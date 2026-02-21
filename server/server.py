@@ -1,0 +1,676 @@
+"""
+Hashed SDK - Control Plane API Server
+FastAPI backend for AI Agent Governance
+"""
+
+import os
+from datetime import datetime
+from typing import List, Optional
+
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+from dotenv import load_dotenv
+from fastapi import FastAPI, Header, HTTPException, Depends, status
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+from supabase import create_client, Client
+
+# Load environment variables
+load_dotenv()
+
+# Initialize FastAPI
+app = FastAPI(
+    title="Hashed Control Plane API",
+    description="AI Agent Governance - Policy & Audit Management",
+    version="0.1.0",
+)
+
+# CORS Configuration
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+if allowed_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allowed_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+# Initialize Supabase client
+supabase_url = os.getenv("SUPABASE_URL")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+
+if not supabase_url or not supabase_key:
+    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+
+supabase: Client = create_client(supabase_url, supabase_key)
+
+
+# ============================================================================
+# PYDANTIC MODELS
+# ============================================================================
+
+class PolicyModel(BaseModel):
+    tool_name: str
+    max_amount: Optional[float] = None
+    allowed: bool = True
+    requires_approval: bool = False
+    time_window: Optional[str] = None
+    rate_limit_per: Optional[str] = None
+    rate_limit_count: Optional[int] = None
+    metadata: dict = Field(default_factory=dict)
+
+
+class LogEntry(BaseModel):
+    event_type: str
+    data: dict
+    metadata: dict = Field(default_factory=dict)
+    timestamp: str
+
+
+class LogBatchRequest(BaseModel):
+    logs: List[LogEntry]
+    agent_public_key: str
+
+
+class AgentRegistration(BaseModel):
+    name: str
+    public_key: str
+    agent_type: str = "general"
+    description: Optional[str] = None
+
+
+class ApprovalDecision(BaseModel):
+    approved: bool
+    approved_by: str
+    rejection_reason: Optional[str] = None
+
+
+# ============================================================================
+# AUTHENTICATION
+# ============================================================================
+
+async def verify_api_key(x_api_key: str = Header(..., alias="X-API-KEY")) -> dict:
+    """
+    Verify API key and return organization info.
+    
+    Raises:
+        HTTPException: If API key is invalid
+    """
+    try:
+        response = supabase.table("organizations").select("*").eq("api_key", x_api_key).eq("is_active", True).execute()
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key"
+            )
+        
+        organization = response.data[0]
+        
+        # Set organization context for RLS
+        # Note: This is simplified - in production, use proper session management
+        return organization
+    
+    except Exception as e:
+        if isinstance(e, HTTPException):
+            raise
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Authentication error: {str(e)}"
+        )
+
+
+def verify_signature(public_key_hex: str, signature_hex: str, message: str) -> bool:
+    """
+    Verify Ed25519 signature.
+    
+    Args:
+        public_key_hex: Public key in hex format
+        signature_hex: Signature in hex format
+        message: Original message that was signed
+        
+    Returns:
+        True if signature is valid, False otherwise
+    """
+    try:
+        public_key_bytes = bytes.fromhex(public_key_hex)
+        signature_bytes = bytes.fromhex(signature_hex)
+        
+        public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
+        message_bytes = message.encode('utf-8')
+        
+        public_key.verify(signature_bytes, message_bytes)
+        return True
+    except Exception:
+        return False
+
+
+# ============================================================================
+# HEALTH CHECK
+# ============================================================================
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "hashed-control-plane"
+    }
+
+
+# ============================================================================
+# AGENT MANAGEMENT
+# ============================================================================
+
+@app.post("/v1/agents/register", status_code=status.HTTP_201_CREATED)
+async def register_agent(
+    agent: AgentRegistration,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    Register a new AI agent with the organization.
+    
+    Args:
+        agent: Agent registration data
+        org: Organization from API key authentication
+        
+    Returns:
+        Registered agent information
+    """
+    try:
+        # Check if agent with this public key already exists
+        existing = supabase.table("agents").select("*").eq("public_key", agent.public_key).execute()
+        
+        if existing.data and len(existing.data) > 0:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Agent with this public key already exists"
+            )
+        
+        # Create new agent
+        agent_data = {
+            "organization_id": org["id"],
+            "name": agent.name,
+            "public_key": agent.public_key,
+            "agent_type": agent.agent_type,
+            "description": agent.description,
+            "is_active": True
+        }
+        
+        response = supabase.table("agents").insert(agent_data).execute()
+        
+        return {
+            "agent": response.data[0],
+            "message": "Agent registered successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to register agent: {str(e)}"
+        )
+
+
+@app.get("/v1/agents")
+async def list_agents(org: dict = Depends(verify_api_key)):
+    """
+    List all agents for the organization.
+    
+    Returns:
+        List of agents
+    """
+    try:
+        response = supabase.table("agents").select("*").eq("organization_id", org["id"]).execute()
+        
+        return {
+            "agents": response.data,
+            "count": len(response.data)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list agents: {str(e)}"
+        )
+
+
+# ============================================================================
+# POLICY SYNC
+# ============================================================================
+
+@app.get("/v1/policies/sync")
+async def sync_policies(
+    agent_public_key: str,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    Sync policies for a specific agent.
+    
+    The SDK calls this endpoint to download current policies.
+    Returns both agent-specific and organization-wide policies.
+    
+    Args:
+        agent_public_key: Ed25519 public key of the agent
+        org: Organization from API key authentication
+        
+    Returns:
+        Agent info and applicable policies
+    """
+    try:
+        # Find agent
+        agent_response = supabase.table("agents")\
+            .select("*")\
+            .eq("public_key", agent_public_key)\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        if not agent_response.data or len(agent_response.data) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent not found"
+            )
+        
+        agent = agent_response.data[0]
+        
+        # Get agent-specific policies
+        agent_policies = supabase.table("policies")\
+            .select("*")\
+            .eq("agent_id", agent["id"])\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        # Get organization-wide policies (agent_id is NULL)
+        org_policies = supabase.table("policies")\
+            .select("*")\
+            .is_("agent_id", "null")\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        # Combine and format policies
+        all_policies = {}
+        
+        # Add org-wide policies first (lower priority)
+        for policy in org_policies.data:
+            all_policies[policy["tool_name"]] = {
+                "max_amount": policy["max_amount"],
+                "allowed": policy["allowed"],
+                "requires_approval": policy["requires_approval"],
+                "time_window": policy["time_window"],
+                "rate_limit_per": policy["rate_limit_per"],
+                "rate_limit_count": policy["rate_limit_count"],
+                "metadata": policy["metadata"],
+                "priority": policy["priority"]
+            }
+        
+        # Override with agent-specific policies (higher priority)
+        for policy in agent_policies.data:
+            all_policies[policy["tool_name"]] = {
+                "max_amount": policy["max_amount"],
+                "allowed": policy["allowed"],
+                "requires_approval": policy["requires_approval"],
+                "time_window": policy["time_window"],
+                "rate_limit_per": policy["rate_limit_per"],
+                "rate_limit_count": policy["rate_limit_count"],
+                "metadata": policy["metadata"],
+                "priority": policy["priority"]
+            }
+        
+        return {
+            "agent": {
+                "id": agent["id"],
+                "name": agent["name"],
+                "public_key": agent["public_key"],
+                "agent_type": agent["agent_type"]
+            },
+            "policies": all_policies,
+            "sync_interval": 300,  # Seconds until next sync
+            "synced_at": datetime.utcnow().isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync policies: {str(e)}"
+        )
+
+
+# ============================================================================
+# LOG INGESTION
+# ============================================================================
+
+@app.post("/v1/logs/batch", status_code=status.HTTP_202_ACCEPTED)
+async def receive_logs_batch(
+    batch: LogBatchRequest,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    Receive batch of logs from SDK.
+    
+    This is called by the AsyncLedger to send buffered logs.
+    
+    Args:
+        batch: Batch of log entries
+        org: Organization from API key authentication
+        
+    Returns:
+        Acknowledgment of receipt
+    """
+    try:
+        # Find agent by public key
+        agent_response = supabase.table("agents")\
+            .select("id")\
+            .eq("public_key", batch.agent_public_key)\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        agent_id = agent_response.data[0]["id"] if agent_response.data else None
+        
+        # Prepare log entries for insertion
+        log_records = []
+        for log in batch.logs:
+            # Extract status from event_type (e.g., "transfer.success" -> "success")
+            event_parts = log.event_type.split(".")
+            status_value = event_parts[-1] if len(event_parts) > 1 else "success"
+            tool_name = event_parts[0] if len(event_parts) > 1 else log.event_type
+            
+            # Verify signature if present
+            signature_valid = False
+            if "signature" in log.metadata and "public_key" in log.metadata:
+                import json
+                signature_valid = verify_signature(
+                    log.metadata["public_key"],
+                    log.metadata["signature"],
+                    json.dumps(log.data, sort_keys=True)
+                )
+            
+            log_record = {
+                "organization_id": org["id"],
+                "agent_id": agent_id,
+                "event_type": log.event_type,
+                "tool_name": tool_name,
+                "amount": log.data.get("amount"),
+                "signature": log.metadata.get("signature"),
+                "public_key": log.metadata.get("public_key"),
+                "status": status_value,
+                "error_message": log.data.get("error"),
+                "data": log.data,
+                "metadata": {**log.metadata, "signature_valid": signature_valid},
+                "timestamp": log.timestamp
+            }
+            log_records.append(log_record)
+        
+        # Bulk insert logs
+        if log_records:
+            supabase.table("ledger_logs").insert(log_records).execute()
+        
+        return {
+            "received": len(batch.logs),
+            "status": "accepted",
+            "processed_at": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process logs: {str(e)}"
+        )
+
+
+# ============================================================================
+# POLICY MANAGEMENT
+# ============================================================================
+
+@app.post("/v1/policies", status_code=status.HTTP_201_CREATED)
+async def create_policy(
+    policy: PolicyModel,
+    agent_id: Optional[str] = None,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    Create a new policy.
+    
+    Args:
+        policy: Policy configuration
+        agent_id: Optional agent ID (if None, policy applies to all agents)
+        org: Organization from API key authentication
+        
+    Returns:
+        Created policy
+    """
+    try:
+        policy_data = {
+            "organization_id": org["id"],
+            "agent_id": agent_id,
+            "tool_name": policy.tool_name,
+            "max_amount": policy.max_amount,
+            "allowed": policy.allowed,
+            "requires_approval": policy.requires_approval,
+            "time_window": policy.time_window,
+            "rate_limit_per": policy.rate_limit_per,
+            "rate_limit_count": policy.rate_limit_count,
+            "metadata": policy.metadata
+        }
+        
+        response = supabase.table("policies").insert(policy_data).execute()
+        
+        return {
+            "policy": response.data[0],
+            "message": "Policy created successfully"
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create policy: {str(e)}"
+        )
+
+
+@app.get("/v1/policies")
+async def list_policies(
+    agent_id: Optional[str] = None,
+    org: dict = Depends(verify_api_key)
+):
+    """List all policies for the organization."""
+    try:
+        query = supabase.table("policies").select("*").eq("organization_id", org["id"])
+        
+        if agent_id:
+            query = query.eq("agent_id", agent_id)
+        
+        response = query.execute()
+        
+        return {
+            "policies": response.data,
+            "count": len(response.data)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list policies: {str(e)}"
+        )
+
+
+# ============================================================================
+# AUDIT & ANALYTICS
+# ============================================================================
+
+@app.get("/v1/logs")
+async def query_logs(
+    agent_id: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    status_filter: Optional[str] = None,
+    limit: int = 100,
+    offset: int = 0,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    Query audit logs with filters.
+    
+    Args:
+        agent_id: Filter by agent ID
+        tool_name: Filter by tool name
+        status_filter: Filter by status (success, denied, error)
+        limit: Maximum number of results
+        offset: Pagination offset
+        org: Organization from API key authentication
+        
+    Returns:
+        Filtered log entries
+    """
+    try:
+        query = supabase.table("ledger_logs")\
+            .select("*")\
+            .eq("organization_id", org["id"])\
+            .order("timestamp", desc=True)\
+            .limit(limit)\
+            .range(offset, offset + limit - 1)
+        
+        if agent_id:
+            query = query.eq("agent_id", agent_id)
+        if tool_name:
+            query = query.eq("tool_name", tool_name)
+        if status_filter:
+            query = query.eq("status", status_filter)
+        
+        response = query.execute()
+        
+        return {
+            "logs": response.data,
+            "count": len(response.data),
+            "limit": limit,
+            "offset": offset
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to query logs: {str(e)}"
+        )
+
+
+@app.get("/v1/analytics/summary")
+async def analytics_summary(org: dict = Depends(verify_api_key)):
+    """
+    Get analytics summary for the organization.
+    
+    Returns:
+        Summary statistics and insights
+    """
+    try:
+        # Use the pre-built view
+        agents_summary = supabase.table("agent_activity_summary")\
+            .select("*")\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        policy_effectiveness = supabase.table("policy_effectiveness")\
+            .select("*")\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        return {
+            "agents": agents_summary.data,
+            "policy_effectiveness": policy_effectiveness.data,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate analytics: {str(e)}"
+        )
+
+
+# ============================================================================
+# APPROVAL QUEUE (Human-in-the-loop)
+# ============================================================================
+
+@app.get("/v1/approvals/pending")
+async def list_pending_approvals(org: dict = Depends(verify_api_key)):
+    """List pending approval requests."""
+    try:
+        response = supabase.table("approval_queue")\
+            .select("*")\
+            .eq("organization_id", org["id"])\
+            .eq("status", "pending")\
+            .order("created_at", desc=False)\
+            .execute()
+        
+        return {
+            "approvals": response.data,
+            "count": len(response.data)
+        }
+    
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to list approvals: {str(e)}"
+        )
+
+
+@app.post("/v1/approvals/{approval_id}/decide")
+async def decide_approval(
+    approval_id: str,
+    decision: ApprovalDecision,
+    org: dict = Depends(verify_api_key)
+):
+    """Approve or reject a pending request."""
+    try:
+        update_data = {
+            "status": "approved" if decision.approved else "rejected",
+            "approved_by": decision.approved_by,
+            "reviewed_at": datetime.utcnow().isoformat(),
+            "rejection_reason": decision.rejection_reason
+        }
+        
+        response = supabase.table("approval_queue")\
+            .update(update_data)\
+            .eq("id", approval_id)\
+            .eq("organization_id", org["id"])\
+            .eq("status", "pending")\
+            .execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Approval not found or already processed"
+            )
+        
+        return {
+            "approval": response.data[0],
+            "message": f"Request {'approved' if decision.approved else 'rejected'} successfully"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to process approval: {str(e)}"
+        )
+
+
+# ============================================================================
+# RUN SERVER
+# ============================================================================
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    host = os.getenv("SERVER_HOST", "0.0.0.0")
+    port = int(os.getenv("SERVER_PORT", "8000"))
+    debug = os.getenv("DEBUG", "false").lower() == "true"
+    
+    uvicorn.run(
+        "server:app",
+        host=host,
+        port=port,
+        reload=debug,
+        log_level="info"
+    )
