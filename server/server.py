@@ -160,6 +160,218 @@ async def health_check():
 
 
 # ============================================================================
+# SDK COMPATIBILITY ENDPOINTS (No /v1/ prefix for backward compatibility)
+# ============================================================================
+
+@app.post("/register", status_code=status.HTTP_201_CREATED)
+async def register_agent_sdk(
+    agent: AgentRegistration,
+    org: dict = Depends(verify_api_key)
+):
+    """SDK compatibility endpoint for agent registration."""
+    return await register_agent(agent, org)
+
+
+@app.post("/guard")
+async def guard_check(
+    request: dict,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    SDK compatibility endpoint for guard/policy checking.
+    
+    The SDK calls this before executing operations to check if allowed.
+    """
+    try:
+        operation = request.get("operation")
+        agent_id = request.get("agent_id")
+        agent_public_key = request.get("agent_public_key")
+        data = request.get("data", {})
+        
+        if not operation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="operation is required"
+            )
+        
+        # Find agent
+        if agent_public_key:
+            agent_response = supabase.table("agents")\
+                .select("*")\
+                .eq("public_key", agent_public_key)\
+                .eq("organization_id", org["id"])\
+                .execute()
+        elif agent_id:
+            agent_response = supabase.table("agents")\
+                .select("*")\
+                .eq("id", agent_id)\
+                .eq("organization_id", org["id"])\
+                .execute()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="agent_id or agent_public_key is required"
+            )
+        
+        if not agent_response.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Agent not found"
+            )
+        
+        agent = agent_response.data[0]
+        
+        # Get policies for this operation
+        # Check agent-specific policy first
+        policy_response = supabase.table("policies")\
+            .select("*")\
+            .eq("tool_name", operation)\
+            .eq("agent_id", agent["id"])\
+            .eq("organization_id", org["id"])\
+            .execute()
+        
+        # If no agent-specific policy, check org-wide
+        if not policy_response.data:
+            policy_response = supabase.table("policies")\
+                .select("*")\
+                .eq("tool_name", operation)\
+                .is_("agent_id", "null")\
+                .eq("organization_id", org["id"])\
+                .execute()
+        
+        # Default allow if no policy
+        if not policy_response.data:
+            return {
+                "allowed": True,
+                "policy": None,
+                "message": "No policy found - default allow"
+            }
+        
+        policy = policy_response.data[0]
+        
+        # Check if operation is allowed
+        if not policy["allowed"]:
+            return {
+                "allowed": False,
+                "policy": policy,
+                "message": f"Operation {operation} is not allowed by policy"
+            }
+        
+        # Check if requires approval
+        if policy["requires_approval"]:
+            # Create approval request
+            approval_data = {
+                "organization_id": org["id"],
+                "agent_id": agent["id"],
+                "tool_name": operation,
+                "request_data": data,
+                "status": "pending"
+            }
+            
+            approval = supabase.table("approval_queue").insert(approval_data).execute()
+            
+            return {
+                "allowed": False,
+                "requires_approval": True,
+                "approval_id": approval.data[0]["id"],
+                "policy": policy,
+                "message": "Operation requires approval"
+            }
+        
+        # Policy allows the operation
+        return {
+            "allowed": True,
+            "policy": policy,
+            "message": "Operation allowed"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to check policy: {str(e)}"
+        )
+
+
+@app.post("/log", status_code=status.HTTP_202_ACCEPTED)
+async def log_operation(
+    request: dict,
+    org: dict = Depends(verify_api_key)
+):
+    """
+    SDK compatibility endpoint for logging operations.
+    
+    The SDK calls this after executing operations to create audit log.
+    """
+    try:
+        operation = request.get("operation")
+        agent_public_key = request.get("agent_public_key")
+        agent_id = request.get("agent_id")
+        status_value = request.get("status", "success")
+        data = request.get("data", {})
+        metadata = request.get("metadata", {})
+        error = request.get("error")
+        
+        if not operation:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="operation is required"
+            )
+        
+        # Find agent
+        if agent_public_key:
+            agent_response = supabase.table("agents")\
+                .select("id")\
+                .eq("public_key", agent_public_key)\
+                .eq("organization_id", org["id"])\
+                .execute()
+            agent_id = agent_response.data[0]["id"] if agent_response.data else None
+        
+        # Verify signature if present
+        signature_valid = False
+        if "signature" in metadata and agent_public_key:
+            import json
+            signature_valid = verify_signature(
+                agent_public_key,
+                metadata["signature"],
+                json.dumps(data, sort_keys=True)
+            )
+        
+        # Create log entry
+        log_record = {
+            "organization_id": org["id"],
+            "agent_id": agent_id,
+            "event_type": f"{operation}.{status_value}",
+            "tool_name": operation,
+            "amount": data.get("amount"),
+            "signature": metadata.get("signature"),
+            "public_key": agent_public_key,
+            "status": status_value,
+            "error_message": error,
+            "data": data,
+            "metadata": {**metadata, "signature_valid": signature_valid},
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        
+        response = supabase.table("ledger_logs").insert(log_record).execute()
+        
+        return {
+            "log_id": response.data[0]["id"],
+            "status": "logged",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to log operation: {str(e)}"
+        )
+
+
+# ============================================================================
 # AGENT MANAGEMENT
 # ============================================================================
 

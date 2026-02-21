@@ -228,13 +228,47 @@ class HashedCore:
                 }
 
                 try:
-                    # 1. Validate against policy
+                    # 1. Validate against LOCAL policy first
                     self._policy_engine.validate(
                         tool_name=tool_name, amount=amount, **context
                     )
-                    logger.debug(f"Policy validation passed for '{tool_name}'")
+                    logger.debug(f"Local policy validation passed for '{tool_name}'")
+                    
+                    # 2. Validate against BACKEND policy (if connected)
+                    if self._http_client:
+                        try:
+                            guard_response = await self._http_client.post(
+                                "/guard",
+                                json={
+                                    "operation": tool_name,
+                                    "agent_public_key": self._identity.public_key_hex,
+                                    "data": {
+                                        "amount": amount,
+                                        **{k: str(v) for k, v in kwargs.items()}
+                                    }
+                                }
+                            )
+                            
+                            if guard_response.is_success:
+                                guard_result = guard_response.json()
+                                if not guard_result.get("allowed", False):
+                                    raise PermissionError(
+                                        f"Operation '{tool_name}' is not allowed by backend policy",
+                                        details={
+                                            "tool_name": tool_name,
+                                            "policy": guard_result.get("policy"),
+                                            "message": guard_result.get("message")
+                                        }
+                                    )
+                                logger.debug(f"Backend policy validation passed for '{tool_name}'")
+                            else:
+                                logger.warning(f"Backend guard check failed: {guard_response.status_code}")
+                        except PermissionError:
+                            raise
+                        except Exception as e:
+                            logger.warning(f"Backend guard check error (continuing): {e}")
 
-                    # 2. Sign the operation
+                    # 3. Sign the operation
                     signed_operation = self._identity.sign_data(
                         {
                             "tool_name": tool_name,
@@ -243,17 +277,40 @@ class HashedCore:
                         }
                     )
 
-                    # 3. Execute the function
+                    # 4. Execute the function
                     result = await func(*args, **kwargs)
 
-                    # 4. Log successful operation to ledger
+                    # 5. Log successful operation to BACKEND
+                    if self._http_client:
+                        try:
+                            await self._http_client.post(
+                                "/log",
+                                json={
+                                    "operation": tool_name,
+                                    "agent_public_key": self._identity.public_key_hex,
+                                    "status": "success",
+                                    "data": {
+                                        "tool_name": tool_name,
+                                        "amount": amount,
+                                        "result": str(result)[:200],
+                                    },
+                                    "metadata": {
+                                        "signature": signed_operation["signature"],
+                                    }
+                                }
+                            )
+                            logger.debug(f"Operation '{tool_name}' logged to backend")
+                        except Exception as e:
+                            logger.warning(f"Failed to log to backend: {e}")
+                    
+                    # 6. Log to local ledger (if configured)
                     if self._ledger:
                         await self._ledger.log(
                             event_type=f"{tool_name}.success",
                             data={
                                 "tool_name": tool_name,
                                 "amount": amount,
-                                "result": str(result)[:200],  # Truncate long results
+                                "result": str(result)[:200],
                             },
                             metadata={
                                 "signature": signed_operation["signature"],
@@ -341,7 +398,7 @@ class HashedCore:
         
         try:
             response = await self._http_client.post(
-                "/v1/agents/register",
+                "/register",
                 json={
                     "name": self._agent_name,
                     "public_key": self._identity.public_key_hex,
