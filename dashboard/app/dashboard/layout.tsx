@@ -77,8 +77,8 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 overflow-hidden">
-      {/* Sidebar - Crystal Glass Effect */}
-      <aside className="w-64 flex flex-col bg-white/30 backdrop-blur-2xl border-r border-white/30 flex-shrink-0 shadow-2xl" style={{boxShadow: '0 8px 32px rgba(31, 38, 135, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.5)'}}>
+      {/* Sidebar - Glass Effect */}
+      <aside className="w-64 flex flex-col bg-white/40 backdrop-blur-xl border-r border-white/20 flex-shrink-0 shadow-xl">
         {/* Logo */}
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
@@ -121,21 +121,21 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        {/* Status Box - Mac Window Style */}
+        {/* Status Box - Pure Glass */}
         <div className="px-4 py-4 border-t border-white/10">
-          <div className="terminal-box rounded-xl p-3 pt-8">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></div>
-              <span className="text-emerald-400 font-mono text-xs font-medium">ONLINE</span>
+          <div className="terminal-box rounded-2xl p-4 overflow-hidden">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"></div>
+              <span className="text-emerald-600 font-mono text-xs font-semibold tracking-wide">SYSTEM ONLINE</span>
             </div>
-            <div className="font-mono text-xs space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-slate-500">time</span>
-                <span className="text-emerald-400">{time}</span>
+            <div className="font-mono text-xs space-y-2">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-medium">Time</span>
+                <span className="text-emerald-600 font-semibold">{time}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">status</span>
-                <span className="text-emerald-400">active</span>
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-medium">Status</span>
+                <span className="text-emerald-600 font-semibold">Active</span>
               </div>
             </div>
           </div>
