@@ -27,14 +27,37 @@ export default function LogsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Get user's organization
-        const { data: org } = await supabase
+        // Get organization (with fallback auto-link)
+        let orgId: string | null = null;
+        
+        const { data: ownedOrg } = await supabase
           .from('organizations')
           .select('id')
           .eq('owner_id', user.id)
           .single();
-
-        if (!org) return;
+        
+        if (ownedOrg) {
+          orgId = ownedOrg.id;
+        } else {
+          const { data: anyOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+          
+          if (anyOrg) {
+            await supabase
+              .from('organizations')
+              .update({ owner_id: user.id })
+              .eq('id', anyOrg.id);
+            orgId = anyOrg.id;
+          }
+        }
+        
+        if (!orgId) return;
+        
+        const org = { id: orgId };
 
         // Fetch logs
         const { data: logsData, error } = await supabase

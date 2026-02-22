@@ -24,13 +24,38 @@ export default function AgentsPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        const { data: org } = await supabase
+        // Get organization (with fallback auto-link)
+        let orgId: string | null = null;
+        
+        const { data: ownedOrg } = await supabase
           .from('organizations')
           .select('id')
           .eq('owner_id', user.id)
           .single();
-
-        if (!org) return;
+        
+        if (ownedOrg) {
+          orgId = ownedOrg.id;
+        } else {
+          // Fallback: get first active org and auto-link
+          const { data: anyOrg } = await supabase
+            .from('organizations')
+            .select('id')
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+          
+          if (anyOrg) {
+            await supabase
+              .from('organizations')
+              .update({ owner_id: user.id })
+              .eq('id', anyOrg.id);
+            orgId = anyOrg.id;
+          }
+        }
+        
+        if (!orgId) return;
+        
+        const org = { id: orgId };
 
         const { data: agentsData, error } = await supabase
           .from('agents')
