@@ -33,24 +33,54 @@ interface Log {
 // ============================================
 
 function buildChartData(logs: Log[]) {
-  const byHour: Record<string, { success: number; error: number; permission_denied: number }> = {};
+  const bySlot: Record<string, { success: number; error: number; permission_denied: number; sortKey: string }> = {};
 
   logs.forEach(log => {
-    const hour = new Date(log.timestamp).toLocaleTimeString('en-US', {
+    const d = new Date(log.timestamp);
+    // Format as "MM/DD HH:mm" in EST
+    const label = d.toLocaleString('en-US', {
+      timeZone: 'America/New_York',
+      month: '2-digit',
+      day: '2-digit',
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
     });
-    if (!byHour[hour]) byHour[hour] = { success: 0, error: 0, permission_denied: 0 };
-    if (log.status === 'success') byHour[hour].success++;
-    else if (log.status === 'denied') byHour[hour].permission_denied++;
-    else byHour[hour].error++;
+    const sortKey = d.toISOString();
+    if (!bySlot[label]) bySlot[label] = { success: 0, error: 0, permission_denied: 0, sortKey };
+    if (log.status === 'success') bySlot[label].success++;
+    else if (log.status === 'denied') bySlot[label].permission_denied++;
+    else bySlot[label].error++;
   });
 
-  return Object.entries(byHour)
-    .sort((a, b) => a[0].localeCompare(b[0]))
-    .slice(-12)
-    .map(([time, data]) => ({ time, ...data }));
+  return Object.entries(bySlot)
+    .sort((a, b) => a[1].sortKey.localeCompare(b[1].sortKey))
+    .map(([time, { sortKey, ...data }]) => ({ time, ...data }));
+}
+
+function filterLogsByPeriod(logs: Log[], period: string, customDate?: string): Log[] {
+  const now = new Date();
+  return logs.filter(log => {
+    const logDate = new Date(log.timestamp);
+    switch (period) {
+      case 'today': {
+        const todayEST = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        const logEST = new Date(logDate.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+        return logEST.toDateString() === todayEST.toDateString();
+      }
+      case '7d':
+        return (now.getTime() - logDate.getTime()) < 7 * 24 * 60 * 60 * 1000;
+      case '30d':
+        return (now.getTime() - logDate.getTime()) < 30 * 24 * 60 * 60 * 1000;
+      case 'custom':
+        if (!customDate) return true;
+        const target = new Date(customDate + 'T00:00:00');
+        const nextDay = new Date(customDate + 'T23:59:59');
+        return logDate >= target && logDate <= nextDay;
+      default:
+        return true;
+    }
+  });
 }
 
 function buildToolData(logs: Log[]) {
@@ -123,6 +153,8 @@ export default function DashboardOverview() {
   const [allLogs, setAllLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
   const [apiKeyCopied, setApiKeyCopied] = useState(false);
+  const [chartPeriod, setChartPeriod] = useState<string>('all');
+  const [customDate, setCustomDate] = useState<string>('');
 
   useEffect(() => {
     async function fetchData() {
@@ -179,7 +211,8 @@ export default function DashboardOverview() {
     fetchData();
   }, []);
 
-  const chartData = buildChartData(allLogs);
+  const filteredLogs = filterLogsByPeriod(allLogs, chartPeriod, customDate);
+  const chartData = buildChartData(filteredLogs);
   const toolData = buildToolData(allLogs);
 
   const pieData = [
@@ -259,10 +292,14 @@ export default function DashboardOverview() {
 
         {/* Area Chart - Operations Timeline */}
         <div className="lg:col-span-2 card p-5">
-          <div className="flex items-center justify-between mb-4">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-3">
             <div>
               <h3 className="font-semibold text-ink text-sm">Operations Timeline</h3>
-              <p className="text-ink-subtle text-xs mt-0.5">Last {chartData.length} intervals</p>
+              <p className="text-ink-subtle text-xs mt-0.5">
+                {filteredLogs.length} ops · {chartData.length} intervals · 
+                <span className="font-mono"> EST</span>
+              </p>
             </div>
             <div className="flex items-center gap-3 text-xs">
               <div className="flex items-center gap-1.5">
@@ -278,6 +315,45 @@ export default function DashboardOverview() {
                 <span className="text-ink-muted">Permission Denied</span>
               </div>
             </div>
+          </div>
+
+          {/* Period Filters */}
+          <div className="flex items-center gap-2 mb-4 flex-wrap">
+            {[
+              { id: 'all', label: 'All Time' },
+              { id: 'today', label: 'Today' },
+              { id: '7d', label: 'Last 7 Days' },
+              { id: '30d', label: 'Last 30 Days' },
+              { id: 'custom', label: 'Pick Date' },
+            ].map(p => (
+              <button
+                key={p.id}
+                onClick={() => { setChartPeriod(p.id); if (p.id !== 'custom') setCustomDate(''); }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-150 ${
+                  chartPeriod === p.id
+                    ? 'bg-ink text-white shadow-sm'
+                    : 'bg-surface-50 border border-surface-200 text-ink-muted hover:text-ink hover:border-surface-300'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+            {chartPeriod === 'custom' && (
+              <input
+                type="date"
+                value={customDate}
+                onChange={e => setCustomDate(e.target.value)}
+                className="px-3 py-1.5 rounded-lg text-xs font-mono bg-white border border-surface-200 
+                           text-ink focus:outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500/20"
+              />
+            )}
+            {chartPeriod !== 'all' && (
+              <span className="text-xs text-ink-subtle font-mono ml-auto">
+                {filteredLogs.filter(l => l.status === 'success').length} ✓ · 
+                {filteredLogs.filter(l => l.status !== 'success' && l.status !== 'denied').length} ⚠ · 
+                {filteredLogs.filter(l => l.status === 'denied').length} ✗
+              </span>
+            )}
           </div>
           {chartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -421,8 +497,13 @@ export default function DashboardOverview() {
                     </span>
                     <span className="font-mono text-xs text-ink-muted">{log.tool_name}</span>
                   </div>
-                  <span className="text-xs text-ink-subtle">
-                    {new Date(log.timestamp).toLocaleTimeString()}
+                  <span className="text-xs text-ink-subtle font-mono">
+                    {new Date(log.timestamp).toLocaleString('en-US', {
+                      timeZone: 'America/New_York',
+                      month: '2-digit', day: '2-digit',
+                      hour: '2-digit', minute: '2-digit',
+                      hour12: true,
+                    })} EST
                   </span>
                 </div>
               ))}
