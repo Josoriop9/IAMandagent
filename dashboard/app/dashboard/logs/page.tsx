@@ -88,7 +88,13 @@ export default function LogsPage() {
         setLoading(false);
       }
     }
+    
     fetchLogs();
+    
+    // Auto-refresh every 5 seconds
+    const interval = setInterval(fetchLogs, 5000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   // Build hourly chart data
