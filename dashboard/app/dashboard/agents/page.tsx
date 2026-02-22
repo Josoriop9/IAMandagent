@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 
 interface Agent {
@@ -34,6 +34,82 @@ export default function AgentsPage() {
   const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
   const [positions, setPositions] = useState<Record<string, NodePosition>>({});
   const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
+
+  // Refs for animation loop (avoid stale closures)
+  const posRef = useRef<Record<string, NodePosition>>({});
+  const velRef = useRef<Record<string, { vx: number; vy: number }>>({});
+  const rafRef = useRef<number | null>(null);
+  const draggingRef = useRef<string | null>(null);
+
+  // Sync draggingRef when dragging changes
+  useEffect(() => { draggingRef.current = dragging?.id ?? null; }, [dragging]);
+
+  // Sync posRef when positions change (from drag)
+  useEffect(() => { posRef.current = positions; }, [positions]);
+
+  // Start / stop animation when viewMode or agents change
+  useEffect(() => {
+    if (viewMode !== 'ecosystem' || agents.length === 0) {
+      if (rafRef.current) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
+      return;
+    }
+
+    // Init velocities for agents that don't have one yet
+    agents.forEach(agent => {
+      if (!velRef.current[agent.id]) {
+        const speed = 0.4 + Math.random() * 0.4; // slow float
+        const angle = Math.random() * Math.PI * 2;
+        velRef.current[agent.id] = { vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed };
+      }
+    });
+
+    const W = 800; // approximate canvas width
+    const H = 480; // canvas height - margin
+    const MARGIN = 50;
+
+    const tick = () => {
+      const newPositions: Record<string, NodePosition> = { ...posRef.current };
+      let changed = false;
+
+      agents.forEach(agent => {
+        if (draggingRef.current === agent.id) return; // skip dragged node
+        const pos = posRef.current[agent.id];
+        const vel = velRef.current[agent.id];
+        if (!pos || !vel) return;
+
+        let nx = pos.x + vel.vx;
+        let ny = pos.y + vel.vy;
+
+        // Bounce off walls
+        if (nx < MARGIN) { nx = MARGIN; vel.vx = Math.abs(vel.vx); }
+        if (nx > W - MARGIN) { nx = W - MARGIN; vel.vx = -Math.abs(vel.vx); }
+        if (ny < MARGIN) { ny = MARGIN; vel.vy = Math.abs(vel.vy); }
+        if (ny > H - MARGIN) { ny = H - MARGIN; vel.vy = -Math.abs(vel.vy); }
+
+        // Add tiny random wobble
+        vel.vx += (Math.random() - 0.5) * 0.02;
+        vel.vy += (Math.random() - 0.5) * 0.02;
+
+        // Clamp speed
+        const speed = Math.sqrt(vel.vx * vel.vx + vel.vy * vel.vy);
+        if (speed > 0.8) { vel.vx *= 0.8 / speed; vel.vy *= 0.8 / speed; }
+        if (speed < 0.2) { vel.vx *= 1.05; vel.vy *= 1.05; }
+
+        newPositions[agent.id] = { x: nx, y: ny };
+        changed = true;
+      });
+
+      if (changed) {
+        posRef.current = newPositions;
+        setPositions({ ...newPositions });
+      }
+
+      rafRef.current = requestAnimationFrame(tick);
+    };
+
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [viewMode, agents]);
 
   useEffect(() => {
     async function fetchAgents() {
