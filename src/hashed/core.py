@@ -280,7 +280,10 @@ class HashedCore:
                     # 4. Execute the function
                     result = await func(*args, **kwargs)
 
-                    # 5. Log successful operation to BACKEND
+                    # 5. Log successful operation (backend OR local ledger, not both)
+                    logged = False
+                    
+                    # Prefer backend logging if available
                     if self._http_client:
                         try:
                             await self._http_client.post(
@@ -300,11 +303,12 @@ class HashedCore:
                                 }
                             )
                             logger.debug(f"Operation '{tool_name}' logged to backend")
+                            logged = True
                         except Exception as e:
                             logger.warning(f"Failed to log to backend: {e}")
                     
-                    # 6. Log to local ledger (if configured)
-                    if self._ledger:
+                    # Fallback to local ledger only if backend logging failed
+                    if not logged and self._ledger:
                         await self._ledger.log(
                             event_type=f"{tool_name}.success",
                             data={
@@ -317,6 +321,7 @@ class HashedCore:
                                 "public_key": signed_operation["public_key"],
                             },
                         )
+                        logger.debug(f"Operation '{tool_name}' logged to local ledger")
 
                     return result
 
