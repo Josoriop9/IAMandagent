@@ -17,6 +17,13 @@ from hashed.exceptions import (
 )
 from hashed.guard import PermissionError, Policy, PolicyEngine
 from hashed.identity import IdentityManager
+from hashed.identity_store import (
+    generate_secure_password,
+    load_identity,
+    load_or_create_identity,
+    save_identity,
+    verify_identity_file,
+)
 from hashed.ledger import AsyncLedger
 from hashed.models import HashRequest, HashResponse, HashAlgorithm
 
@@ -43,6 +50,12 @@ __all__ = [
     "IdentityManager",
     "PolicyEngine",
     "Policy",
+    # Identity Persistence
+    "load_or_create_identity",
+    "load_identity",
+    "save_identity",
+    "verify_identity_file",
+    "generate_secure_password",
     # Ledger
     "AsyncLedger",
 ]
