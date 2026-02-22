@@ -390,84 +390,98 @@ export default function AgentsPage() {
               <p className="font-mono text-emerald-900 text-sm">{'> no_agents_registered'}</p>
             </div>
           )}
+
+          {/* ===== SELECTED AGENT PANEL - Overlay inside canvas ===== */}
+          {selectedAgent && (() => {
+            const stats = agentStats[selectedAgent.id] || { success: 0, denied: 0, error: 0, total: 0 };
+            return (
+              <div
+                className="absolute top-4 right-4 w-72 z-30 overflow-y-auto"
+                style={{
+                  maxHeight: 'calc(100% - 32px)',
+                  backdropFilter: 'blur(24px)',
+                  WebkitBackdropFilter: 'blur(24px)',
+                  background: 'linear-gradient(160deg, rgba(15,12,40,0.85) 0%, rgba(20,10,50,0.90) 100%)',
+                  border: '1px solid rgba(167,139,250,0.35)',
+                  borderRadius: '16px',
+                  boxShadow: '0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08)',
+                  animation: 'slideInRight 0.25s ease-out',
+                }}
+              >
+                <style>{`@keyframes slideInRight { from { opacity:0; transform: translateX(20px); } to { opacity:1; transform: translateX(0); } }`}</style>
+                <div className="p-4">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <div className="w-9 h-9 rounded-full flex items-center justify-center"
+                        style={{ background: 'rgba(139,92,246,0.2)', border: '1px solid rgba(167,139,250,0.4)' }}>
+                        <span className="text-purple-300 font-bold text-sm">
+                          {selectedAgent.name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-white text-sm">{selectedAgent.name}</h3>
+                        <p className="text-xs text-purple-300/70">{selectedAgent.agent_type} · {selectedAgent.is_active ? '● Active' : '○ Inactive'}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setSelectedAgent(null)}
+                      className="text-white/40 hover:text-white/80 text-xl leading-none transition-colors w-6 h-6 flex items-center justify-center rounded-full hover:bg-white/10">
+                      ×
+                    </button>
+                  </div>
+
+                  {/* Stats */}
+                  <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(34,197,94,0.12)', border: '1px solid rgba(34,197,94,0.2)' }}>
+                      <p className="text-emerald-400 font-bold text-lg font-mono">{stats.success}</p>
+                      <p className="text-xs text-emerald-500/70 mt-0.5">✓ OK</p>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.2)' }}>
+                      <p className="text-red-400 font-bold text-lg font-mono">{stats.denied}</p>
+                      <p className="text-xs text-red-400/70 mt-0.5">✗ Denied</p>
+                    </div>
+                    <div className="rounded-lg p-2 text-center" style={{ background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.2)' }}>
+                      <p className="text-amber-400 font-bold text-lg font-mono">{stats.error}</p>
+                      <p className="text-xs text-amber-400/70 mt-0.5">⚠ Err</p>
+                    </div>
+                  </div>
+
+                  {/* Progress bar */}
+                  {stats.total > 0 && (
+                    <div className="mb-4">
+                      <div className="flex justify-between text-xs text-white/40 mb-1">
+                        <span>Success Rate</span>
+                        <span className="text-emerald-400">{Math.round((stats.success / stats.total) * 100)}%</span>
+                      </div>
+                      <div className="h-1.5 rounded-full overflow-hidden flex" style={{ background: 'rgba(255,255,255,0.08)' }}>
+                        <div className="bg-emerald-500 h-full" style={{ width: `${(stats.success / stats.total) * 100}%` }} />
+                        <div className="bg-red-500 h-full" style={{ width: `${(stats.denied / stats.total) * 100}%` }} />
+                        <div className="bg-amber-500 h-full" style={{ width: `${(stats.error / stats.total) * 100}%` }} />
+                      </div>
+                      <p className="text-xs text-white/30 mt-1">{stats.total} total ops</p>
+                    </div>
+                  )}
+
+                  {/* Details */}
+                  <div className="space-y-1.5 text-xs">
+                    {[
+                      { label: 'Agent ID', value: `${selectedAgent.id.substring(0, 8)}...${selectedAgent.id.slice(-4)}`, mono: true, color: '#a78bfa' },
+                      { label: 'Public Key', value: `${selectedAgent.public_key.substring(0, 14)}...`, mono: true, color: '#34d399' },
+                      { label: 'Last Seen', value: selectedAgent.last_seen_at ? new Date(selectedAgent.last_seen_at).toLocaleTimeString('en-US', { timeZone: 'America/New_York', hour12: true }) + ' EST' : 'Never', mono: false, color: 'rgba(255,255,255,0.7)' },
+                      { label: 'Registered', value: new Date(selectedAgent.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }), mono: false, color: 'rgba(255,255,255,0.7)' },
+                    ].map(item => (
+                      <div key={item.label} className="flex items-center gap-2 px-2 py-1.5 rounded-lg" style={{ background: 'rgba(255,255,255,0.04)' }}>
+                        <span style={{ color: 'rgba(167,139,250,0.6)', width: '64px', flexShrink: 0 }}>{item.label}</span>
+                        <span style={{ color: item.color, fontFamily: item.mono ? 'monospace' : 'inherit', fontSize: '11px', wordBreak: 'break-all' }}>{item.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </div>
       )}
-
-      {/* ===== SELECTED AGENT PANEL (Ecosystem) ===== */}
-      {viewMode === 'ecosystem' && selectedAgent && (() => {
-        const stats = agentStats[selectedAgent.id] || { success: 0, denied: 0, error: 0, total: 0 };
-        return (
-          <div className="rounded-2xl p-5 animate-slide-up"
-            style={{
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.06) 50%, rgba(168,85,247,0.08) 100%)',
-              border: '1px solid rgba(167,139,250,0.25)',
-              boxShadow: '0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.1)',
-            }}>
-            <div className="flex items-start justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
-                  <span className="text-emerald-600 font-bold text-sm">
-                    {selectedAgent.name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
-                  </span>
-                </div>
-                <div>
-                  <h3 className="font-semibold text-ink">{selectedAgent.name}</h3>
-                  <p className="text-xs text-ink-subtle">{selectedAgent.agent_type} · {selectedAgent.is_active ? '● Active' : '○ Inactive'}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedAgent(null)} className="text-ink-subtle hover:text-ink text-lg leading-none">×</button>
-            </div>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-center">
-                <p className="text-emerald-600 font-bold text-xl font-mono">{stats.success}</p>
-                <p className="text-xs text-emerald-700 mt-0.5">✓ Success</p>
-              </div>
-              <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
-                <p className="text-red-500 font-bold text-xl font-mono">{stats.denied}</p>
-                <p className="text-xs text-red-600 mt-0.5">✗ Denied</p>
-              </div>
-              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-center">
-                <p className="text-amber-600 font-bold text-xl font-mono">{stats.error}</p>
-                <p className="text-xs text-amber-700 mt-0.5">⚠ Errors</p>
-              </div>
-            </div>
-            {stats.total > 0 && (
-              <div className="mb-4">
-                <div className="flex justify-between text-xs text-ink-subtle mb-1">
-                  <span>Success Rate</span>
-                  <span>{Math.round((stats.success / stats.total) * 100)}%</span>
-                </div>
-                <div className="h-2 bg-surface-100 rounded-full overflow-hidden flex">
-                  <div className="bg-emerald-500 h-full" style={{ width: `${(stats.success / stats.total) * 100}%` }} />
-                  <div className="bg-red-400 h-full" style={{ width: `${(stats.denied / stats.total) * 100}%` }} />
-                  <div className="bg-amber-400 h-full" style={{ width: `${(stats.error / stats.total) * 100}%` }} />
-                </div>
-                <p className="text-xs text-ink-subtle mt-1">{stats.total} total operations</p>
-              </div>
-            )}
-            <div className="grid grid-cols-1 gap-2 text-xs">
-              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
-                <span className="text-ink-subtle w-16 flex-shrink-0">Agent ID</span>
-                <code className="font-mono text-accent-600">{selectedAgent.id.substring(0, 8)}...{selectedAgent.id.slice(-4)}</code>
-              </div>
-              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
-                <span className="text-ink-subtle w-16 flex-shrink-0">Public Key</span>
-                <code className="font-mono text-matrix-600">{selectedAgent.public_key.substring(0, 16)}...</code>
-              </div>
-              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
-                <span className="text-ink-subtle w-16 flex-shrink-0">Last Seen</span>
-                <span className="text-ink">{selectedAgent.last_seen_at ? new Date(selectedAgent.last_seen_at).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' EST' : 'Never'}</span>
-              </div>
-              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
-                <span className="text-ink-subtle w-16 flex-shrink-0">Registered</span>
-                <span className="text-ink">{new Date(selectedAgent.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
 
       {/* ===== LIST VIEW ===== */}
       {viewMode === 'list' && (filtered.length === 0 ? (
