@@ -76,18 +76,18 @@ export default function DashboardLayout({
   }, []);
 
   return (
-    <div className="flex h-screen bg-surface-50 overflow-hidden">
-      {/* Sidebar - Matrix Dark */}
-      <aside className="w-64 flex flex-col bg-terminal-bg border-r border-terminal-border flex-shrink-0">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 overflow-hidden">
+      {/* Sidebar - Glass Effect */}
+      <aside className="w-64 flex flex-col bg-white/40 backdrop-blur-xl border-r border-white/20 flex-shrink-0 shadow-xl">
         {/* Logo */}
-        <div className="px-6 py-5 border-b border-terminal-border">
+        <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-matrix-500/20 border border-matrix-500/40 flex items-center justify-center">
-              <span className="text-matrix-500 font-mono text-sm font-bold">#</span>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center shadow-lg">
+              <span className="text-white font-bold text-sm">#</span>
             </div>
             <div>
-              <h1 className="text-white font-semibold text-sm tracking-wide">HASHED</h1>
-              <p className="text-matrix-500 font-mono text-xs opacity-70">control plane</p>
+              <h1 className="text-slate-800 font-bold text-sm tracking-wide">HASHED</h1>
+              <p className="text-emerald-600 text-xs font-medium">Control Plane</p>
             </div>
           </div>
         </div>
@@ -101,41 +101,41 @@ export default function DashboardLayout({
                 key={item.href}
                 href={item.href}
                 className={`
-                  flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-                  transition-all duration-150 group
+                  flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+                  transition-all duration-200 group
                   ${isActive
-                    ? 'bg-matrix-500/15 text-matrix-500 border border-matrix-500/30'
-                    : 'text-slate-400 hover:text-white hover:bg-white/5'
+                    ? 'bg-white/60 text-emerald-600 shadow-sm backdrop-blur-sm'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/30'
                   }
                 `}
               >
-                <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-matrix-500' : 'group-hover:text-white'}`}>
+                <span className={`flex-shrink-0 transition-colors ${isActive ? 'text-emerald-600' : 'group-hover:text-slate-900'}`}>
                   {item.icon}
                 </span>
                 <span>{item.label}</span>
                 {isActive && (
-                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-matrix-500 animate-pulse" />
+                  <span className="ml-auto w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50" />
                 )}
               </Link>
             );
           })}
         </nav>
 
-        {/* Terminal Status - Matrix aesthetic */}
-        <div className="px-4 py-4 border-t border-terminal-border">
-          <div className="bg-black/50 rounded-lg p-3 border border-terminal-border scanlines">
+        {/* Status Box - Mac Window Style */}
+        <div className="px-4 py-4 border-t border-white/10">
+          <div className="terminal-box rounded-xl p-3 pt-8">
             <div className="flex items-center gap-2 mb-2">
-              <div className="live-dot flex-shrink-0"></div>
-              <span className="text-matrix-500 font-mono text-xs">SYSTEM ONLINE</span>
+              <div className="w-2 h-2 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400/50"></div>
+              <span className="text-emerald-400 font-mono text-xs font-medium">ONLINE</span>
             </div>
-            <div className="font-mono text-xs space-y-1">
+            <div className="font-mono text-xs space-y-1.5">
               <div className="flex justify-between">
-                <span className="text-slate-600">time</span>
-                <span className="text-matrix-500">{time}</span>
+                <span className="text-slate-500">time</span>
+                <span className="text-emerald-400">{time}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-600">hash</span>
-                <span className="text-matrix-500 opacity-60">{matrixChars}</span>
+                <span className="text-slate-500">status</span>
+                <span className="text-emerald-400">active</span>
               </div>
             </div>
           </div>

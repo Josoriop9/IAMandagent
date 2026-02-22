@@ -29,30 +29,39 @@ body {
 }
 
 /* ============================================
-   MATRIX TERMINAL STYLES
+   MAC-STYLE CODE WINDOW
    ============================================ */
 
 .terminal-text {
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  color: var(--matrix-green);
-  text-shadow: 0 0 10px rgba(0, 255, 65, 0.5);
+  color: #10b981;
 }
 
 .terminal-box {
-  background: #0d1117;
-  border: 1px solid #1a3a2a;
+  background: linear-gradient(to bottom, #1a1d29 0%, #13151e 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
   font-family: 'JetBrains Mono', monospace;
-  color: var(--matrix-green);
+  color: #a3e635;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  position: relative;
 }
 
+/* Mac-style window dots */
 .terminal-box::before {
-  content: '>';
-  color: var(--matrix-dim);
-  margin-right: 8px;
-  animation: blink 1s step-end infinite;
+  content: '';
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 12px;
+  height: 12px;
+  background: #ff5f57;
+  border-radius: 50%;
+  box-shadow: 
+    20px 0 0 #febc2e,
+    40px 0 0 #28c840;
 }
 
-/* Scanline effect */
+/* Subtle gradient overlay */
 .scanlines {
   position: relative;
   overflow: hidden;
@@ -65,28 +74,25 @@ body {
   left: 0;
   right: 0;
   bottom: 0;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.03) 2px,
-    rgba(0, 0, 0, 0.03) 4px
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.02) 0%,
+    transparent 50%,
+    rgba(0, 0, 0, 0.02) 100%
   );
   pointer-events: none;
   z-index: 1;
 }
 
-/* Matrix glow */
+/* Subtle green glow for special elements */
 .matrix-glow {
-  box-shadow: 0 0 20px rgba(0, 255, 65, 0.15),
-              inset 0 0 20px rgba(0, 255, 65, 0.05);
-  border: 1px solid rgba(0, 255, 65, 0.3);
+  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+  border: 1px solid rgba(16, 185, 129, 0.2);
 }
 
 .matrix-glow:hover {
-  box-shadow: 0 0 30px rgba(0, 255, 65, 0.25),
-              inset 0 0 20px rgba(0, 255, 65, 0.08);
-  border-color: rgba(0, 255, 65, 0.5);
+  box-shadow: 0 0 24px rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.3);
 }
 
 /* ============================================
@@ -94,16 +100,19 @@ body {
    ============================================ */
 
 .card {
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.07);
-  transition: all 0.2s ease;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  transition: all 0.3s ease;
 }
 
 .card:hover {
-  box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.1);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.8);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.2);
+  transform: translateY(-2px);
 }
 
 .card-stat {
