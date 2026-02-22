@@ -273,6 +273,10 @@ export default function DashboardOverview() {
                 <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
                 <span className="text-ink-muted">Denied</span>
               </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
+                <span className="text-ink-muted">Error</span>
+              </div>
             </div>
           </div>
           {chartData.length > 0 ? (
@@ -287,6 +291,10 @@ export default function DashboardOverview() {
                     <stop offset="5%" stopColor="#ef4444" stopOpacity={0.2} />
                     <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                   </linearGradient>
+                  <linearGradient id="errorGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                  </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="time" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
@@ -297,6 +305,7 @@ export default function DashboardOverview() {
                 />
                 <Area type="monotone" dataKey="success" stroke="#00cc33" fill="url(#successGrad)" strokeWidth={2} dot={false} />
                 <Area type="monotone" dataKey="denied" stroke="#ef4444" fill="url(#deniedGrad)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="error" stroke="#f59e0b" fill="url(#errorGrad)" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
