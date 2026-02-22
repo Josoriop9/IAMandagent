@@ -183,8 +183,8 @@ export default function AgentsPage() {
       {/* ===== ECOSYSTEM VIEW ===== */}
       {viewMode === 'ecosystem' && (
         <div
-          className="relative rounded-2xl overflow-hidden border border-white/20 shadow-xl"
-          style={{ height: '520px', background: 'linear-gradient(135deg, #0a0f1a 0%, #0d1f2d 50%, #081a12 100%)' }}
+          className="relative rounded-2xl overflow-hidden shadow-2xl"
+          style={{ height: '520px', background: 'linear-gradient(135deg, #1a0533 0%, #0d0a2e 30%, #051a2e 60%, #0a1a1a 100%)' }}
           onMouseMove={e => {
             if (!dragging) return;
             const rect = e.currentTarget.getBoundingClientRect();
@@ -199,11 +199,23 @@ export default function AgentsPage() {
           onMouseUp={() => setDragging(null)}
           onMouseLeave={() => setDragging(null)}
         >
+          {/* Colorful blobs for glassmorphism background */}
+          <div className="absolute" style={{ width: 320, height: 320, top: -80, left: -60,
+            background: 'radial-gradient(circle, rgba(139,92,246,0.55) 0%, transparent 70%)', filter: 'blur(40px)', borderRadius: '50%' }} />
+          <div className="absolute" style={{ width: 280, height: 280, top: 60, right: -40,
+            background: 'radial-gradient(circle, rgba(6,182,212,0.5) 0%, transparent 70%)', filter: 'blur(40px)', borderRadius: '50%' }} />
+          <div className="absolute" style={{ width: 300, height: 300, bottom: -60, left: '40%',
+            background: 'radial-gradient(circle, rgba(168,85,247,0.45) 0%, transparent 70%)', filter: 'blur(40px)', borderRadius: '50%' }} />
+          <div className="absolute" style={{ width: 220, height: 220, bottom: 20, left: 80,
+            background: 'radial-gradient(circle, rgba(20,184,166,0.4) 0%, transparent 70%)', filter: 'blur(35px)', borderRadius: '50%' }} />
+          <div className="absolute" style={{ width: 200, height: 200, top: 100, left: '55%',
+            background: 'radial-gradient(circle, rgba(236,72,153,0.35) 0%, transparent 70%)', filter: 'blur(35px)', borderRadius: '50%' }} />
+
           {/* Grid lines */}
-          <svg className="absolute inset-0 w-full h-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+          <svg className="absolute inset-0 w-full h-full opacity-[0.06]" xmlns="http://www.w3.org/2000/svg">
             <defs>
               <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#00cc33" strokeWidth="0.5"/>
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#ffffff" strokeWidth="0.5"/>
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#grid)" />
@@ -239,14 +251,24 @@ export default function AgentsPage() {
                     style={{ background: 'radial-gradient(circle, rgba(0,204,51,0.15) 0%, transparent 70%)', width: '100px', height: '100px', margin: '-10px' }} />
                 )}
 
-                {/* Node circle */}
+                {/* Node circle - glassmorphism */}
                 <div className={`relative w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all duration-200
-                  ${isSelected ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-transparent scale-110' : 'hover:scale-105'}
-                  ${agent.is_active
-                    ? 'bg-gradient-to-br from-emerald-900/80 to-emerald-800/60 border-2 border-emerald-500/60'
-                    : 'bg-gradient-to-br from-slate-800/80 to-slate-700/60 border-2 border-slate-600/40'
-                  }`}
-                  style={{ backdropFilter: 'blur(8px)', boxShadow: agent.is_active ? '0 0 20px rgba(0,204,51,0.2)' : 'none' }}
+                  ${isSelected ? 'scale-110' : 'hover:scale-105'}`}
+                  style={{
+                    backdropFilter: 'blur(16px)',
+                    WebkitBackdropFilter: 'blur(16px)',
+                    background: 'rgba(255,255,255,0.08)',
+                    border: isSelected
+                      ? '1.5px solid rgba(167,139,250,0.8)'
+                      : agent.is_active
+                        ? '1.5px solid rgba(167,139,250,0.4)'
+                        : '1.5px solid rgba(255,255,255,0.15)',
+                    boxShadow: isSelected
+                      ? '0 0 24px rgba(139,92,246,0.5), inset 0 1px 0 rgba(255,255,255,0.15)'
+                      : agent.is_active
+                        ? '0 0 16px rgba(139,92,246,0.3), inset 0 1px 0 rgba(255,255,255,0.1)'
+                        : 'inset 0 1px 0 rgba(255,255,255,0.05)',
+                  }}
                 >
                   <span className="text-white font-bold text-sm">{initials}</span>
                   <span className="text-emerald-400/70 text-xs mt-0.5">{agent.agent_type.substring(0, 4)}</span>
@@ -299,7 +321,14 @@ export default function AgentsPage() {
       {viewMode === 'ecosystem' && selectedAgent && (() => {
         const stats = agentStats[selectedAgent.id] || { success: 0, denied: 0, error: 0, total: 0 };
         return (
-          <div className="card p-5 border-l-4 border-emerald-500 animate-slide-up">
+          <div className="rounded-2xl p-5 animate-slide-up"
+            style={{
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              background: 'linear-gradient(135deg, rgba(139,92,246,0.08) 0%, rgba(6,182,212,0.06) 50%, rgba(168,85,247,0.08) 100%)',
+              border: '1px solid rgba(167,139,250,0.25)',
+              boxShadow: '0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.1)',
+            }}>
             <div className="flex items-start justify-between mb-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
