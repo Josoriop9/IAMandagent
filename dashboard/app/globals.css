@@ -29,7 +29,7 @@ body {
 }
 
 /* ============================================
-   MAC-STYLE CODE WINDOW
+   GLASS EFFECT CONTAINERS
    ============================================ */
 
 .terminal-text {
@@ -37,93 +37,61 @@ body {
   color: #10b981;
 }
 
+/*
+  REAL GLASSMORPHISM:
+  - Colorful gradient as actual background
+  - ::before = frosted glass overlay with backdrop-filter
+  - Content sits on top via z-index
+*/
 .terminal-box {
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.25), rgba(255, 255, 255, 0.15));
-  backdrop-filter: blur(30px) saturate(200%);
-  -webkit-backdrop-filter: blur(30px) saturate(200%);
-  border: 1.5px solid rgba(255, 255, 255, 0.6);
-  font-family: 'JetBrains Mono', monospace;
-  color: #059669;
-  box-shadow: 
-    0 8px 32px rgba(31, 38, 135, 0.2),
-    inset 0 1px 0 rgba(255, 255, 255, 0.8),
-    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #4facfe, #43e97b);
+  background-size: 300% 300%;
+  animation: gradientShift 8s ease infinite;
+  border-radius: 20px;
   position: relative;
   overflow: hidden;
+  border: 1.5px solid rgba(255, 255, 255, 0.35);
+  font-family: 'JetBrains Mono', monospace;
+  color: #1e293b;
+  box-shadow: 
+    0 8px 32px rgba(31, 38, 135, 0.25),
+    0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
-/* Colorful gradient background for glassmorphism effect */
-.terminal-box::after {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: linear-gradient(
-    135deg,
-    #667eea 0%,
-    #764ba2 25%,
-    #f093fb 50%,
-    #4facfe 75%,
-    #00f2fe 100%
-  );
-  opacity: 0.15;
-  z-index: -1;
-  animation: rotate 20s linear infinite;
+@keyframes gradientShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
-@keyframes rotate {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* Crystal glass shine effect */
+/* Frosted glass overlay */
 .terminal-box::before {
   content: '';
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 50%;
-  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.4), transparent);
+  inset: 0;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(16px) saturate(180%);
+  -webkit-backdrop-filter: blur(16px) saturate(180%);
+  z-index: 0;
   border-radius: inherit;
-  pointer-events: none;
+}
+
+/* Ensure all content inside sits above the frost overlay */
+.terminal-box > * {
+  position: relative;
   z-index: 1;
 }
 
-/* Subtle gradient overlay */
-.scanlines {
-  position: relative;
-  overflow: hidden;
-}
-
-.scanlines::after {
+/* Light refraction edge shine */
+.terminal-box::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.02) 0%,
-    transparent 50%,
-    rgba(0, 0, 0, 0.02) 100%
-  );
-  pointer-events: none;
-  z-index: 1;
-}
-
-/* Subtle green glow for special elements */
-.matrix-glow {
-  box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
-  border: 1px solid rgba(16, 185, 129, 0.2);
-}
-
-.matrix-glow:hover {
-  box-shadow: 0 0 24px rgba(16, 185, 129, 0.2);
-  border-color: rgba(16, 185, 129, 0.3);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
+  z-index: 2;
 }
 
 /* ============================================
