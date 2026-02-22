@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import Link from 'next/link';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 interface Policy {
   id: string;
@@ -17,166 +17,309 @@ interface Policy {
 export default function PoliciesPage() {
   const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<string>('all');
+  const [search, setSearch] = useState('');
 
   useEffect(() => {
     async function fetchPolicies() {
       try {
-        // Get current user
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // Get user's organization
-        const { data: org } = await supabase
-          .from('organizations')
-          .select('id')
-          .eq('owner_id', user.id)
-          .single();
+        let orgId: string | null = null;
+        const { data: ownedOrg } = await supabase
+          .from('organizations').select('id').eq('owner_id', user.id).single();
+        if (ownedOrg) {
+          orgId = ownedOrg.id;
+        } else {
+          const { data: anyOrg } = await supabase
+            .from('organizations').select('id').eq('is_active', true).limit(1).single();
+          if (anyOrg) {
+            await supabase.from('organizations').update({ owner_id: user.id }).eq('id', anyOrg.id);
+            orgId = anyOrg.id;
+          }
+        }
+        if (!orgId) return;
 
-        if (!org) return;
-
-        // Fetch policies
-        const { data: policiesData, error } = await supabase
+        const { data, error } = await supabase
           .from('policies')
           .select('*')
-          .eq('organization_id', org.id)
+          .eq('organization_id', orgId)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-
-        setPolicies(policiesData || []);
+        setPolicies(data || []);
       } catch (error) {
         console.error('Error fetching policies:', error);
       } finally {
         setLoading(false);
       }
     }
-
     fetchPolicies();
   }, []);
 
+  const allowedCount = policies.filter(p => p.allowed).length;
+  const deniedCount = policies.filter(p => !p.allowed).length;
+  const approvalCount = policies.filter(p => p.requires_approval).length;
+  const globalCount = policies.filter(p => p.agent_id === null).length;
+
+  const pieData = [
+    { name: 'Allowed', value: allowedCount, color: '#00cc33' },
+    { name: 'Denied', value: deniedCount, color: '#ef4444' },
+  ].filter(d => d.value > 0);
+
+  const filtered = policies
+    .filter(p => {
+      if (filter === 'allowed') return p.allowed;
+      if (filter === 'denied') return !p.allowed;
+      if (filter === 'approval') return p.requires_approval;
+      if (filter === 'global') return p.agent_id === null;
+      return true;
+    })
+    .filter(p => !search || p.tool_name.toLowerCase().includes(search.toLowerCase()));
+
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Loading policies...</p>
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-2 border-matrix-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="font-mono text-matrix-600 text-sm">LOADING POLICIES...</p>
         </div>
       </div>
     );
   }
 
-  const allowedPolicies = policies.filter(p => p.allowed);
-  const deniedPolicies = policies.filter(p => !p.allowed);
-
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Policies</h1>
-          <p className="text-gray-400 mt-2">
-            Manage permission rules for your AI agents
+          <h1 className="text-2xl font-bold text-ink">Policies</h1>
+          <p className="text-ink-muted text-sm mt-0.5">
+            Governance rules for AI agent operations
           </p>
         </div>
-        <Link
-          href="/dashboard"
-          className="px-4 py-2 bg-dark-light hover:bg-dark-lighter border border-dark-lighter rounded-lg transition-colors"
-        >
-          ← Back
-        </Link>
+        <div className="flex items-center gap-2">
+          <div className="live-dot"></div>
+          <span className="text-xs font-mono text-matrix-600">ENFORCED</span>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-dark-light rounded-lg border border-dark-lighter p-4">
-          <p className="text-sm text-gray-400">Total Policies</p>
-          <p className="text-2xl font-bold mt-1">{policies.length}</p>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="card p-4">
+          <p className="text-ink-subtle text-xs font-medium uppercase tracking-wide">Total</p>
+          <p className="metric-number text-2xl text-ink mt-1">{policies.length}</p>
         </div>
-        <div className="bg-dark-light rounded-lg border border-dark-lighter p-4">
-          <p className="text-sm text-gray-400">Allowed</p>
-          <p className="text-2xl font-bold mt-1 text-green-400">
-            {allowedPolicies.length}
-          </p>
+        <div className="card p-4">
+          <p className="text-ink-subtle text-xs font-medium uppercase tracking-wide">Allowed</p>
+          <p className="metric-number text-2xl text-emerald-600 mt-1">{allowedCount}</p>
         </div>
-        <div className="bg-dark-light rounded-lg border border-dark-lighter p-4">
-          <p className="text-sm text-gray-400">Denied</p>
-          <p className="text-2xl font-bold mt-1 text-red-400">
-            {deniedPolicies.length}
-          </p>
+        <div className="card p-4">
+          <p className="text-ink-subtle text-xs font-medium uppercase tracking-wide">Denied</p>
+          <p className="metric-number text-2xl text-red-500 mt-1">{deniedCount}</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-ink-subtle text-xs font-medium uppercase tracking-wide">Need Approval</p>
+          <p className="metric-number text-2xl text-amber-600 mt-1">{approvalCount}</p>
+        </div>
+      </div>
+
+      {/* Chart + Info Row */}
+      {pieData.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Pie Chart */}
+          <div className="card p-5">
+            <div className="mb-4">
+              <h3 className="font-semibold text-ink text-sm">Policy Distribution</h3>
+              <p className="text-ink-subtle text-xs mt-0.5">Allow vs Deny</p>
+            </div>
+            <ResponsiveContainer width="100%" height={140}>
+              <PieChart>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={40}
+                  outerRadius={65}
+                  dataKey="value"
+                  paddingAngle={3}
+                >
+                  {pieData.map((entry, index) => (
+                    <Cell key={entry.name} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px' }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="space-y-2 mt-2">
+              {pieData.map((entry) => (
+                <div key={entry.name} className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-2 h-2 rounded-full" style={{ background: entry.color }}></div>
+                    <span className="text-xs text-ink-muted">{entry.name}</span>
+                  </div>
+                  <span className="text-xs font-mono font-medium text-ink">{entry.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Stats */}
+          <div className="lg:col-span-2 card p-5">
+            <h3 className="font-semibold text-ink text-sm mb-4">Policy Breakdown</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                <p className="text-xs text-ink-subtle font-medium mb-1 uppercase tracking-wide">Global Policies</p>
+                <p className="metric-number text-xl text-ink">{globalCount}</p>
+                <p className="text-xs text-ink-subtle mt-1">Apply to all agents</p>
+              </div>
+              <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                <p className="text-xs text-ink-subtle font-medium mb-1 uppercase tracking-wide">Agent-Specific</p>
+                <p className="metric-number text-xl text-ink">{policies.length - globalCount}</p>
+                <p className="text-xs text-ink-subtle mt-1">Scoped to one agent</p>
+              </div>
+              <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                <p className="text-xs text-ink-subtle font-medium mb-1 uppercase tracking-wide">With Amount Limits</p>
+                <p className="metric-number text-xl text-ink">{policies.filter(p => p.max_amount !== null).length}</p>
+                <p className="text-xs text-ink-subtle mt-1">Financial restrictions</p>
+              </div>
+              <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                <p className="text-xs text-ink-subtle font-medium mb-1 uppercase tracking-wide">Require Approval</p>
+                <p className="metric-number text-xl text-ink">{approvalCount}</p>
+                <p className="text-xs text-ink-subtle mt-1">Human-in-the-loop</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Filters + Search */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        {/* Search */}
+        <div className="relative flex-1">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search by tool name..."
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full pl-9 pr-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm
+                       text-ink placeholder:text-ink-subtle focus:outline-none focus:border-accent-500
+                       focus:ring-1 focus:ring-accent-500/20 transition-all"
+          />
+        </div>
+
+        {/* Filter Pills */}
+        <div className="flex gap-2 flex-wrap">
+          {[
+            { id: 'all', label: `All (${policies.length})` },
+            { id: 'allowed', label: `✓ ${allowedCount}` },
+            { id: 'denied', label: `✗ ${deniedCount}` },
+            { id: 'approval', label: `⚠ ${approvalCount}` },
+            { id: 'global', label: `🌐 ${globalCount}` },
+          ].map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`px-3 py-2 rounded-xl text-sm font-medium transition-all duration-150 ${
+                filter === f.id
+                  ? 'bg-ink text-white shadow-sm'
+                  : 'bg-white border border-surface-200 text-ink-muted hover:text-ink hover:border-surface-300'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {/* Policies List */}
-      {policies.length === 0 ? (
-        <div className="bg-dark-light rounded-lg border border-dark-lighter p-12 text-center">
-          <div className="text-6xl mb-4">🛡️</div>
-          <h3 className="text-xl font-semibold mb-2">No Policies Yet</h3>
-          <p className="text-gray-400 mb-6">
-            Policies will be synced when you register an agent with the SDK
-          </p>
-          <div className="text-sm text-gray-500">
-            <p>Policies define what operations your agents can perform:</p>
-            <ul className="mt-2 space-y-1">
-              <li>• Which tools/functions are allowed or denied</li>
-              <li>• Maximum amounts for financial operations</li>
-              <li>• Operations requiring human approval</li>
-            </ul>
+      {filtered.length === 0 ? (
+        <div className="card p-16 text-center">
+          <div className="terminal-box rounded-xl p-8 inline-block mb-6">
+            <span className="font-mono text-matrix-500 text-2xl">{'🛡️'}</span>
           </div>
+          <h3 className="text-lg font-semibold text-ink mb-2">
+            {search || filter !== 'all' ? 'No matching policies' : 'No Policies Yet'}
+          </h3>
+          <p className="text-ink-muted text-sm mb-6">
+            {search || filter !== 'all'
+              ? 'Try adjusting your filters'
+              : 'Policies are synced when you initialize agents with the SDK'}
+          </p>
+          {!search && filter === 'all' && (
+            <div className="terminal-box rounded-lg p-4 inline-block text-left">
+              <p className="font-mono text-xs text-matrix-500">from hashed import HashedCore</p>
+              <p className="font-mono text-xs text-terminal-dim mt-1">
+                core = HashedCore(config, policies=[...])
+              </p>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="space-y-4">
-          {policies.map((policy) => (
+        <div className="grid grid-cols-1 gap-4">
+          {filtered.map((policy, index) => (
             <div
               key={policy.id}
-              className="bg-dark-light rounded-lg border border-dark-lighter p-6"
+              className={`card p-5 animate-slide-up stagger-${Math.min(index + 1, 4)}`}
             >
               <div className="flex items-start justify-between">
+                {/* Left: Tool Name + Badges */}
                 <div className="flex-1">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-semibold">{policy.tool_name}</h3>
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${
-                        policy.allowed
-                          ? 'bg-green-500/20 text-green-400'
-                          : 'bg-red-500/20 text-red-400'
-                      }`}
-                    >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <h3 className="font-semibold text-ink text-lg font-mono">{policy.tool_name}</h3>
+                    <span className={`badge ${policy.allowed ? 'badge-success' : 'badge-danger'}`}>
                       {policy.allowed ? '✓ Allowed' : '✗ Denied'}
                     </span>
                     {policy.requires_approval && (
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-400">
-                        Requires Approval
-                      </span>
+                      <span className="badge badge-warning">⚠ Requires Approval</span>
                     )}
                     {policy.agent_id === null && (
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-primary-500/20 text-primary-400">
-                        Global
+                      <span className="badge" style={{ background: '#eff6ff', color: '#1e40af', border: '1px solid #bfdbfe' }}>
+                        🌐 Global
                       </span>
                     )}
                   </div>
 
-                  <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                  {/* Policy Details Grid */}
+                  <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                     {policy.max_amount !== null && (
-                      <div>
-                        <p className="text-gray-400">Max Amount</p>
-                        <p className="text-gray-300 font-semibold">
+                      <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                        <p className="text-xs text-ink-subtle font-medium uppercase tracking-wide">Max Amount</p>
+                        <p className="metric-number text-lg text-ink mt-0.5">
                           ${policy.max_amount.toLocaleString()}
                         </p>
                       </div>
                     )}
-                    <div>
-                      <p className="text-gray-400">Scope</p>
-                      <p className="text-gray-300">
+                    <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                      <p className="text-xs text-ink-subtle font-medium uppercase tracking-wide">Scope</p>
+                      <p className="text-sm text-ink mt-0.5">
                         {policy.agent_id ? 'Agent-specific' : 'All agents'}
                       </p>
                     </div>
-                    <div>
-                      <p className="text-gray-400">Created</p>
-                      <p className="text-gray-300">
-                        {new Date(policy.created_at).toLocaleDateString()}
+                    <div className="bg-surface-50 rounded-lg p-3 border border-surface-200">
+                      <p className="text-xs text-ink-subtle font-medium uppercase tracking-wide">Created</p>
+                      <p className="text-sm text-ink mt-0.5">
+                        {new Date(policy.created_at).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Right: Status Icon */}
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  policy.allowed
+                    ? 'bg-emerald-50 text-emerald-600 border border-emerald-100'
+                    : 'bg-red-50 text-red-500 border border-red-100'
+                }`}>
+                  {policy.allowed ? '✓' : '✗'}
                 </div>
               </div>
             </div>
@@ -184,17 +327,18 @@ export default function PoliciesPage() {
         </div>
       )}
 
-      {/* Info Box */}
-      <div className="bg-primary-500/10 border border-primary-500/30 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-2">💡 About Policies</h3>
-        <p className="text-gray-300 text-sm mb-3">
-          Policies are synced from your agent code when using the SDK. To add or modify policies:
-        </p>
-        <ol className="text-sm text-gray-400 space-y-2 ml-4">
-          <li>1. Define policies in your agent code when initializing HashedCore</li>
-          <li>2. Run your agent - policies will sync automatically</li>
-          <li>3. View and monitor them here in the dashboard</li>
-        </ol>
+      {/* Info Banner */}
+      <div className="terminal-box rounded-xl p-4 scanlines">
+        <div className="flex items-start gap-3">
+          <span className="text-matrix-500 text-sm flex-shrink-0">💡</span>
+          <div>
+            <p className="font-mono text-matrix-500 text-xs">POLICY SYNC</p>
+            <p className="font-mono text-terminal-dim text-xs mt-1">
+              Policies are defined in your agent code and automatically synced to the control plane.
+              Changes require restarting your agent to take effect.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
