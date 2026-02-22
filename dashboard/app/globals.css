@@ -16,6 +16,17 @@
   --sidebar-text: #e2e8f0;
 }
 
+.dark {
+  --background: #0a0f1a;
+  --foreground: #e2e8f0;
+  --matrix-green: #00ff41;
+  --matrix-dim: #00cc33;
+  --card-border: #1e293b;
+  --card-bg: #0f172a;
+  --sidebar-bg: #050a12;
+  --sidebar-text: #e2e8f0;
+}
+
 * {
   box-sizing: border-box;
 }

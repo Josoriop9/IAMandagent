@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const navItems = [
   {
@@ -76,10 +77,10 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 overflow-hidden">
+    <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 dark:from-slate-900 dark:via-slate-800 dark:to-slate-900 overflow-hidden transition-colors">
       {/* Sidebar */}
       <aside
-        className={`flex flex-col bg-white/40 backdrop-blur-xl border-r border-white/20 flex-shrink-0 shadow-xl
+        className={`flex flex-col bg-white/40 dark:bg-slate-900/60 backdrop-blur-xl border-r border-white/20 dark:border-white/10 flex-shrink-0 shadow-xl
                     transition-all duration-300 ease-in-out ${collapsed ? 'w-[68px]' : 'w-64'}`}
       >
         {/* Logo + Collapse Toggle */}
@@ -91,8 +92,8 @@ export default function DashboardLayout({
               </div>
               {!collapsed && (
                 <div className="overflow-hidden">
-                  <h1 className="text-slate-800 font-bold text-sm tracking-wide">HASHED</h1>
-                  <p className="text-emerald-600 text-xs font-medium">Control Plane</p>
+                  <h1 className="text-slate-800 dark:text-white font-bold text-sm tracking-wide">HASHED</h1>
+                  <p className="text-emerald-600 dark:text-emerald-400 text-xs font-medium">Control Plane</p>
                 </div>
               )}
             </div>
@@ -199,19 +200,22 @@ export default function DashboardLayout({
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
         {/* Top Bar */}
-        <header className="h-14 bg-white border-b border-surface-200 flex items-center justify-between px-6 flex-shrink-0">
+        <header className="h-14 bg-white dark:bg-slate-900/80 border-b border-surface-200 dark:border-white/10 flex items-center justify-between px-6 flex-shrink-0 transition-colors">
           <div className="flex items-center gap-3">
             {/* Breadcrumb */}
             <nav className="flex items-center gap-2 text-sm">
-              <span className="text-ink-subtle">Hashed</span>
-              <span className="text-ink-subtle">/</span>
-              <span className="font-medium text-ink">
+              <span className="text-ink-subtle dark:text-slate-400">Hashed</span>
+              <span className="text-ink-subtle dark:text-slate-600">/</span>
+              <span className="font-medium text-ink dark:text-white">
                 {navItems.find(i => i.href === pathname)?.label ?? 'Dashboard'}
               </span>
             </nav>
           </div>
 
           <div className="flex items-center gap-4">
+            {/* Theme Toggle */}
+            <ThemeToggle />
+
             {/* Live badge */}
             <div className="flex items-center gap-2 px-3 py-1.5 bg-matrix-500/10 border border-matrix-500/30 rounded-full">
               <div className="live-dot"></div>
