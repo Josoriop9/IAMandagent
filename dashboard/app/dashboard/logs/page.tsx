@@ -53,10 +53,35 @@ export default function LogsPage() {
           .select('*')
           .eq('organization_id', orgId)
           .order('timestamp', { ascending: false })
-          .limit(200);
+          .limit(500);
 
         if (error) throw error;
-        setLogs(data || []);
+        
+        // Filter to show only final result logs (success, denied, error)
+        // Exclude intermediate validation logs
+        const finalLogs = (data || []).filter(log => 
+          log.status === 'success' || 
+          log.status === 'denied' || 
+          log.status === 'error'
+        );
+        
+        // Deduplicate: keep only the LAST log for each unique operation
+        // Group by tool_name + timestamp window (within 1 second)
+        const uniqueLogs = finalLogs.reduce((acc: Log[], log) => {
+          const logTime = new Date(log.timestamp).getTime();
+          const isDuplicate = acc.some(existing => {
+            const existingTime = new Date(existing.timestamp).getTime();
+            const timeDiff = Math.abs(logTime - existingTime);
+            return existing.tool_name === log.tool_name && timeDiff < 1000;
+          });
+          
+          if (!isDuplicate) {
+            acc.push(log);
+          }
+          return acc;
+        }, []);
+        
+        setLogs(uniqueLogs);
       } catch (error) {
         console.error('Error fetching logs:', error);
       } finally {
