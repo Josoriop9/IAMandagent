@@ -13,10 +13,27 @@ interface Agent {
   last_seen_at: string | null;
 }
 
+interface AgentStats {
+  success: number;
+  denied: number;
+  error: number;
+  total: number;
+}
+
+interface NodePosition {
+  x: number;
+  y: number;
+}
+
 export default function AgentsPage() {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState<'list' | 'ecosystem'>('list');
+  const [agentStats, setAgentStats] = useState<Record<string, AgentStats>>({});
+  const [selectedAgent, setSelectedAgent] = useState<Agent | null>(null);
+  const [positions, setPositions] = useState<Record<string, NodePosition>>({});
+  const [dragging, setDragging] = useState<{ id: string; offsetX: number; offsetY: number } | null>(null);
 
   useEffect(() => {
     async function fetchAgents() {
@@ -43,7 +60,39 @@ export default function AgentsPage() {
           .from('agents').select('*').eq('organization_id', orgId)
           .order('created_at', { ascending: false });
 
-        setAgents(data || []);
+        const agentList = data || [];
+        setAgents(agentList);
+
+        // Fetch logs to compute per-agent stats
+        const { data: logs } = await supabase
+          .from('ledger_logs')
+          .select('agent_id, status')
+          .eq('organization_id', orgId);
+
+        const statsMap: Record<string, AgentStats> = {};
+        (logs || []).forEach((log: any) => {
+          const aid = log.agent_id;
+          if (!aid) return;
+          if (!statsMap[aid]) statsMap[aid] = { success: 0, denied: 0, error: 0, total: 0 };
+          statsMap[aid].total++;
+          if (log.status === 'success') statsMap[aid].success++;
+          else if (log.status === 'denied') statsMap[aid].denied++;
+          else statsMap[aid].error++;
+        });
+        setAgentStats(statsMap);
+
+        // Initialize random positions for ecosystem view
+        const posMap: Record<string, NodePosition> = {};
+        agentList.forEach((agent: Agent, i: number) => {
+          const cols = Math.ceil(Math.sqrt(agentList.length + 1));
+          const col = i % cols;
+          const row = Math.floor(i / cols);
+          posMap[agent.id] = {
+            x: 120 + col * 220 + (Math.random() * 40 - 20),
+            y: 100 + row * 200 + (Math.random() * 40 - 20),
+          };
+        });
+        setPositions(posMap);
       } catch (error) {
         console.error('Error fetching agents:', error);
       } finally {
@@ -79,8 +128,23 @@ export default function AgentsPage() {
             AI agents registered with the control plane
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs font-mono">
-          <span className="badge badge-matrix">{agents.length} registered</span>
+        <div className="flex items-center gap-3">
+          <span className="badge badge-matrix text-xs font-mono">{agents.length} registered</span>
+          {/* View Toggle */}
+          <div className="flex items-center bg-surface-100 rounded-lg p-1 gap-1">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'list' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}
+            >
+              ☰ List
+            </button>
+            <button
+              onClick={() => setViewMode('ecosystem')}
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${viewMode === 'ecosystem' ? 'bg-white text-ink shadow-sm' : 'text-ink-muted hover:text-ink'}`}
+            >
+              🌐 Ecosystem
+            </button>
+          </div>
         </div>
       </div>
 
@@ -116,8 +180,192 @@ export default function AgentsPage() {
         />
       </div>
 
-      {/* Agents Grid */}
-      {filtered.length === 0 ? (
+      {/* ===== ECOSYSTEM VIEW ===== */}
+      {viewMode === 'ecosystem' && (
+        <div
+          className="relative rounded-2xl overflow-hidden border border-white/20 shadow-xl"
+          style={{ height: '520px', background: 'linear-gradient(135deg, #0a0f1a 0%, #0d1f2d 50%, #081a12 100%)' }}
+          onMouseMove={e => {
+            if (!dragging) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            setPositions(prev => ({
+              ...prev,
+              [dragging.id]: {
+                x: e.clientX - rect.left - dragging.offsetX,
+                y: e.clientY - rect.top - dragging.offsetY,
+              }
+            }));
+          }}
+          onMouseUp={() => setDragging(null)}
+          onMouseLeave={() => setDragging(null)}
+        >
+          {/* Grid lines */}
+          <svg className="absolute inset-0 w-full h-full opacity-10" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+                <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#00cc33" strokeWidth="0.5"/>
+              </pattern>
+            </defs>
+            <rect width="100%" height="100%" fill="url(#grid)" />
+          </svg>
+
+          {/* Title */}
+          <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+            <span className="font-mono text-xs text-emerald-500 tracking-widest">AGENT ECOSYSTEM · {agents.length} NODES</span>
+          </div>
+          <p className="absolute top-4 right-4 font-mono text-xs text-emerald-900 z-10">drag nodes to arrange</p>
+
+          {/* Nodes */}
+          {agents.map((agent, idx) => {
+            const pos = positions[agent.id] || { x: 100 + idx * 180, y: 150 };
+            const stats = agentStats[agent.id] || { success: 0, denied: 0, error: 0, total: 0 };
+            const isSelected = selectedAgent?.id === agent.id;
+            const initials = agent.name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase();
+
+            return (
+              <div
+                key={agent.id}
+                style={{ position: 'absolute', left: pos.x, top: pos.y, transform: 'translate(-50%, -50%)', cursor: 'grab', zIndex: isSelected ? 20 : 10, userSelect: 'none' }}
+                onMouseDown={e => {
+                  e.preventDefault();
+                  setDragging({ id: agent.id, offsetX: 0, offsetY: 0 });
+                }}
+                onClick={() => setSelectedAgent(isSelected ? null : agent)}
+              >
+                {/* Glow ring for active */}
+                {agent.is_active && (
+                  <div className="absolute inset-0 rounded-full animate-ping"
+                    style={{ background: 'radial-gradient(circle, rgba(0,204,51,0.15) 0%, transparent 70%)', width: '100px', height: '100px', margin: '-10px' }} />
+                )}
+
+                {/* Node circle */}
+                <div className={`relative w-20 h-20 rounded-full flex flex-col items-center justify-center transition-all duration-200
+                  ${isSelected ? 'ring-2 ring-emerald-400 ring-offset-2 ring-offset-transparent scale-110' : 'hover:scale-105'}
+                  ${agent.is_active
+                    ? 'bg-gradient-to-br from-emerald-900/80 to-emerald-800/60 border-2 border-emerald-500/60'
+                    : 'bg-gradient-to-br from-slate-800/80 to-slate-700/60 border-2 border-slate-600/40'
+                  }`}
+                  style={{ backdropFilter: 'blur(8px)', boxShadow: agent.is_active ? '0 0 20px rgba(0,204,51,0.2)' : 'none' }}
+                >
+                  <span className="text-white font-bold text-sm">{initials}</span>
+                  <span className="text-emerald-400/70 text-xs mt-0.5">{agent.agent_type.substring(0, 4)}</span>
+
+                  {/* Status dot */}
+                  {agent.is_active && (
+                    <div className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-emerald-900 animate-pulse" />
+                  )}
+                </div>
+
+                {/* Name label */}
+                <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
+                  <span className="text-white/80 text-xs font-medium">{agent.name.length > 12 ? agent.name.substring(0, 12) + '…' : agent.name}</span>
+                </div>
+
+                {/* Stats badges */}
+                {stats.total > 0 && (
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex gap-1 whitespace-nowrap">
+                    {stats.success > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 font-mono">
+                        ✓{stats.success}
+                      </span>
+                    )}
+                    {stats.denied > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-red-500/20 border border-red-500/40 text-red-400 font-mono">
+                        ✗{stats.denied}
+                      </span>
+                    )}
+                    {stats.error > 0 && (
+                      <span className="text-xs px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 font-mono">
+                        ⚠{stats.error}
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {/* Empty state */}
+          {agents.length === 0 && (
+            <div className="absolute inset-0 flex items-center justify-center">
+              <p className="font-mono text-emerald-900 text-sm">{'> no_agents_registered'}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ===== SELECTED AGENT PANEL (Ecosystem) ===== */}
+      {viewMode === 'ecosystem' && selectedAgent && (() => {
+        const stats = agentStats[selectedAgent.id] || { success: 0, denied: 0, error: 0, total: 0 };
+        return (
+          <div className="card p-5 border-l-4 border-emerald-500 animate-slide-up">
+            <div className="flex items-start justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
+                  <span className="text-emerald-600 font-bold text-sm">
+                    {selectedAgent.name.split(' ').map((w: string) => w[0]).join('').substring(0, 2).toUpperCase()}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-semibold text-ink">{selectedAgent.name}</h3>
+                  <p className="text-xs text-ink-subtle">{selectedAgent.agent_type} · {selectedAgent.is_active ? '● Active' : '○ Inactive'}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedAgent(null)} className="text-ink-subtle hover:text-ink text-lg leading-none">×</button>
+            </div>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-3 text-center">
+                <p className="text-emerald-600 font-bold text-xl font-mono">{stats.success}</p>
+                <p className="text-xs text-emerald-700 mt-0.5">✓ Success</p>
+              </div>
+              <div className="bg-red-50 border border-red-100 rounded-lg p-3 text-center">
+                <p className="text-red-500 font-bold text-xl font-mono">{stats.denied}</p>
+                <p className="text-xs text-red-600 mt-0.5">✗ Denied</p>
+              </div>
+              <div className="bg-amber-50 border border-amber-100 rounded-lg p-3 text-center">
+                <p className="text-amber-600 font-bold text-xl font-mono">{stats.error}</p>
+                <p className="text-xs text-amber-700 mt-0.5">⚠ Errors</p>
+              </div>
+            </div>
+            {stats.total > 0 && (
+              <div className="mb-4">
+                <div className="flex justify-between text-xs text-ink-subtle mb-1">
+                  <span>Success Rate</span>
+                  <span>{Math.round((stats.success / stats.total) * 100)}%</span>
+                </div>
+                <div className="h-2 bg-surface-100 rounded-full overflow-hidden flex">
+                  <div className="bg-emerald-500 h-full" style={{ width: `${(stats.success / stats.total) * 100}%` }} />
+                  <div className="bg-red-400 h-full" style={{ width: `${(stats.denied / stats.total) * 100}%` }} />
+                  <div className="bg-amber-400 h-full" style={{ width: `${(stats.error / stats.total) * 100}%` }} />
+                </div>
+                <p className="text-xs text-ink-subtle mt-1">{stats.total} total operations</p>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-2 text-xs">
+              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+                <span className="text-ink-subtle w-16 flex-shrink-0">Agent ID</span>
+                <code className="font-mono text-accent-600">{selectedAgent.id.substring(0, 8)}...{selectedAgent.id.slice(-4)}</code>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+                <span className="text-ink-subtle w-16 flex-shrink-0">Public Key</span>
+                <code className="font-mono text-matrix-600">{selectedAgent.public_key.substring(0, 16)}...</code>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+                <span className="text-ink-subtle w-16 flex-shrink-0">Last Seen</span>
+                <span className="text-ink">{selectedAgent.last_seen_at ? new Date(selectedAgent.last_seen_at).toLocaleString('en-US', { timeZone: 'America/New_York' }) + ' EST' : 'Never'}</span>
+              </div>
+              <div className="flex items-center gap-2 p-2 bg-surface-50 rounded-lg">
+                <span className="text-ink-subtle w-16 flex-shrink-0">Registered</span>
+                <span className="text-ink">{new Date(selectedAgent.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== LIST VIEW ===== */}
+      {viewMode === 'list' && (filtered.length === 0 ? (
         <div className="card p-16 text-center">
           <div className="terminal-box rounded-xl p-8 inline-block mx-auto mb-6">
             <span className="font-mono text-matrix-500 text-2xl">{'> _'}</span>
@@ -215,7 +463,7 @@ export default function AgentsPage() {
             </div>
           ))}
         </div>
-      )}
+      ))}
 
       {/* Info Banner */}
       <div className="terminal-box glass-indigo rounded-xl p-4">
