@@ -20,6 +20,13 @@ interface Log {
   metadata?: any;
 }
 
+interface LogGroup {
+  mainLog: Log;
+  relatedLogs: Log[];
+  timestamp: string;
+  tool_name: string;
+}
+
 export default function LogsPage() {
   const [logs, setLogs] = useState<Log[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,31 +64,9 @@ export default function LogsPage() {
 
         if (error) throw error;
         
-        // Filter to show only final result logs (success, denied, error)
-        // Exclude intermediate validation logs
-        const finalLogs = (data || []).filter(log => 
-          log.status === 'success' || 
-          log.status === 'denied' || 
-          log.status === 'error'
-        );
-        
-        // Deduplicate: keep only the LAST log for each unique operation
-        // Group by tool_name + timestamp window (within 1 second)
-        const uniqueLogs = finalLogs.reduce((acc: Log[], log) => {
-          const logTime = new Date(log.timestamp).getTime();
-          const isDuplicate = acc.some(existing => {
-            const existingTime = new Date(existing.timestamp).getTime();
-            const timeDiff = Math.abs(logTime - existingTime);
-            return existing.tool_name === log.tool_name && timeDiff < 1000;
-          });
-          
-          if (!isDuplicate) {
-            acc.push(log);
-          }
-          return acc;
-        }, []);
-        
-        setLogs(uniqueLogs);
+        // Show ALL logs without filtering
+        // This allows visibility into all operations including intermediate steps
+        setLogs(data || []);
       } catch (error) {
         console.error('Error fetching logs:', error);
       } finally {
