@@ -77,8 +77,8 @@ export default function DashboardLayout({
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-emerald-50 overflow-hidden">
-      {/* Sidebar - Glass Effect */}
-      <aside className="w-64 flex flex-col bg-white/40 backdrop-blur-xl border-r border-white/20 flex-shrink-0 shadow-xl">
+      {/* Sidebar - Crystal Glass Effect */}
+      <aside className="w-64 flex flex-col bg-white/30 backdrop-blur-2xl border-r border-white/30 flex-shrink-0 shadow-2xl" style={{boxShadow: '0 8px 32px rgba(31, 38, 135, 0.2), inset 0 1px 1px rgba(255, 255, 255, 0.5)'}}>
         {/* Logo */}
         <div className="px-6 py-5 border-b border-white/10">
           <div className="flex items-center gap-3">
