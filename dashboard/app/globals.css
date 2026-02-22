@@ -38,11 +38,13 @@ body {
 }
 
 .terminal-box {
-  background: linear-gradient(to bottom, #1a1d29 0%, #13151e 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.5);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   font-family: 'JetBrains Mono', monospace;
-  color: #a3e635;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  color: #10b981;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.5);
   position: relative;
 }
 
@@ -50,15 +52,15 @@ body {
 .terminal-box::before {
   content: '';
   position: absolute;
-  top: 12px;
-  left: 12px;
-  width: 12px;
-  height: 12px;
+  top: 10px;
+  left: 10px;
+  width: 10px;
+  height: 10px;
   background: #ff5f57;
   border-radius: 50%;
   box-shadow: 
-    20px 0 0 #febc2e,
-    40px 0 0 #28c840;
+    18px 0 0 #febc2e,
+    36px 0 0 #28c840;
 }
 
 /* Subtle gradient overlay */
