@@ -33,7 +33,7 @@ interface Log {
 // ============================================
 
 function buildChartData(logs: Log[]) {
-  const byHour: Record<string, { success: number; denied: number; error: number }> = {};
+  const byHour: Record<string, { success: number; error: number; permission_denied: number }> = {};
 
   logs.forEach(log => {
     const hour = new Date(log.timestamp).toLocaleTimeString('en-US', {
@@ -41,9 +41,9 @@ function buildChartData(logs: Log[]) {
       minute: '2-digit',
       hour12: false,
     });
-    if (!byHour[hour]) byHour[hour] = { success: 0, denied: 0, error: 0 };
+    if (!byHour[hour]) byHour[hour] = { success: 0, error: 0, permission_denied: 0 };
     if (log.status === 'success') byHour[hour].success++;
-    else if (log.status === 'denied') byHour[hour].denied++;
+    else if (log.status === 'denied') byHour[hour].permission_denied++;
     else byHour[hour].error++;
   });
 
@@ -270,12 +270,12 @@ export default function DashboardOverview() {
                 <span className="text-ink-muted">Success</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
-                <span className="text-ink-muted">Denied</span>
-              </div>
-              <div className="flex items-center gap-1.5">
                 <div className="w-2.5 h-2.5 rounded-full bg-amber-400"></div>
                 <span className="text-ink-muted">Error</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-2.5 h-2.5 rounded-full bg-red-400"></div>
+                <span className="text-ink-muted">Permission Denied</span>
               </div>
             </div>
           </div>
@@ -303,9 +303,9 @@ export default function DashboardOverview() {
                   contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px' }}
                   cursor={{ stroke: '#e2e8f0' }}
                 />
-                <Area type="monotone" dataKey="success" stroke="#00cc33" fill="url(#successGrad)" strokeWidth={2} dot={false} />
-                <Area type="monotone" dataKey="denied" stroke="#ef4444" fill="url(#deniedGrad)" strokeWidth={2} dot={false} />
-                <Area type="monotone" dataKey="error" stroke="#f59e0b" fill="url(#errorGrad)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="success" name="Success" stroke="#00cc33" fill="url(#successGrad)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="error" name="Error" stroke="#f59e0b" fill="url(#errorGrad)" strokeWidth={2} dot={false} />
+                <Area type="monotone" dataKey="permission_denied" name="Permission Denied" stroke="#ef4444" fill="url(#deniedGrad)" strokeWidth={2} dot={false} />
               </AreaChart>
             </ResponsiveContainer>
           ) : (
