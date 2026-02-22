@@ -21,15 +21,39 @@ export default function DashboardOverview() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
-        // 2. Get user's organization
-        const { data: org, error: orgError } = await supabase
+        // 2. Get user's organization (try by owner_id first, then fallback to any active org)
+        let org: any = null;
+        
+        const { data: ownedOrg } = await supabase
           .from('organizations')
           .select('*')
           .eq('owner_id', user.id)
           .single();
+        
+        if (ownedOrg) {
+          org = ownedOrg;
+        } else {
+          // Fallback: get first active organization (and auto-link it to this user)
+          const { data: anyOrg } = await supabase
+            .from('organizations')
+            .select('*')
+            .eq('is_active', true)
+            .limit(1)
+            .single();
+          
+          if (anyOrg) {
+            // Auto-link this user to the organization
+            await supabase
+              .from('organizations')
+              .update({ owner_id: user.id })
+              .eq('id', anyOrg.id);
+            org = anyOrg;
+          }
+        }
 
-        if (orgError) {
-          console.error('Error fetching organization:', orgError);
+        if (!org) {
+          console.error('No organization found. Run this SQL in Supabase:\nUPDATE organizations SET owner_id = (SELECT id FROM auth.users WHERE email = \'your@email.com\') WHERE owner_id IS NULL;');
+          setLoading(false);
           return;
         }
 
