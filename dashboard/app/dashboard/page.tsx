@@ -156,16 +156,16 @@ export default function DashboardOverview() {
   const [chartPeriod, setChartPeriod] = useState<string>('all');
   const [customDate, setCustomDate] = useState<string>('');
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+  // Fetch data function (reusable for polling)
+  async function fetchData() {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-        let org: any = null;
+      let org: any = organization;
+      if (!org) {
         const { data: ownedOrg } = await supabase
           .from('organizations').select('*').eq('owner_id', user.id).single();
-
         if (ownedOrg) {
           org = ownedOrg;
         } else {
@@ -176,52 +176,61 @@ export default function DashboardOverview() {
             org = anyOrg;
           }
         }
-
         if (!org) return;
         setOrganization(org);
-
-        const [agents, policies, logs] = await Promise.all([
-          supabase.from('agents').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
-          supabase.from('policies').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
-          supabase.from('ledger_logs').select('*').eq('organization_id', org.id).order('timestamp', { ascending: false }).limit(100),
-        ]);
-
-        const logData = logs.data || [];
-        const successCount = logData.filter(l => l.status === 'success').length;
-        const deniedCount = logData.filter(l => l.status === 'denied').length;
-        const successRate = logData.length > 0 ? Math.round((successCount / logData.length) * 100) : 0;
-
-        setStats({
-          agents: agents.count || 0,
-          policies: policies.count || 0,
-          logs: logData.length,
-          successRate,
-          deniedOps: deniedCount,
-        });
-
-        setAllLogs(logData);
-        setRecentLogs(logData.slice(0, 6));
-      } catch (error) {
-        console.error('Error:', error);
-      } finally {
-        setLoading(false);
       }
-    }
 
+      const [agents, policies, logs] = await Promise.all([
+        supabase.from('agents').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
+        supabase.from('policies').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
+        supabase.from('ledger_logs').select('*').eq('organization_id', org.id).order('timestamp', { ascending: false }).limit(500),
+      ]);
+
+      const logData = logs.data || [];
+      const successCount = logData.filter(l => l.status === 'success').length;
+      const deniedCount = logData.filter(l => l.status === 'denied').length;
+      const successRate = logData.length > 0 ? Math.round((successCount / logData.length) * 100) : 0;
+
+      setStats({
+        agents: agents.count || 0,
+        policies: policies.count || 0,
+        logs: logData.length,
+        successRate,
+        deniedOps: deniedCount,
+      });
+
+      setAllLogs(logData);
+      setRecentLogs(logData.slice(0, 6));
+    } catch (error) {
+      console.error('Error:', error);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Initial fetch + auto-refresh every 10 seconds
+  useEffect(() => {
     fetchData();
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
   }, []);
 
   const filteredLogs = filterLogsByPeriod(allLogs, chartPeriod, customDate);
   const chartData = buildChartData(filteredLogs);
   const toolData = buildToolData(allLogs);
 
+  // Pie chart uses same logic as chart: success / denied / everything else = error
+  const successTotal = allLogs.filter(l => l.status === 'success').length;
+  const deniedTotal = allLogs.filter(l => l.status === 'denied').length;
+  const errorTotal = allLogs.length - successTotal - deniedTotal;
+
   const pieData = [
-    { name: 'Success', value: allLogs.filter(l => l.status === 'success').length },
-    { name: 'Denied', value: allLogs.filter(l => l.status === 'denied').length },
-    { name: 'Error', value: allLogs.filter(l => l.status === 'error').length },
+    { name: 'Success', value: successTotal, color: '#00cc33' },
+    { name: 'Permission Denied', value: deniedTotal, color: '#ef4444' },
+    { name: 'Error', value: errorTotal, color: '#f59e0b' },
   ].filter(d => d.value > 0);
 
-  const pieColors = ['#00cc33', '#ef4444', '#f59e0b'];
+  const pieColors = pieData.map(d => d.color);
 
   const handleCopyKey = () => {
     if (organization?.api_key) {
