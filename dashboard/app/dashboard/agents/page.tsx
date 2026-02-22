@@ -218,7 +218,7 @@ export default function AgentsPage() {
       )}
 
       {/* Info Banner */}
-      <div className="terminal-box rounded-xl p-4 scanlines">
+      <div className="terminal-box glass-indigo rounded-xl p-4">
         <div className="flex items-start gap-3">
           <span className="text-matrix-500 font-mono text-sm mt-0.5">$</span>
           <div>

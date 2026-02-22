@@ -43,10 +43,8 @@ body {
   - ::before = frosted glass overlay with backdrop-filter
   - Content sits on top via z-index
 */
+/* Base glass structure - shared across all variants */
 .terminal-box {
-  background: linear-gradient(135deg, #667eea, #764ba2, #f093fb, #4facfe, #43e97b);
-  background-size: 300% 300%;
-  animation: gradientShift 8s ease infinite;
   border-radius: 20px;
   position: relative;
   overflow: hidden;
@@ -54,8 +52,11 @@ body {
   font-family: 'JetBrains Mono', monospace;
   color: #1e293b;
   box-shadow: 
-    0 8px 32px rgba(31, 38, 135, 0.25),
-    0 4px 12px rgba(0, 0, 0, 0.1);
+    0 8px 32px rgba(31, 38, 135, 0.12),
+    0 4px 12px rgba(0, 0, 0, 0.06);
+  background: linear-gradient(135deg, #a8edea, #94b9ff, #d4c4fb);
+  background-size: 200% 200%;
+  animation: gradientShift 12s ease infinite;
 }
 
 @keyframes gradientShift {
@@ -69,14 +70,14 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.6);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
   z-index: 0;
   border-radius: inherit;
 }
 
-/* Ensure all content inside sits above the frost overlay */
+/* Content sits above the frost overlay */
 .terminal-box > * {
   position: relative;
   z-index: 1;
@@ -92,6 +93,48 @@ body {
   height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.9), transparent);
   z-index: 2;
+}
+
+/* ---- Glass Variants by page theme ---- */
+
+/* Overview: Emerald/Teal - crypto/tech vibe */
+.glass-emerald {
+  background: linear-gradient(135deg, #a7f3d0, #6ee7b7, #99f6e4, #a7f3d0);
+  background-size: 200% 200%;
+  border-color: rgba(16, 185, 129, 0.2);
+  box-shadow: 0 8px 32px rgba(16, 185, 129, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Agents: Indigo/Blue - identity/security */
+.glass-indigo {
+  background: linear-gradient(135deg, #c7d2fe, #a5b4fc, #bfdbfe, #c7d2fe);
+  background-size: 200% 200%;
+  border-color: rgba(99, 102, 241, 0.2);
+  box-shadow: 0 8px 32px rgba(99, 102, 241, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Logs: Slate/Gray-Blue - audit/formal */
+.glass-slate {
+  background: linear-gradient(135deg, #cbd5e1, #94a3b8, #bae6fd, #cbd5e1);
+  background-size: 200% 200%;
+  border-color: rgba(100, 116, 139, 0.2);
+  box-shadow: 0 8px 32px rgba(100, 116, 139, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Policies: Violet/Purple - governance */
+.glass-violet {
+  background: linear-gradient(135deg, #ddd6fe, #c4b5fd, #e9d5ff, #ddd6fe);
+  background-size: 200% 200%;
+  border-color: rgba(139, 92, 246, 0.2);
+  box-shadow: 0 8px 32px rgba(139, 92, 246, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Sidebar status: Mint/Fresh green */
+.glass-mint {
+  background: linear-gradient(135deg, #d1fae5, #a7f3d0, #ccfbf1, #d1fae5);
+  background-size: 200% 200%;
+  border-color: rgba(52, 211, 153, 0.2);
+  box-shadow: 0 8px 32px rgba(52, 211, 153, 0.1), 0 4px 12px rgba(0, 0, 0, 0.04);
 }
 
 /* ============================================

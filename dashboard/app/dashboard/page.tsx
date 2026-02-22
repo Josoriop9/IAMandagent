@@ -431,7 +431,7 @@ export default function DashboardOverview() {
 
       {/* ---- API KEY SECTION ---- */}
       {organization && (
-        <div className="terminal-box rounded-xl p-5 scanlines">
+        <div className="terminal-box glass-emerald rounded-xl p-5">
           <div className="flex items-center gap-2 mb-3">
             <div className="live-dot"></div>
             <span className="font-mono text-xs text-matrix-500 tracking-wider">API_KEY / CONTROL_PLANE_CONNECTION</span>

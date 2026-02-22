@@ -328,7 +328,7 @@ export default function PoliciesPage() {
       )}
 
       {/* Info Banner */}
-      <div className="terminal-box rounded-xl p-4 scanlines">
+      <div className="terminal-box glass-violet rounded-xl p-4">
         <div className="flex items-start gap-3">
           <span className="text-matrix-500 text-sm flex-shrink-0">💡</span>
           <div>

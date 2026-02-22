@@ -123,7 +123,7 @@ export default function DashboardLayout({
 
         {/* Status Box - Pure Glass */}
         <div className="px-4 py-4 border-t border-white/10">
-          <div className="terminal-box rounded-2xl p-4 overflow-hidden">
+          <div className="terminal-box glass-mint rounded-2xl p-4 overflow-hidden">
             <div className="flex items-center gap-2 mb-3">
               <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50 animate-pulse"></div>
               <span className="text-emerald-600 font-mono text-xs font-semibold tracking-wide">SYSTEM ONLINE</span>
