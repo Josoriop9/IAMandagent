@@ -23,16 +23,28 @@ class HashedConfig(BaseModel):
 
     This class follows the Dependency Inversion Principle by providing
     a clear configuration interface that the SDK depends on.
+    
+    Reads from environment variables:
+        API_KEY or HASHED_API_KEY: API key for authentication
+        BACKEND_URL or HASHED_BACKEND_URL: Backend URL
     """
 
     # Backend Configuration
     api_key: Optional[str] = Field(
-        default=None,
+        default_factory=lambda: (
+            os.getenv("API_KEY") or
+            os.getenv("HASHED_API_KEY") or
+            None
+        ),
         description="API key for backend authentication (X-API-KEY header)",
     )
     backend_url: Optional[str] = Field(
-        default=None,
-        description="Backend Control Plane URL (e.g., https://api.hashed.com)",
+        default_factory=lambda: (
+            os.getenv("BACKEND_URL") or
+            os.getenv("HASHED_BACKEND_URL") or
+            None
+        ),
+        description="Backend Control Plane URL (e.g., http://localhost:8000)",
     )
     
     # Legacy API Configuration (deprecated, use backend_url)
