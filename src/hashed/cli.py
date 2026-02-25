@@ -542,10 +542,6 @@ def logs_list(
     📝 View recent audit logs (requires backend).
     """
     async def _list():
-        # Capture outer scope variables
-        _limit = limit
-        _status = status
-        
         try:
             config = get_config()
             
@@ -556,9 +552,9 @@ def logs_list(
             import httpx
             async with httpx.AsyncClient() as client:
                 # Build params dict
-                params = {"limit": _limit}
-                if _status:
-                    params["status"] = _status
+                params = {"limit": limit}
+                if status:
+                    params["status"] = status
                 
                 response = await client.get(
                     f"{config.backend_url}/v1/logs",
@@ -586,25 +582,25 @@ def logs_list(
                 for log in logs:
                     timestamp = log["timestamp"][:19].replace("T", " ")
                     tool = log["tool_name"]
-                    status = log["status"]
+                    log_status = log["status"]
                     agent = log.get("agent_name", "Unknown")[:20]
                     
                     status_emoji = {
                         "success": "✓",
                         "denied": "✗",
                         "error": "⚠"
-                    }.get(status, "•")
+                    }.get(log_status, "•")
                     
                     status_color = {
                         "success": "green",
                         "denied": "red",
                         "error": "yellow"
-                    }.get(status, "white")
+                    }.get(log_status, "white")
                     
                     table.add_row(
                         timestamp,
                         tool,
-                        f"[{status_color}]{status_emoji} {status}[/]",
+                        f"[{status_color}]{status_emoji} {log_status}[/]",
                         agent
                     )
                 
