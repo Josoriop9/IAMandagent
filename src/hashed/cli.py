@@ -22,7 +22,7 @@ from rich import box
 
 from hashed import HashedCore, HashedConfig, load_or_create_identity
 from hashed.identity import IdentityManager
-from hashed.exceptions import PermissionError
+from hashed.guard import PermissionError
 
 # Initialize Typer app
 app = typer.Typer(
