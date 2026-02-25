@@ -85,17 +85,9 @@ export default function PoliciesPage() {
           ...policy,
           agent_name: policy.agents?.name || null,
           agent_public_key: policy.agents?.public_key || null,
-          agent_icon: policy.agents?.icon || 'robot',
-          agent_color: policy.agents?.color || 'purple'
+          agent_icon: (policy.agents && 'icon' in policy.agents) ? policy.agents.icon : 'robot',
+          agent_color: (policy.agents && 'color' in policy.agents) ? policy.agents.color : 'purple'
         }));
-        setPolicies(policiesWithAgents);
-        // ← AGREGA AQUÍ:
-        console.log('🔍 First 3 policies:', policies.slice(0, 3).map(p => ({
-          tool: p.tool_name,
-          agent_id: p.agent_id,
-          agent_name: p.agent_name,
-          agent_public_key: p.agent_public_key?.substring(0, 16)
-        })));
         setPolicies(policiesWithAgents);
       } catch (error) {
         console.error('Error fetching policies:', error);
