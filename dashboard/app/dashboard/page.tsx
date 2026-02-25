@@ -503,37 +503,59 @@ export default function DashboardOverview() {
             </div>
           </div>
           {toolData.length > 0 ? (
-            <div className="relative">
-              <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={toolData} margin={{ top: 25, right: 5, left: -20, bottom: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} angle={-15} dy={8} />
-                  <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px' }} />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
-                    {toolData.map((entry, index) => (
-                      <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              {/* Agent Icons floating above bars */}
-              <div className="absolute top-0 left-0 right-0 flex justify-around px-5" style={{ marginTop: '5px' }}>
-                {toolData.map((tool) => (
-                  <div key={tool.name} className="flex items-center gap-0.5">
-                    {tool.agents.slice(0, 3).map((agent) => (
-                      <AgentIcon
-                        key={agent.name}
-                        icon={agent.icon}
-                        color={agent.color}
-                        size="sm"
-                        className="flex-shrink-0"
-                      />
-                    ))}
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ResponsiveContainer width="100%" height={240}>
+              <BarChart data={toolData} margin={{ top: 40, right: 5, left: -20, bottom: 20 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} angle={-15} dy={8} />
+                <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <Tooltip contentStyle={{ background: '#fff', border: '1px solid #e2e8f0', borderRadius: '8px', fontSize: '12px' }} />
+                <Bar 
+                  dataKey="count" 
+                  radius={[4, 4, 0, 0]}
+                  label={(props: any) => {
+                    const { x, y, width, value, index } = props;
+                    const tool = toolData[index];
+                    if (!tool || !tool.agents || tool.agents.length === 0) return <g />;
+                    
+                    const iconSize = 32; // sm size
+                    const gap = 2;
+                    const totalWidth = (tool.agents.slice(0, 3).length * iconSize) + ((tool.agents.slice(0, 3).length - 1) * gap);
+                    const startX = x + (width / 2) - (totalWidth / 2);
+                    
+                    return (
+                      <g>
+                        {tool.agents.slice(0, 3).map((agent, i) => {
+                          const iconX = startX + (i * (iconSize + gap));
+                          const iconY = y - 10; // 10px above bar
+                          
+                          return (
+                            <foreignObject
+                              key={agent.name}
+                              x={iconX}
+                              y={iconY}
+                              width={iconSize}
+                              height={iconSize}
+                            >
+                              <div style={{ width: iconSize, height: iconSize }}>
+                                <AgentIcon
+                                  icon={agent.icon}
+                                  color={agent.color}
+                                  size="sm"
+                                />
+                              </div>
+                            </foreignObject>
+                          );
+                        })}
+                      </g>
+                    );
+                  }}
+                >
+                  {toolData.map((entry, index) => (
+                    <Cell key={entry.name} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
           ) : (
             <div className="h-[200px] flex items-center justify-center">
               <p className="text-ink-subtle text-sm">No tool data yet</p>
