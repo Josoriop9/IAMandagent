@@ -172,7 +172,7 @@ export default function DashboardLayout({
 
           {/* System Status */}
           {!collapsed ? (
-            <div className="rounded-lg p-3 bg-white/30 border border-white/20 backdrop-blur-sm">
+            <div className="rounded-lg p-3 bg-white/30 border border-slate-900/20 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></div>
                 <span className="text-slate-500 text-[10px] font-medium tracking-wider uppercase">Online</span>
