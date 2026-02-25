@@ -542,6 +542,10 @@ def logs_list(
     📝 View recent audit logs (requires backend).
     """
     async def _list():
+        # Capture outer scope variables
+        _limit = limit
+        _status = status
+        
         try:
             config = get_config()
             
@@ -551,9 +555,14 @@ def logs_list(
             
             import httpx
             async with httpx.AsyncClient() as client:
+                # Build params dict
+                params = {"limit": _limit}
+                if _status:
+                    params["status"] = _status
+                
                 response = await client.get(
                     f"{config.backend_url}/v1/logs",
-                    params={"limit": limit, "status": status} if status else {"limit": limit},
+                    params=params,
                     headers={"X-API-KEY": config.api_key or ""}
                 )
                 
