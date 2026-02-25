@@ -503,9 +503,9 @@ export default function DashboardOverview() {
             </div>
           </div>
           {toolData.length > 0 ? (
-            <>
+            <div className="relative">
               <ResponsiveContainer width="100%" height={200}>
-                <BarChart data={toolData} margin={{ top: 5, right: 5, left: -20, bottom: 20 }}>
+                <BarChart data={toolData} margin={{ top: 25, right: 5, left: -20, bottom: 20 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                   <XAxis dataKey="name" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} angle={-15} dy={8} />
                   <YAxis tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} allowDecimals={false} />
@@ -517,29 +517,23 @@ export default function DashboardOverview() {
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
-              {/* Agent Icons for each tool */}
-              <div className="grid grid-cols-2 gap-2 mt-4">
+              {/* Agent Icons floating above bars */}
+              <div className="absolute top-0 left-0 right-0 flex justify-around px-5" style={{ marginTop: '5px' }}>
                 {toolData.map((tool) => (
-                  <div key={tool.name} className="bg-surface-50 rounded-lg p-2 border border-surface-200">
-                    <p className="text-xs font-mono text-ink-muted mb-1.5 truncate">{tool.name}</p>
-                    <div className="flex items-center gap-1 flex-wrap">
-                      {tool.agents.slice(0, 3).map((agent) => (
-                        <AgentIcon
-                          key={agent.name}
-                          icon={agent.icon}
-                          color={agent.color}
-                          size="sm"
-                          className="flex-shrink-0"
-                        />
-                      ))}
-                      {tool.agents.length > 3 && (
-                        <span className="text-xs text-ink-subtle">+{tool.agents.length - 3}</span>
-                      )}
-                    </div>
+                  <div key={tool.name} className="flex items-center gap-0.5">
+                    {tool.agents.slice(0, 3).map((agent) => (
+                      <AgentIcon
+                        key={agent.name}
+                        icon={agent.icon}
+                        color={agent.color}
+                        size="sm"
+                        className="flex-shrink-0"
+                      />
+                    ))}
                   </div>
                 ))}
               </div>
-            </>
+            </div>
           ) : (
             <div className="h-[200px] flex items-center justify-center">
               <p className="text-ink-subtle text-sm">No tool data yet</p>
