@@ -426,6 +426,60 @@ class HashedCore:
             logger.error(f"Failed to register agent: {e}")
             raise
 
+    async def push_policies_to_backend(self) -> None:
+        """
+        Push local policies to the backend.
+        
+        Uploads all local policies to the backend database so they're
+        visible in the dashboard.
+        
+        Raises:
+            Exception: If push fails
+        """
+        if not self._http_client:
+            logger.warning("HTTP client not initialized, skipping policy push")
+            return
+        
+        try:
+            # Get all local policies
+            local_policies = self._policy_engine._policies
+            
+            if not local_policies:
+                logger.info("No local policies to push")
+                return
+            
+            # Push each policy to backend
+            pushed_count = 0
+            for tool_name, policy in local_policies.items():
+                try:
+                    response = await self._http_client.post(
+                        "/v1/policies",
+                        json={
+                            "tool_name": tool_name,
+                            "agent_public_key": self._identity.public_key_hex,
+                            "allowed": policy.allowed,
+                            "max_amount": policy.max_amount,
+                            "requires_approval": policy.metadata.get("requires_approval", False),
+                            "metadata": policy.metadata,
+                        }
+                    )
+                    
+                    if response.is_success or response.status_code == 409:  # 409 = already exists
+                        pushed_count += 1
+                        logger.debug(f"Policy '{tool_name}' pushed to backend")
+                    else:
+                        logger.warning(f"Failed to push policy '{tool_name}': {response.status_code}")
+                        
+                except Exception as e:
+                    logger.warning(f"Error pushing policy '{tool_name}': {e}")
+                    continue
+            
+            logger.info(f"Pushed {pushed_count}/{len(local_policies)} policies to backend")
+            
+        except Exception as e:
+            logger.error(f"Failed to push policies: {e}")
+            raise
+
     async def sync_policies_from_backend(self) -> None:
         """
         Sync policies from the backend.
