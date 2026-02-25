@@ -16,6 +16,8 @@ interface Log {
   timestamp: string;
   duration_ms: number | null;
   error_message: string | null;
+  agent_public_key: string;
+  agent_name?: string;
   data?: any;
   metadata?: any;
 }
@@ -57,16 +59,26 @@ export default function LogsPage() {
 
         const { data, error } = await supabase
           .from('ledger_logs')
-          .select('*')
+          .select(`
+            *,
+            agents!inner(name, agent_type)
+          `)
           .eq('organization_id', orgId)
           .order('timestamp', { ascending: false })
           .limit(500);
 
         if (error) throw error;
         
+        // Map agent info to logs
+        const logsWithAgents = (data || []).map(log => ({
+          ...log,
+          agent_name: log.agents?.name || 'Unknown Agent',
+          agent_type: log.agents?.agent_type || 'unknown'
+        }));
+        
         // Show ALL logs without filtering
         // This allows visibility into all operations including intermediate steps
-        setLogs(data || []);
+        setLogs(logsWithAgents);
       } catch (error) {
         console.error('Error fetching logs:', error);
       } finally {
@@ -268,11 +280,12 @@ export default function LogsPage() {
         <div className="card overflow-hidden">
           {/* Table Header */}
           <div className="grid grid-cols-12 gap-4 px-5 py-3 bg-surface-50 border-b border-surface-200 text-xs font-semibold text-ink-muted uppercase tracking-wide">
-            <div className="col-span-2">Status</div>
-            <div className="col-span-3">Tool / Operation</div>
-            <div className="col-span-3">Event Type</div>
+            <div className="col-span-1">Status</div>
+            <div className="col-span-2">Agent</div>
+            <div className="col-span-2">Tool / Operation</div>
+            <div className="col-span-2">Event Type</div>
             <div className="col-span-2">Signature</div>
-            <div className="col-span-2 text-right">Timestamp</div>
+            <div className="col-span-3 text-right">Timestamp</div>
           </div>
 
           {/* Table Rows */}
@@ -283,15 +296,23 @@ export default function LogsPage() {
                   onClick={() => setExpanded(expanded === log.id ? null : log.id)}
                   className="w-full grid grid-cols-12 gap-4 px-5 py-3.5 hover:bg-surface-50 transition-colors text-left"
                 >
-                  <div className="col-span-2">
+                  <div className="col-span-1">
                     <span className={`badge ${statusClass(log.status)}`}>
-                      {statusIcon(log.status)} {log.status}
+                      {statusIcon(log.status)}
                     </span>
                   </div>
-                  <div className="col-span-3">
-                    <span className="font-mono text-sm text-ink font-medium">{log.tool_name || '—'}</span>
+                  <div className="col-span-2">
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm text-ink font-medium truncate">{log.agent_name}</span>
+                      <code className="text-xs text-ink-subtle font-mono truncate">
+                        {log.agent_public_key?.substring(0, 8)}...
+                      </code>
+                    </div>
                   </div>
-                  <div className="col-span-3">
+                  <div className="col-span-2">
+                    <span className="font-mono text-sm text-ink font-medium truncate block">{log.tool_name || '—'}</span>
+                  </div>
+                  <div className="col-span-2">
                     <span className="font-mono text-xs text-ink-muted truncate block">{log.event_type || '—'}</span>
                   </div>
                   <div className="col-span-2">
@@ -303,7 +324,7 @@ export default function LogsPage() {
                       <span className="text-xs text-ink-subtle">—</span>
                     )}
                   </div>
-                  <div className="col-span-2 text-right">
+                  <div className="col-span-3 text-right">
                     <span className="text-xs text-ink-subtle font-mono">
                       {new Date(log.timestamp).toLocaleTimeString()}
                     </span>
@@ -317,6 +338,14 @@ export default function LogsPage() {
                       <div className="flex gap-3">
                         <span className="text-terminal-dim w-20 flex-shrink-0">id</span>
                         <span className="text-matrix-500 font-mono">{log.id}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-terminal-dim w-20 flex-shrink-0">agent</span>
+                        <span className="text-matrix-500 font-mono">{log.agent_name}</span>
+                      </div>
+                      <div className="flex gap-3">
+                        <span className="text-terminal-dim w-20 flex-shrink-0">agent_key</span>
+                        <span className="text-matrix-500 font-mono break-all">{log.agent_public_key}</span>
                       </div>
                       <div className="flex gap-3">
                         <span className="text-terminal-dim w-20 flex-shrink-0">tool</span>
