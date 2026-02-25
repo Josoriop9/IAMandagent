@@ -62,7 +62,7 @@ def success(message: str) -> None:
 
 def error(message: str) -> None:
     """Print error message."""
-    console.print(f"[red]✗[/red] {message}", file=sys.stderr)
+    console.print(f"[red]✗[/red] {message}")
 
 
 def info(message: str) -> None:
