@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
+import AgentIcon from '@/components/AgentIcon';
 
 interface Policy {
   id: string;
@@ -14,12 +15,16 @@ interface Policy {
   agent_id: string | null;
   agent_name?: string;
   agent_public_key?: string;
+  agent_icon?: string;
+  agent_color?: string;
 }
 
 interface AgentWithPolicies {
   agent_id: string | null;
   agent_name: string;
   agent_public_key?: string;
+  agent_icon?: string;
+  agent_color?: string;
   policies: Policy[];
 }
 
@@ -68,7 +73,7 @@ export default function PoliciesPage() {
           .from('policies')
           .select(`
             *,
-            agents(name, public_key)
+            agents(name, public_key, icon, color)
           `)
           .eq('organization_id', orgId)
           .order('created_at', { ascending: false });
@@ -79,7 +84,9 @@ export default function PoliciesPage() {
         const policiesWithAgents = (data || []).map(policy => ({
           ...policy,
           agent_name: policy.agents?.name || null,
-          agent_public_key: policy.agents?.public_key || null
+          agent_public_key: policy.agents?.public_key || null,
+          agent_icon: policy.agents?.icon || 'robot',
+          agent_color: policy.agents?.color || 'purple'
         }));
         setPolicies(policiesWithAgents);
         // ← AGREGA AQUÍ:
@@ -142,6 +149,8 @@ export default function PoliciesPage() {
         agent_id: agentId,
         agent_name: policy.agent_name || 'Unknown Agent',
         agent_public_key: policy.agent_public_key,
+        agent_icon: policy.agent_icon || 'robot',
+        agent_color: policy.agent_color || 'purple',
         policies: []
       });
     }
@@ -361,13 +370,17 @@ export default function PoliciesPage() {
                   className="w-full p-5 flex items-center gap-4 hover:bg-surface-50 transition-colors"
                 >
                   {/* Agent Icon */}
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
-                    agentGroup.agent_id === null
-                      ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                      : 'bg-purple-50 text-purple-600 border border-purple-100'
-                  }`}>
-                    {agentGroup.agent_id === null ? '🌐' : '🤖'}
-                  </div>
+                  {agentGroup.agent_id === null ? (
+                    <div className="w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 bg-blue-50 text-blue-600 border border-blue-100">
+                      🌐
+                    </div>
+                  ) : (
+                    <AgentIcon 
+                      icon={agentGroup.agent_icon} 
+                      color={agentGroup.agent_color} 
+                      size="lg" 
+                    />
+                  )}
 
                   {/* Agent Info */}
                   <div className="flex-1 text-left">
