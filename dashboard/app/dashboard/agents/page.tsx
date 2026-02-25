@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import AgentIcon from '@/components/AgentIcon';
 
 interface Agent {
   id: string;
@@ -11,6 +12,8 @@ interface Agent {
   is_active: boolean;
   created_at: string;
   last_seen_at: string | null;
+  icon?: string;
+  color?: string;
 }
 
 interface AgentStats {
@@ -511,17 +514,12 @@ export default function AgentsPage() {
               <div className="flex items-start justify-between">
                 {/* Left: Identity */}
                 <div className="flex items-center gap-4">
-                  {/* Avatar */}
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0
-                    ${agent.is_active
-                      ? 'bg-matrix-500/10 border border-matrix-500/30'
-                      : 'bg-surface-100 border border-surface-200'
-                    }`}>
-                    <svg className={`w-6 h-6 ${agent.is_active ? 'text-matrix-600' : 'text-ink-subtle'}`}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z" />
-                    </svg>
-                  </div>
+                  {/* Avatar with AgentIcon */}
+                  <AgentIcon 
+                    icon={agent.icon || 'robot'} 
+                    color={agent.color || 'purple'} 
+                    size="lg" 
+                  />
 
                   <div>
                     <div className="flex items-center gap-2">
