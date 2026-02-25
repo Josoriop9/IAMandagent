@@ -441,6 +441,27 @@ class HashedCore:
             return
         
         try:
+            # First, get the agent_id from the backend using our public key
+            agent_response = await self._http_client.get("/v1/agents")
+            if not agent_response.is_success:
+                raise Exception(f"Failed to get agent info: {agent_response.status_code}")
+            
+            agents_data = agent_response.json()
+            agents = agents_data.get("agents", [])
+            
+            # Find our agent by public key
+            our_agent = next(
+                (agent for agent in agents if agent["public_key"] == self._identity.public_key_hex),
+                None
+            )
+            
+            if not our_agent:
+                logger.error("Agent not found in backend, cannot push policies")
+                return
+            
+            agent_id = our_agent["id"]
+            logger.debug(f"Found agent_id: {agent_id}")
+            
             # Get all local policies
             local_policies = self._policy_engine._policies
             
@@ -448,15 +469,15 @@ class HashedCore:
                 logger.info("No local policies to push")
                 return
             
-            # Push each policy to backend
+            # Push each policy to backend with agent_id
             pushed_count = 0
             for tool_name, policy in local_policies.items():
                 try:
                     response = await self._http_client.post(
                         "/v1/policies",
+                        params={"agent_id": agent_id},  # Send agent_id as query param
                         json={
                             "tool_name": tool_name,
-                            "agent_public_key": self._identity.public_key_hex,
                             "allowed": policy.allowed,
                             "max_amount": policy.max_amount,
                             "requires_approval": policy.metadata.get("requires_approval", False),

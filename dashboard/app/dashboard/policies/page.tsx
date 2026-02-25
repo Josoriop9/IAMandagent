@@ -80,7 +80,14 @@ export default function PoliciesPage() {
           agent_name: policy.agents?.name || null,
           agent_public_key: policy.agents?.public_key || null
         }));
-        
+        setPolicies(policiesWithAgents);
+        // ← AGREGA AQUÍ:
+        console.log('🔍 First 3 policies:', policies.slice(0, 3).map(p => ({
+          tool: p.tool_name,
+          agent_id: p.agent_id,
+          agent_name: p.agent_name,
+          agent_public_key: p.agent_public_key?.substring(0, 16)
+        })));
         setPolicies(policiesWithAgents);
       } catch (error) {
         console.error('Error fetching policies:', error);
@@ -142,6 +149,11 @@ export default function PoliciesPage() {
   
   // Add agent groups to array
   groupedPolicies.push(...Array.from(agentMap.values()));
+
+  console.log('🔍 Total policies:', policies.length);
+  console.log('🔍 Grouped policies:', groupedPolicies.length);
+  console.log('🔍 Groups:', groupedPolicies.map(g => g.agent_name));
+
 
   if (loading) {
     return (
