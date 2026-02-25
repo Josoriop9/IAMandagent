@@ -26,6 +26,10 @@ interface Log {
   status: string;
   event_type: string;
   timestamp: string;
+  agent_name?: string;
+  agents?: {
+    name: string;
+  };
 }
 
 // ============================================
@@ -183,10 +187,16 @@ export default function DashboardOverview() {
       const [agents, policies, logs] = await Promise.all([
         supabase.from('agents').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
         supabase.from('policies').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
-        supabase.from('ledger_logs').select('*').eq('organization_id', org.id).order('timestamp', { ascending: false }).limit(500),
+        supabase.from('ledger_logs').select(`
+          *,
+          agents!inner(name)
+        `).eq('organization_id', org.id).order('timestamp', { ascending: false}).limit(500),
       ]);
 
-      const logData = logs.data || [];
+      const logData = (logs.data || []).map(log => ({
+        ...log,
+        agent_name: log.agents?.name || 'Unknown Agent'
+      }));
       const successCount = logData.filter(l => l.status === 'success').length;
       const deniedCount = logData.filter(l => l.status === 'denied').length;
       const successRate = logData.length > 0 ? Math.round((successCount / logData.length) * 100) : 0;
@@ -497,16 +507,19 @@ export default function DashboardOverview() {
             <div className="space-y-2">
               {recentLogs.map(log => (
                 <div key={log.id} className="flex items-center justify-between py-2 border-b border-surface-100 last:border-0">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
                     <span className={`badge ${
                       log.status === 'success' ? 'badge-success' :
                       log.status === 'denied' ? 'badge-danger' : 'badge-warning'
                     }`}>
-                      {log.status === 'success' ? '✓' : log.status === 'denied' ? '✗' : '⚠'} {log.status}
+                      {log.status === 'success' ? '✓' : log.status === 'denied' ? '✗' : '⚠'}
                     </span>
-                    <span className="font-mono text-xs text-ink-muted">{log.tool_name}</span>
+                    <div className="flex flex-col gap-0.5 min-w-0">
+                      <span className="font-mono text-xs text-ink font-medium truncate">{log.tool_name}</span>
+                      <span className="text-xs text-ink-subtle truncate">🤖 {log.agent_name}</span>
+                    </div>
                   </div>
-                  <span className="text-xs text-ink-subtle font-mono">
+                  <span className="text-xs text-ink-subtle font-mono whitespace-nowrap ml-2">
                     {new Date(log.timestamp).toLocaleString('en-US', {
                       timeZone: 'America/New_York',
                       month: '2-digit', day: '2-digit',
