@@ -619,25 +619,25 @@ export default function DashboardOverview() {
 
       {/* ---- API KEY SECTION ---- */}
       {organization && (
-        <div className="terminal-box glass-emerald rounded-xl p-5">
+        <div className="card p-5">
           <div className="flex items-center gap-2 mb-3">
-            <div className="live-dot"></div>
-            <span className="font-mono text-xs text-matrix-500 tracking-wider">API_KEY / CONTROL_PLANE_CONNECTION</span>
+            <div className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></div>
+            <span className="text-xs text-slate-500 font-medium tracking-wide uppercase">API Key</span>
           </div>
           <div className="flex items-center gap-3">
-            <code className="flex-1 font-mono text-sm text-matrix-500 bg-black/30 px-4 py-2.5 rounded-lg border border-terminal-border truncate">
+            <code className="flex-1 font-mono text-sm text-slate-600 bg-slate-50 px-4 py-2.5 rounded-lg border border-slate-200 truncate">
               {organization.api_key}
             </code>
             <button
               onClick={handleCopyKey}
-              className="px-4 py-2.5 bg-matrix-500/20 hover:bg-matrix-500/30 border border-matrix-500/40 
-                         text-matrix-500 font-mono text-xs rounded-lg transition-all duration-150 whitespace-nowrap"
+              className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 border border-slate-200 
+                         text-slate-700 font-medium text-xs rounded-lg transition-all duration-150 whitespace-nowrap"
             >
-              {apiKeyCopied ? '✓ COPIED' : 'COPY KEY'}
+              {apiKeyCopied ? '✓ Copied' : 'Copy'}
             </button>
           </div>
-          <p className="font-mono text-xs text-terminal-dim mt-3">
-            $ pip install git+https://github.com/Josoriop9/IAMandagent.git<span className="animate-blink">_</span>
+          <p className="text-xs text-slate-400 mt-3 font-mono">
+            pip install git+https://github.com/Josoriop9/IAMandagent.git
           </p>
         </div>
       )}
