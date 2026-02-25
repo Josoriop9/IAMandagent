@@ -148,15 +148,21 @@ HASHED_AGENT_TYPE={agent_type}
 """
 
 import asyncio
+import os
+from dotenv import load_dotenv
 from hashed import HashedCore, HashedConfig, load_or_create_identity
+
+# Load environment variables from .env file
+load_dotenv()
 
 async def main():
     """Main agent logic."""
     # Load configuration
     config = HashedConfig()
     
-    # Load identity
-    identity = load_or_create_identity("{identity_file}")
+    # Load identity (password from .env or environment)
+    password = os.getenv("HASHED_IDENTITY_PASSWORD")
+    identity = load_or_create_identity("{identity_file}", password)
     
     # Create core
     core = HashedCore(
