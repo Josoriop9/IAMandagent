@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import AgentIcon from '@/components/AgentIcon';
 import {
   AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line
@@ -27,8 +28,12 @@ interface Log {
   event_type: string;
   timestamp: string;
   agent_name?: string;
+  agent_icon?: string;
+  agent_color?: string;
   agents?: {
     name: string;
+    icon?: string;
+    color?: string;
   };
 }
 
@@ -189,13 +194,15 @@ export default function DashboardOverview() {
         supabase.from('policies').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
         supabase.from('ledger_logs').select(`
           *,
-          agents!inner(name)
+          agents!inner(name, icon, color)
         `).eq('organization_id', org.id).order('timestamp', { ascending: false}).limit(500),
       ]);
 
       const logData = (logs.data || []).map(log => ({
         ...log,
-        agent_name: log.agents?.name || 'Unknown Agent'
+        agent_name: log.agents?.name || 'Unknown Agent',
+        agent_icon: (log.agents && 'icon' in log.agents) ? log.agents.icon : 'robot',
+        agent_color: (log.agents && 'color' in log.agents) ? log.agents.color : 'purple'
       }));
       const successCount = logData.filter(l => l.status === 'success').length;
       const deniedCount = logData.filter(l => l.status === 'denied').length;
@@ -514,9 +521,14 @@ export default function DashboardOverview() {
                     }`}>
                       {log.status === 'success' ? '✓' : log.status === 'denied' ? '✗' : '⚠'}
                     </span>
+                    <AgentIcon 
+                      icon={log.agent_icon || 'robot'} 
+                      color={log.agent_color || 'purple'} 
+                      size="sm" 
+                    />
                     <div className="flex flex-col gap-0.5 min-w-0">
                       <span className="font-mono text-xs text-ink font-medium truncate">{log.tool_name}</span>
-                      <span className="text-xs text-ink-subtle truncate">🤖 {log.agent_name}</span>
+                      <span className="text-xs text-ink-subtle truncate">{log.agent_name}</span>
                     </div>
                   </div>
                   <span className="text-xs text-ink-subtle font-mono whitespace-nowrap ml-2">
