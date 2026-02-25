@@ -12,6 +12,15 @@ interface Policy {
   requires_approval: boolean;
   created_at: string;
   agent_id: string | null;
+  agent_name?: string;
+  agent_public_key?: string;
+}
+
+interface AgentWithPolicies {
+  agent_id: string | null;
+  agent_name: string;
+  agent_public_key?: string;
+  policies: Policy[];
 }
 
 export default function PoliciesPage() {
@@ -43,12 +52,23 @@ export default function PoliciesPage() {
 
         const { data, error } = await supabase
           .from('policies')
-          .select('*')
+          .select(`
+            *,
+            agents(name, public_key)
+          `)
           .eq('organization_id', orgId)
           .order('created_at', { ascending: false });
 
         if (error) throw error;
-        setPolicies(data || []);
+        
+        // Map agent info to policies
+        const policiesWithAgents = (data || []).map(policy => ({
+          ...policy,
+          agent_name: policy.agents?.name || null,
+          agent_public_key: policy.agents?.public_key || null
+        }));
+        
+        setPolicies(policiesWithAgents);
       } catch (error) {
         console.error('Error fetching policies:', error);
       } finally {
@@ -77,6 +97,38 @@ export default function PoliciesPage() {
       return true;
     })
     .filter(p => !search || p.tool_name.toLowerCase().includes(search.toLowerCase()));
+
+  // Group policies by agent
+  const groupedPolicies: AgentWithPolicies[] = [];
+  
+  // First, add global policies
+  const globalPolicies = filtered.filter(p => p.agent_id === null);
+  if (globalPolicies.length > 0) {
+    groupedPolicies.push({
+      agent_id: null,
+      agent_name: 'Global Policies',
+      agent_public_key: undefined,
+      policies: globalPolicies
+    });
+  }
+  
+  // Then, group by agent
+  const agentMap = new Map<string, AgentWithPolicies>();
+  filtered.filter(p => p.agent_id !== null).forEach(policy => {
+    const agentId = policy.agent_id!;
+    if (!agentMap.has(agentId)) {
+      agentMap.set(agentId, {
+        agent_id: agentId,
+        agent_name: policy.agent_name || 'Unknown Agent',
+        agent_public_key: policy.agent_public_key,
+        policies: []
+      });
+    }
+    agentMap.get(agentId)!.policies.push(policy);
+  });
+  
+  // Add agent groups to array
+  groupedPolicies.push(...Array.from(agentMap.values()));
 
   if (loading) {
     return (
@@ -236,8 +288,8 @@ export default function PoliciesPage() {
         </div>
       </div>
 
-      {/* Policies List */}
-      {filtered.length === 0 ? (
+      {/* Policies List - Grouped by Agent */}
+      {groupedPolicies.length === 0 ? (
         <div className="card p-16 text-center">
           <div className="terminal-box rounded-xl p-8 inline-block mb-6">
             <span className="font-mono text-matrix-500 text-2xl">{'🛡️'}</span>
@@ -260,12 +312,41 @@ export default function PoliciesPage() {
           )}
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4">
-          {filtered.map((policy, index) => (
-            <div
-              key={policy.id}
-              className={`card p-5 animate-slide-up stagger-${Math.min(index + 1, 4)}`}
-            >
+        <div className="space-y-6">
+          {groupedPolicies.map((agentGroup) => (
+            <div key={agentGroup.agent_id || 'global'} className="space-y-3">
+              {/* Agent Header */}
+              <div className="flex items-center gap-3 px-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  agentGroup.agent_id === null
+                    ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                    : 'bg-purple-50 text-purple-600 border border-purple-100'
+                }`}>
+                  {agentGroup.agent_id === null ? '🌐' : '🤖'}
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-semibold text-ink">{agentGroup.agent_name}</h3>
+                  {agentGroup.agent_public_key && (
+                    <code className="text-xs text-ink-subtle font-mono">
+                      {agentGroup.agent_public_key.substring(0, 16)}...
+                    </code>
+                  )}
+                  {agentGroup.agent_id === null && (
+                    <p className="text-xs text-ink-subtle">Apply to all agents</p>
+                  )}
+                </div>
+                <div className="text-sm text-ink-subtle">
+                  {agentGroup.policies.length} {agentGroup.policies.length === 1 ? 'policy' : 'policies'}
+                </div>
+              </div>
+
+              {/* Policies for this agent */}
+              <div className="grid grid-cols-1 gap-3">
+                {agentGroup.policies.map((policy, index) => (
+                  <div
+                    key={policy.id}
+                    className={`card p-5 animate-slide-up stagger-${Math.min(index + 1, 4)}`}
+                  >
               <div className="flex items-start justify-between">
                 {/* Left: Tool Name + Badges */}
                 <div className="flex-1">
@@ -321,6 +402,9 @@ export default function PoliciesPage() {
                 }`}>
                   {policy.allowed ? '✓' : '✗'}
                 </div>
+              </div>
+            </div>
+                ))}
               </div>
             </div>
           ))}
