@@ -1,322 +1,572 @@
 # Hashed SDK
 
-A professional Python SDK for cryptographic hashing operations with a clean, type-safe interface.
+**Governance & Audit Framework for AI Agents**
+
+A professional Python SDK that provides cryptographic identity, policy enforcement, and immutable audit logging for AI agents. Built for production-grade AI systems that require accountability, compliance, and security.
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## Features
+---
 
-- 🔐 **Multiple Hash Algorithms**: SHA-256, SHA-512, BLAKE2b, BLAKE2s
-- 🔑 **Key Derivation**: PBKDF2-based key derivation
-- ⚡ **Async Support**: Full async/await support with httpx
-- 🛡️ **Type Safety**: Complete type hints with Pydantic models
-- 🎯 **SOLID Principles**: Clean, maintainable architecture
-- 🧪 **Well Tested**: Comprehensive test suite
-- 📚 **Great Documentation**: Examples and detailed docstrings
-- 🔄 **Retry Logic**: Automatic retry with exponential backoff
-- 🎨 **Context Managers**: Sync and async context managers
+## 🎯 What is Hashed?
 
-## Installation
+Hashed is a complete governance framework for AI agents that ensures:
+
+- **🔐 Cryptographic Identity**: Ed25519 keypairs for agent authentication
+- **🛡️ Policy Enforcement**: Define and enforce rules for agent operations  
+- **📝 Immutable Audit Trail**: Every operation is cryptographically signed and logged
+- **🎛️ Control Dashboard**: Web UI for monitoring agents, policies, and operations
+- **💾 Persistent Identity**: Agents maintain identity across restarts
+- **🔄 Real-time Sync**: Policies and logs sync automatically with backend
+
+**Perfect for:** Customer service bots, data analysis agents, autonomous trading systems, or any AI agent that needs governance.
+
+---
+
+## ✨ Key Features
+
+### 🔐 Identity Management
+- **Cryptographic Identities**: Ed25519 keypairs for each agent
+- **Persistent Storage**: Encrypted key storage with AES-256
+- **Automatic Registration**: Agents self-register with backend on startup
+- **Signature Verification**: All operations cryptographically signed
+
+### 🛡️ Policy Enforcement  
+- **Declarative Policies**: Define max amounts, allow/deny, approval requirements
+- **Local + Remote**: Policies enforced locally and validated with backend
+- **@guard Decorator**: Protect any function with a simple decorator
+- **Real-time Sync**: Policies sync automatically from control plane
+
+### 📝 Audit Logging
+- **Immutable Trail**: All operations logged with signatures
+- **Success + Failures**: Log both successful and denied operations
+- **Rich Metadata**: Capture context, amounts, timestamps, errors
+- **Dashboard Visibility**: All logs visible in real-time web UI
+
+### 🎛️ Control Dashboard
+- **Agent Monitoring**: Track all registered agents
+- **Policy Management**: View and create governance rules
+- **Audit Logs**: Search and filter operation history
+- **Real-time Updates**: Auto-refresh every 5 seconds
+
+---
+
+## 🚀 Quick Start
+
+### Installation
 
 ```bash
-# Using pip
-pip install hashed-sdk
+# Install the SDK
+pip install -e git+https://github.com/yourrepo/hashed.git#egg=hashed-sdk
 
-# For development
-pip install -e ".[dev]"
+# Or for local development
+cd hashed-sdk
+pip install -e .
 ```
 
-## Quick Start
-
-```python
-from hashed import HashedClient
-
-# Initialize the client
-client = HashedClient()
-
-# Hash a string
-hash_value = client.hash_string("Hello, World!")
-print(f"Hash: {hash_value}")
-```
-
-## Usage Examples
-
-### Basic Hashing
-
-```python
-from hashed import HashedClient, HashRequest, HashAlgorithm
-
-client = HashedClient()
-
-# Simple hashing
-sha256_hash = client.hash_string("my data")
-
-# Using different algorithms
-sha512_hash = client.hash_string("my data", algorithm="sha512")
-blake2b_hash = client.hash_string("my data", algorithm="blake2b")
-
-# Using HashRequest for more control
-request = HashRequest(
-    data="sensitive data",
-    algorithm=HashAlgorithm.SHA256,
-    salt="random_salt"
-)
-response = client.hash(request)
-print(f"Hash: {response.hash_value}")
-print(f"Metadata: {response.metadata}")
-```
-
-### Hashing with Salt
-
-```python
-# Add salt for additional security
-hash_with_salt = client.hash_string(
-    data="password",
-    salt="unique_salt_per_user"
-)
-```
-
-### Key Derivation
-
-```python
-import os
-
-# Generate a cryptographic key from a password
-password = "user_password"
-salt = os.urandom(16)
-
-key = client.derive_key(
-    password=password,
-    salt=salt,
-    length=32,
-    iterations=100000
-)
-print(f"Derived key: {key.hex()}")
-```
-
-### Async Operations
+### Basic Usage
 
 ```python
 import asyncio
+from hashed import HashedCore, HashedConfig
+
+# Configure connection to backend
+config = HashedConfig(
+    backend_url="http://localhost:8000",
+    api_key="your_api_key_here"
+)
+
+# Create core with identity
+core = HashedCore(
+    config=config,
+    agent_name="My First Agent",
+    agent_type="customer_service"
+)
 
 async def main():
-    async with HashedClient() as client:
-        # Use the client asynchronously
-        hash_value = client.hash_string("async data")
-        
-        # Make async API requests
-        result = await client.request_async("GET", "/status")
+    # Initialize (registers agent, syncs policies)
+    await core.initialize()
+    
+    # Define a guarded operation
+    @core.guard("send_email")
+    async def send_email(to: str, subject: str, body: str):
+        # Your email logic here
+        return {"status": "sent", "to": to}
+    
+    # Execute - automatically validated and logged
+    result = await send_email(
+        to="user@example.com",
+        subject="Hello",
+        body="Test message"
+    )
+    
+    # Cleanup
+    await core.shutdown()
 
 asyncio.run(main())
 ```
 
-### Context Managers
+---
+
+## 📚 Core Concepts
+
+### 1. Cryptographic Identity
+
+Each agent has a unique Ed25519 keypair that identifies it:
 
 ```python
-# Synchronous context manager
-with HashedClient() as client:
-    result = client.hash_string("data")
+from hashed import IdentityManager
 
-# Asynchronous context manager
-async with HashedClient() as client:
-    result = client.hash_string("data")
+# Generate new identity (ephemeral)
+identity = IdentityManager()
+print(f"Public Key: {identity.public_key_hex}")
+
+# Sign operations
+signature = identity.sign_message("operation_data")
+
+# Verify signatures
+is_valid = identity.verify_signature("operation_data", signature)
 ```
 
-## Configuration
+### 2. Persistent Identity
 
-### Environment Variables
-
-Create a `.env` file:
-
-```env
-HASHED_API_KEY=your_api_key_here
-HASHED_API_URL=https://api.hashed.example.com
-HASHED_TIMEOUT=30.0
-HASHED_MAX_RETRIES=3
-HASHED_VERIFY_SSL=true
-HASHED_DEBUG=false
-```
-
-### Programmatic Configuration
+For agents that need to maintain identity across restarts:
 
 ```python
-from hashed import HashedClient, HashedConfig
+from hashed import load_or_create_identity
+import os
 
-# Create custom configuration
-config = HashedConfig(
-    api_key="your_api_key",
-    api_url="https://custom.api.com",
-    timeout=60.0,
-    max_retries=5,
-    verify_ssl=True,
-    debug=False
+# Load existing or create new (with encryption)
+identity = load_or_create_identity(
+    filepath="./secrets/agent_key.pem",
+    password=os.getenv("AGENT_PASSWORD")
 )
 
-# Initialize client with config
-client = HashedClient(config=config)
-
-# Or load from environment
-client = HashedClient.from_env()
+# Use with HashedCore
+core = HashedCore(
+    config=config,
+    identity=identity,  # ← Persistent identity
+    agent_name="My Agent"
+)
 ```
 
-## Architecture
+**Benefits:**
+- Same public key across restarts
+- Continuous audit trail
+- Dashboard shows single agent (not duplicates)
+- Policy targeting by specific agent
 
-This SDK follows SOLID principles and professional design patterns:
+### 3. Policy Enforcement
 
-- **Single Responsibility Principle**: Each module has a clear, focused purpose
-- **Open/Closed Principle**: Extensible through strategies and protocols
-- **Liskov Substitution Principle**: Proper inheritance hierarchies
-- **Interface Segregation Principle**: Focused, minimal interfaces
-- **Dependency Inversion Principle**: Depends on abstractions, not concretions
+Define rules for what agents can/cannot do:
 
-### Design Patterns
+```python
+# Add policies locally
+core.policy_engine.add_policy(
+    tool_name="send_email",
+    allowed=True,
+    max_amount=100.0,  # Max 100 emails
+    metadata={"description": "Email sending policy"}
+)
 
-- **Facade Pattern**: `HashedClient` provides a simplified interface
-- **Strategy Pattern**: Pluggable hashing algorithms
-- **Factory Pattern**: `from_env()` class method
-- **Context Manager**: Resource management with `__enter__` / `__exit__`
+core.policy_engine.add_policy(
+    tool_name="delete_database",
+    allowed=False,  # Completely blocked
+    metadata={"reason": "Too dangerous"}
+)
 
-## Project Structure
+# Push policies to dashboard (so they're visible)
+await core.push_policies_to_backend()
+```
+
+### 4. Guarded Operations
+
+Protect operations with the `@guard` decorator:
+
+```python
+@core.guard("transfer_money", amount_param="amount")
+async def transfer_money(amount: float, to_account: str):
+    """
+    Transfer money with automatic:
+    - Policy validation
+    - Operation signing  
+    - Audit logging
+    - Error handling
+    """
+    # Your transfer logic
+    return {"status": "completed", "amount": amount}
+
+# Execute - policy is checked automatically
+try:
+    result = await transfer_money(amount=500.0, to_account="12345")
+    print("Transfer successful")
+except PermissionError as e:
+    print(f"Transfer blocked: {e}")
+```
+
+**What happens:**
+1. Local policy check (fast)
+2. Backend policy validation (if connected)
+3. Operation signing with agent identity
+4. Function execution (if allowed)
+5. Result logged to backend/ledger
+6. If denied: PermissionError raised, denial logged
+
+### 5. Audit Trail
+
+Every operation is automatically logged:
+
+```python
+# Logs are sent automatically, no manual logging needed
+await send_email(to="user@example.com", ...)
+
+# View in dashboard: http://localhost:3000/dashboard/logs
+# Or query programmatically via backend API
+```
+
+**Each log entry contains:**
+- Tool name
+- Status (success/denied/error)
+- Timestamp
+- Agent public key
+- Cryptographic signature
+- Operation parameters (sanitized)
+- Result or error message
+
+---
+
+## 🎨 Examples
+
+### Complete Agent with LLM Integration
+
+```python
+"""
+AI Agent with OpenAI + Hashed Governance
+"""
+import asyncio
+from openai import AsyncOpenAI
+from hashed import HashedCore, HashedConfig, load_or_create_identity
+
+# Initialize
+openai = AsyncOpenAI()
+identity = load_or_create_identity("./secrets/agent.pem", "password123")
+core = HashedCore(
+    config=HashedConfig(),
+    identity=identity,
+    agent_name="Customer Service Bot",
+    agent_type="customer_service"
+)
+
+async def main():
+    await core.initialize()
+    
+    # Define policies
+    core.policy_engine.add_policy("send_email", allowed=True, max_amount=50.0)
+    core.policy_engine.add_policy("refund", allowed=True, max_amount=500.0)
+    core.policy_engine.add_policy("database_delete", allowed=False)
+    
+    # Push to dashboard
+    await core.push_policies_to_backend()
+    
+    # Define guarded tools
+    @core.guard("send_email", amount_param="count")
+    async def send_email(to: str, subject: str, count: int = 1):
+        # Email logic
+        return {"sent": count}
+    
+    @core.guard("process_refund", amount_param="amount")
+    async def process_refund(amount: float, reason: str):
+        # Refund logic
+        return {"refunded": amount}
+    
+    # Use with LLM
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "send_email",
+                "description": "Send email to customer",
+                "parameters": { ... }
+            }
+        },
+        # ... more tools
+    ]
+    
+    response = await openai.chat.completions.create(
+        model="gpt-4",
+        messages=[{"role": "user", "content": "Send refund email"}],
+        tools=tools
+    )
+    
+    # Execute tool calls (with automatic governance)
+    for tool_call in response.choices[0].message.tool_calls:
+        if tool_call.function.name == "send_email":
+            result = await send_email(**json.loads(tool_call.function.arguments))
+    
+    await core.shutdown()
+
+asyncio.run(main())
+```
+
+See [examples/](examples/) for more:
+- [persistent_agent.py](examples/persistent_agent.py) - Full persistent identity example
+- [basic_usage.py](examples/basic_usage.py) - Simple getting started
+- [async_usage.py](examples/async_usage.py) - Async patterns
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Your AI Agent                        │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │  HashedCore (SDK)                                │   │
+│  │  • IdentityManager (Ed25519)                     │   │
+│  │  • PolicyEngine (Local validation)               │   │
+│  │  • @guard decorator                              │   │
+│  │  • AsyncLedger (Logging)                         │   │
+│  └──────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+                          │
+                    HTTPS │ (mTLS ready)
+                          │
+┌─────────────────────────▼───────────────────────────────┐
+│              Backend API (FastAPI)                      │
+│  • Agent registration                                   │
+│  • Policy storage & sync                                │
+│  • Audit log persistence                                │
+│  • Signature verification                               │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Supabase
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│               PostgreSQL Database                        │
+│  • agents (registry)                                    │
+│  • policies (rules)                                     │
+│  • ledger_logs (immutable audit trail)                 │
+│  • organizations (multi-tenant)                         │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ Real-time
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│            Dashboard (Next.js + React)                  │
+│  • Agent monitoring                                     │
+│  • Policy management                                    │
+│  • Audit log viewer (auto-refresh)                     │
+│  • Analytics & reports                                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 📦 Project Structure
 
 ```
 hashed-sdk/
 ├── src/hashed/
-│   ├── __init__.py          # Package exports
-│   ├── client.py            # Main client (Facade)
-│   ├── config.py            # Configuration management
-│   ├── exceptions.py        # Custom exceptions
-│   ├── models.py            # Pydantic models
-│   ├── crypto/              # Cryptography module
+│   ├── __init__.py              # Main exports
+│   ├── core.py                  # HashedCore (main class)
+│   ├── config.py                # Configuration
+│   ├── identity.py              # IdentityManager (Ed25519)
+│   ├── identity_store.py        # Persistent identity functions
+│   ├── guard.py                 # PolicyEngine + @guard
+│   ├── ledger.py                # AsyncLedger (logging)
+│   ├── exceptions.py            # Custom exceptions
+│   ├── models.py                # Pydantic models
+│   ├── client.py                # Legacy client (deprecated)
+│   ├── crypto/                  # Cryptography
 │   │   ├── __init__.py
-│   │   └── hasher.py        # Hash strategies
-│   └── utils/               # Utilities
+│   │   └── hasher.py
+│   └── utils/                   # Utilities
 │       ├── __init__.py
-│       └── http_client.py   # HTTP client wrapper
-├── tests/                   # Test suite
-├── examples/                # Usage examples
-├── pyproject.toml           # Project configuration
-└── README.md                # This file
+│       └── http_client.py
+├── tests/                       # Test suite
+│   ├── test_core.py
+│   ├── test_identity.py
+│   ├── test_identity_store.py
+│   ├── test_guard.py
+│   └── ...
+├── examples/                    # Usage examples
+│   ├── persistent_agent.py
+│   ├── basic_usage.py
+│   └── secrets/.gitignore
+├── server/                      # Backend API
+│   ├── server.py               # FastAPI app
+│   ├── requirements.txt
+│   └── README.md
+├── dashboard/                   # Web UI (Next.js)
+│   ├── app/
+│   ├── lib/
+│   └── package.json
+├── database/                    # DB schema
+│   └── schema.sql
+├── docs/                        # Documentation
+│   ├── API_REFERENCE.md
+│   ├── INTEGRATION.md
+│   ├── SECURITY.md
+│   └── USAGE_FROM_OTHER_PROJECT.md
+└── pyproject.toml              # Project config
 ```
 
-## Development
+---
 
-### Setup Development Environment
+## 🛠️ Development
+
+### Setup
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/hashed-sdk.git
+# Clone repo
+git clone https://github.com/yourrepo/hashed-sdk.git
 cd hashed-sdk
 
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Install SDK
+pip install -e .
 
-# Install with dev dependencies
-pip install -e ".[dev]"
-```
+# Start backend
+cd server
+pip install -r requirements.txt
+python server.py
 
-### Running Tests
+# Start dashboard (separate terminal)
+cd dashboard
+npm install
+npm run dev
 
-```bash
-# Run all tests
+# Run tests
 pytest
-
-# Run with coverage
-pytest --cov=hashed --cov-report=term-missing
-
-# Run specific test file
-pytest tests/test_client.py
 ```
 
-### Code Quality
+### Running the Full Stack
 
 ```bash
-# Format code with black
-black src/ tests/
+# Terminal 1: Backend
+cd server && python server.py
 
-# Type checking with mypy
-mypy src/
+# Terminal 2: Dashboard  
+cd dashboard && npm run dev
 
-# Lint with ruff
-ruff check src/ tests/
+# Terminal 3: Your agent
+python your_agent.py
+
+# Access dashboard
+open http://localhost:3000
 ```
 
-## Examples
+---
 
-Check out the [examples](examples/) directory for more detailed usage examples:
+## 🔒 Security
 
-- [basic_usage.py](examples/basic_usage.py) - Basic functionality
-- [async_usage.py](examples/async_usage.py) - Async operations
-- [examples/README.md](examples/README.md) - Detailed examples documentation
+### Identity Storage
 
-## API Reference
+Persistent identities are stored encrypted:
 
-### HashedClient
+```python
+# Encrypted with AES-256
+identity = load_or_create_identity(
+    filepath="./secrets/agent.pem",
+    password="strong_password_from_env"  # Never hardcode!
+)
 
-Main client class providing SDK functionality.
+# File permissions: 0600 (owner read/write only)
+# Password from: Environment variable, secrets manager, etc.
+```
 
-**Methods:**
-- `hash(request: HashRequest) -> HashResponse` - Compute hash from request
-- `hash_string(data: str, algorithm: str, salt: str) -> str` - Convenience method
-- `derive_key(password: str, salt: bytes, length: int, iterations: int) -> bytes` - Key derivation
-- `request_async(method: str, endpoint: str, data: dict) -> dict` - Async API request
-- `request_sync(method: str, endpoint: str, data: dict) -> dict` - Sync API request
+### Best Practices
 
-### HashRequest
+✅ **DO:**
+- Use environment variables for passwords
+- Store keys in `./secrets/` with `.gitignore`
+- Use strong passwords (32+ chars, generated)
+- Rotate keys periodically
+- Use mTLS for production backend
+- Review audit logs regularly
 
-Request model for hashing operations.
+❌ **DON'T:**
+- Hardcode passwords in code
+- Commit `.pem` files to git
+- Reuse passwords across agents
+- Disable signature verification
+- Ignore policy violations in logs
 
-**Fields:**
-- `data: str` - Data to be hashed (required)
-- `algorithm: HashAlgorithm` - Hashing algorithm (default: SHA256)
-- `encoding: str` - Character encoding (default: utf-8)
-- `salt: Optional[str]` - Optional salt
+See [SECURITY.md](SECURITY.md) for complete security guide.
 
-### HashResponse
+---
 
-Response model for hashing operations.
+## 📖 Documentation
 
-**Fields:**
-- `hash_value: str` - Computed hash value
-- `algorithm: str` - Algorithm used
-- `timestamp: datetime` - Timestamp of computation
-- `metadata: dict` - Additional metadata
+- **[API Reference](API_REFERENCE.md)** - Complete API docs
+- **[Integration Guide](INTEGRATION.md)** - Integrate with your project
+- **[Setup Guide](SETUP_GUIDE.md)** - Production setup
+- **[Security Guide](SECURITY.md)** - Security best practices
+- **[Usage from Other Projects](USAGE_FROM_OTHER_PROJECT.md)** - External usage
 
-## Contributing
+---
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+## 🔄 Recent Updates
 
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+### v0.2.0 (Latest)
 
-## License
+**New Features:**
+- ✨ Persistent identity system (`load_or_create_identity`)
+- ✨ Push policies to dashboard (`push_policies_to_backend`)
+- ✨ Auto-refresh dashboard (5 second polling)
+- 🐛 Fixed double logging issue (backend OR local, not both)
+- 📝 Complete documentation overhaul
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+**Breaking Changes:**
+- `HashedClient` deprecated → Use `HashedCore`
+- Hashing-focused API removed (use `cryptography` directly)
 
-## Support
+### v0.1.0
 
-For issues, questions, or contributions, please open an issue on GitHub.
+- 🔐 Cryptographic identity (Ed25519)
+- 🛡️ Policy engine with `@guard` decorator
+- 📝 Immutable audit logging
+- 🎛️ Web dashboard (Next.js)
+- 🔄 Auto-sync with backend
 
-## Changelog
+---
 
-### Version 0.1.0 (Initial Release)
+## 🤝 Contributing
 
-- ✨ Initial release
-- 🔐 Support for SHA-256, SHA-512, BLAKE2b, BLAKE2s
-- 🔑 PBKDF2 key derivation
-- ⚡ Async/await support
-- 🛡️ Type-safe with Pydantic
-- 🧪 Comprehensive test suite
-- 📚 Full documentation and examples
+Contributions welcome! Please:
 
-## Acknowledgments
+1. Fork the repo
+2. Create feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push branch (`git push origin feature/amazing`)
+5. Open Pull Request
+
+---
+
+## 📄 License
+
+MIT License - see [LICENSE](LICENSE) for details.
+
+---
+
+## 🙏 Acknowledgments
 
 Built with:
-- [cryptography](https://cryptography.io/) - Cryptographic primitives
-- [pydantic](https://pydantic-docs.helpmanual.io/) - Data validation
+- [cryptography](https://cryptography.io/) - Ed25519, AES-256
+- [FastAPI](https://fastapi.tiangolo.com/) - Backend API
+- [Next.js](https://nextjs.org/) - Dashboard UI
+- [Supabase](https://supabase.com/) - Database + Auth
 - [httpx](https://www.python-httpx.org/) - HTTP client
-- [python-dotenv](https://github.com/theskumar/python-dotenv) - Environment management
+- [Pydantic](https://docs.pydantic.dev/) - Data validation
+
+---
+
+## 📞 Support
+
+- **Issues**: [GitHub Issues](https://github.com/yourrepo/hashed-sdk/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourrepo/hashed-sdk/discussions)
+- **Email**: support@hashed.example.com
+
+---
+
+**Built with ❤️ for responsible AI**
