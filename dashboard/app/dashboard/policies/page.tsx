@@ -28,6 +28,7 @@ export default function PoliciesPage() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [expandedAgents, setExpandedAgents] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     async function fetchPolicies() {
@@ -150,10 +151,17 @@ export default function PoliciesPage() {
   // Add agent groups to array
   groupedPolicies.push(...Array.from(agentMap.values()));
 
-  console.log('🔍 Total policies:', policies.length);
-  console.log('🔍 Grouped policies:', groupedPolicies.length);
-  console.log('🔍 Groups:', groupedPolicies.map(g => g.agent_name));
-
+  const toggleAgent = (agentId: string) => {
+    setExpandedAgents(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(agentId)) {
+        newSet.delete(agentId);
+      } else {
+        newSet.add(agentId);
+      }
+      return newSet;
+    });
+  };
 
   if (loading) {
     return (
@@ -337,36 +345,84 @@ export default function PoliciesPage() {
           )}
         </div>
       ) : (
-        <div className="space-y-6">
-          {groupedPolicies.map((agentGroup) => (
-            <div key={agentGroup.agent_id || 'global'} className="space-y-3">
-              {/* Agent Header */}
-              <div className="flex items-center gap-3 px-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
-                  agentGroup.agent_id === null
-                    ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                    : 'bg-purple-50 text-purple-600 border border-purple-100'
-                }`}>
-                  {agentGroup.agent_id === null ? '🌐' : '🤖'}
-                </div>
-                <div className="flex-1">
-                  <h3 className="font-semibold text-ink">{agentGroup.agent_name}</h3>
-                  {agentGroup.agent_public_key && (
-                    <code className="text-xs text-ink-subtle font-mono">
-                      {agentGroup.agent_public_key.substring(0, 16)}...
-                    </code>
-                  )}
-                  {agentGroup.agent_id === null && (
-                    <p className="text-xs text-ink-subtle">Apply to all agents</p>
-                  )}
-                </div>
-                <div className="text-sm text-ink-subtle">
-                  {agentGroup.policies.length} {agentGroup.policies.length === 1 ? 'policy' : 'policies'}
-                </div>
-              </div>
+        <div className="space-y-4">
+          {groupedPolicies.map((agentGroup) => {
+            const agentKey = agentGroup.agent_id || 'global';
+            const isExpanded = expandedAgents.has(agentKey);
+            const allowedInGroup = agentGroup.policies.filter(p => p.allowed).length;
+            const deniedInGroup = agentGroup.policies.filter(p => !p.allowed).length;
+            const approvalInGroup = agentGroup.policies.filter(p => p.requires_approval).length;
+            
+            return (
+              <div key={agentKey} className="card overflow-hidden">
+                {/* Collapsible Agent Header */}
+                <button
+                  onClick={() => toggleAgent(agentKey)}
+                  className="w-full p-5 flex items-center gap-4 hover:bg-surface-50 transition-colors"
+                >
+                  {/* Agent Icon */}
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center flex-shrink-0 ${
+                    agentGroup.agent_id === null
+                      ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                      : 'bg-purple-50 text-purple-600 border border-purple-100'
+                  }`}>
+                    {agentGroup.agent_id === null ? '🌐' : '🤖'}
+                  </div>
 
-              {/* Policies for this agent */}
-              <div className="grid grid-cols-1 gap-3">
+                  {/* Agent Info */}
+                  <div className="flex-1 text-left">
+                    <h3 className="font-semibold text-ink text-lg">{agentGroup.agent_name}</h3>
+                    <div className="flex items-center gap-3 mt-1">
+                      {agentGroup.agent_public_key && (
+                        <code className="text-xs text-ink-subtle font-mono">
+                          {agentGroup.agent_public_key.substring(0, 20)}...
+                        </code>
+                      )}
+                      {agentGroup.agent_id === null && (
+                        <span className="text-xs text-ink-subtle">Apply to all agents</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Summary Stats */}
+                  <div className="flex items-center gap-3">
+                    <div className="text-center">
+                      <p className="text-xs text-ink-subtle uppercase tracking-wide">Policies</p>
+                      <p className="text-lg font-semibold text-ink">{agentGroup.policies.length}</p>
+                    </div>
+                    <div className="w-px h-10 bg-surface-200"></div>
+                    <div className="flex gap-2">
+                      <div className="bg-emerald-50 px-2 py-1 rounded border border-emerald-100">
+                        <span className="text-xs font-medium text-emerald-600">✓ {allowedInGroup}</span>
+                      </div>
+                      <div className="bg-red-50 px-2 py-1 rounded border border-red-100">
+                        <span className="text-xs font-medium text-red-500">✗ {deniedInGroup}</span>
+                      </div>
+                      {approvalInGroup > 0 && (
+                        <div className="bg-amber-50 px-2 py-1 rounded border border-amber-100">
+                          <span className="text-xs font-medium text-amber-600">⚠ {approvalInGroup}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Expand/Collapse Icon */}
+                  <div className="flex-shrink-0">
+                    <svg
+                      className={`w-5 h-5 text-ink-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+
+                {/* Expanded Policy Details */}
+                {isExpanded && (
+                  <div className="border-t border-surface-200 bg-surface-50">
+                    <div className="p-5 space-y-3">
                 {agentGroup.policies.map((policy, index) => (
                   <div
                     key={policy.id}
@@ -429,10 +485,13 @@ export default function PoliciesPage() {
                 </div>
               </div>
             </div>
-                ))}
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
