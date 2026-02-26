@@ -5,7 +5,9 @@ This module handles SDK configuration with support for environment
 variables and programmatic configuration.
 """
 
+import json
 import os
+from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
@@ -15,6 +17,20 @@ from hashed.exceptions import HashedConfigError
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Credentials file path
+_CREDENTIALS_FILE = Path.home() / ".hashed" / "credentials.json"
+
+
+def _load_credential(key: str) -> Optional[str]:
+    """Load a value from ~/.hashed/credentials.json"""
+    try:
+        if _CREDENTIALS_FILE.exists():
+            creds = json.loads(_CREDENTIALS_FILE.read_text())
+            return creds.get(key)
+    except Exception:
+        pass
+    return None
 
 
 class HashedConfig(BaseModel):
@@ -30,10 +46,12 @@ class HashedConfig(BaseModel):
     """
 
     # Backend Configuration
+    # Priority: env vars > .env file > ~/.hashed/credentials.json
     api_key: Optional[str] = Field(
         default_factory=lambda: (
             os.getenv("API_KEY") or
             os.getenv("HASHED_API_KEY") or
+            _load_credential("api_key") or
             None
         ),
         description="API key for backend authentication (X-API-KEY header)",
@@ -42,6 +60,7 @@ class HashedConfig(BaseModel):
         default_factory=lambda: (
             os.getenv("BACKEND_URL") or
             os.getenv("HASHED_BACKEND_URL") or
+            _load_credential("backend_url") or
             None
         ),
         description="Backend Control Plane URL (e.g., http://localhost:8000)",

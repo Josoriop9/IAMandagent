@@ -34,6 +34,10 @@ app = typer.Typer(
 # Rich console for beautiful output
 console = Console()
 
+# Credentials directory
+CREDENTIALS_DIR = Path.home() / ".hashed"
+CREDENTIALS_FILE = CREDENTIALS_DIR / "credentials.json"
+
 # Sub-commands
 identity_app = typer.Typer(help="🔑 Manage agent identities")
 policy_app = typer.Typer(help="🛡️  Manage policies")
@@ -192,12 +196,6 @@ async def main():
 if __name__ == "__main__":
     asyncio.run(main())
 '''
-            example_file.write_text(example_content)
-            success(f"Created example script: {example_file}")
-        
-        console.print("\n[bold green]✓ Initialization complete![/bold green]")
-        console.print("\n[cyan]Next steps:[/cyan]")
-        console.print("  1. Update .env with your API key")
         console.print("  2. Run: python agent.py")
         console.print("  3. View logs: hashed logs list")
         
@@ -617,6 +615,284 @@ def logs_list(
             raise typer.Exit(1)
     
     asyncio.run(_list())
+
+
+# ============================================================================
+# CREDENTIALS HELPERS
+# ============================================================================
+
+def save_credentials(data: dict) -> None:
+    """Save credentials to ~/.hashed/credentials.json"""
+    CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+    CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
+    # Restrict file permissions (owner only)
+    CREDENTIALS_FILE.chmod(0o600)
+
+
+def load_credentials() -> Optional[dict]:
+    """Load credentials from ~/.hashed/credentials.json"""
+    if not CREDENTIALS_FILE.exists():
+        return None
+    try:
+        return json.loads(CREDENTIALS_FILE.read_text())
+    except Exception:
+        return None
+
+
+def clear_credentials() -> None:
+    """Remove credentials file."""
+    if CREDENTIALS_FILE.exists():
+        CREDENTIALS_FILE.unlink()
+
+
+# ============================================================================
+# AUTH COMMANDS (Signup, Login, Logout, Whoami)
+# ============================================================================
+
+@app.command()
+def signup(
+    backend_url: str = typer.Option("http://localhost:8000", "--backend", "-b", help="Backend URL"),
+):
+    """
+    📝 Create a new Hashed account and organization.
+    
+    Signs up, waits for email confirmation, then creates your org + API key.
+    """
+    import httpx
+    import time
+
+    console.print(Panel.fit(
+        "[bold cyan]Hashed - Create Account[/bold cyan]",
+        border_style="cyan"
+    ))
+
+    # Gather info
+    email = typer.prompt("Email")
+    password = typer.prompt("Password", hide_input=True)
+    confirm_password = typer.prompt("Confirm password", hide_input=True)
+
+    if password != confirm_password:
+        error("Passwords don't match")
+        raise typer.Exit(1)
+
+    if len(password) < 6:
+        error("Password must be at least 6 characters")
+        raise typer.Exit(1)
+
+    org_name = typer.prompt("Organization name")
+
+    # Step 1: Call signup endpoint
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.post(
+                f"{backend_url}/v1/auth/signup",
+                json={"email": email, "password": password, "org_name": org_name}
+            )
+
+            if response.status_code == 409:
+                error("Email already registered. Try: hashed login")
+                raise typer.Exit(1)
+
+            if not response.is_success:
+                detail = response.json().get("detail", "Signup failed")
+                error(detail)
+                raise typer.Exit(1)
+
+        success("Account created!")
+        console.print(f"\n[yellow]📧 Confirmation email sent to [bold]{email}[/bold][/yellow]")
+        console.print("   Please check your inbox and click the confirmation link.\n")
+
+    except httpx.ConnectError:
+        error(f"Cannot connect to backend at {backend_url}")
+        info("Make sure the server is running: python3 server/server.py")
+        raise typer.Exit(1)
+
+    # Step 2: Poll for email confirmation
+    console.print("[dim]⏳ Waiting for email confirmation... (press Ctrl+C to skip)[/dim]")
+
+    confirmed = False
+    try:
+        with httpx.Client(timeout=10) as client:
+            for i in range(120):  # Wait up to 6 minutes
+                time.sleep(3)
+                try:
+                    check = client.get(
+                        f"{backend_url}/v1/auth/check-confirmation",
+                        params={"email": email}
+                    )
+                    if check.is_success and check.json().get("confirmed"):
+                        confirmed = True
+                        break
+                except Exception:
+                    pass
+
+                # Show spinner dots
+                dots = "." * ((i % 3) + 1)
+                console.print(f"\r[dim]   Checking{dots}   [/dim]", end="")
+
+    except KeyboardInterrupt:
+        console.print()
+        info("Skipped waiting. After confirming your email, run:")
+        console.print("  [bold]hashed login[/bold]")
+        raise typer.Exit(0)
+
+    if not confirmed:
+        console.print()
+        warning("Timed out waiting for confirmation.")
+        info("After confirming your email, run: [bold]hashed login[/bold]")
+        raise typer.Exit(0)
+
+    # Step 3: Email confirmed! Now login to create org + get API key
+    console.print()
+    success("Email confirmed! ✅")
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            login_resp = client.post(
+                f"{backend_url}/v1/auth/login",
+                json={"email": email, "password": password}
+            )
+
+            if not login_resp.is_success:
+                error("Auto-login failed. Run: hashed login")
+                raise typer.Exit(1)
+
+            data = login_resp.json()
+
+        # Save credentials
+        creds = {
+            "email": email,
+            "org_name": data["org_name"],
+            "api_key": data["api_key"],
+            "org_id": data["org_id"],
+            "backend_url": backend_url,
+            "created_at": datetime.now().isoformat()
+        }
+        save_credentials(creds)
+
+        # Show results
+        console.print()
+        table = Table(title="🎉 Account Ready!", box=box.ROUNDED)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("Email", email)
+        table.add_row("Organization", data["org_name"])
+        table.add_row("API Key", data["api_key"][:25] + "...")
+        table.add_row("Credentials", str(CREDENTIALS_FILE))
+        console.print(table)
+
+        console.print("\n[bold green]✓ You're all set![/bold green]")
+        console.print("\n[cyan]Next steps:[/cyan]")
+        console.print("  1. hashed init --name \"My Agent\" --type assistant")
+        console.print("  2. python3 agent.py")
+        console.print("  3. hashed logs list")
+
+    except Exception as e:
+        error(f"Setup failed: {e}")
+        info("Run: hashed login")
+        raise typer.Exit(1)
+
+
+@app.command()
+def login(
+    email: Optional[str] = typer.Option(None, "--email", "-e", help="Email address"),
+    password: Optional[str] = typer.Option(None, "--password", "-p", help="Password"),
+    backend_url: str = typer.Option("http://localhost:8000", "--backend", "-b", help="Backend URL"),
+):
+    """
+    🔐 Login to your Hashed account.
+    
+    Authenticates and saves API key to ~/.hashed/credentials.json
+    """
+    import httpx
+
+    console.print(Panel.fit(
+        "[bold cyan]Hashed - Login[/bold cyan]",
+        border_style="cyan"
+    ))
+
+    # Get credentials
+    if not email:
+        email = typer.prompt("Email")
+    if not password:
+        password = typer.prompt("Password", hide_input=True)
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.post(
+                f"{backend_url}/v1/auth/login",
+                json={"email": email, "password": password}
+            )
+
+            if response.status_code == 401:
+                error("Invalid email or password")
+                raise typer.Exit(1)
+            elif response.status_code == 403:
+                error("Email not confirmed. Check your inbox for the confirmation link.")
+                raise typer.Exit(1)
+            elif not response.is_success:
+                detail = response.json().get("detail", "Login failed")
+                error(detail)
+                raise typer.Exit(1)
+
+            data = response.json()
+
+        # Save credentials
+        creds = {
+            "email": email,
+            "org_name": data["org_name"],
+            "api_key": data["api_key"],
+            "org_id": data["org_id"],
+            "backend_url": backend_url,
+            "logged_in_at": datetime.now().isoformat()
+        }
+        save_credentials(creds)
+
+        success("Login successful!")
+        table = Table(show_header=False, box=box.ROUNDED)
+        table.add_row("[cyan]Email[/cyan]", email)
+        table.add_row("[cyan]Organization[/cyan]", data["org_name"])
+        table.add_row("[cyan]API Key[/cyan]", data["api_key"][:25] + "...")
+        table.add_row("[cyan]Saved to[/cyan]", str(CREDENTIALS_FILE))
+        console.print(table)
+
+    except httpx.ConnectError:
+        error(f"Cannot connect to backend at {backend_url}")
+        info("Make sure the server is running")
+        raise typer.Exit(1)
+
+
+@app.command()
+def logout():
+    """
+    👋 Logout and remove saved credentials.
+    """
+    if load_credentials():
+        clear_credentials()
+        success("Logged out. Credentials removed.")
+    else:
+        info("Not logged in (no credentials found)")
+
+
+@app.command()
+def whoami():
+    """
+    👤 Show current logged-in user info.
+    """
+    creds = load_credentials()
+    if not creds:
+        error("Not logged in. Run: hashed login")
+        raise typer.Exit(1)
+
+    table = Table(title="Current Session", box=box.ROUNDED)
+    table.add_column("Property", style="cyan")
+    table.add_column("Value", style="green")
+    table.add_row("Email", creds.get("email", "-"))
+    table.add_row("Organization", creds.get("org_name", "-"))
+    table.add_row("API Key", creds.get("api_key", "-")[:25] + "...")
+    table.add_row("Backend", creds.get("backend_url", "-"))
+    table.add_row("Credentials File", str(CREDENTIALS_FILE))
+    console.print(table)
 
 
 # ============================================================================

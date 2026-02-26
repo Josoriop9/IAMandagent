@@ -160,6 +160,192 @@ async def health_check():
 
 
 # ============================================================================
+# AUTH ENDPOINTS (Signup, Login, Email Confirmation)
+# ============================================================================
+
+class AuthSignupRequest(BaseModel):
+    email: str
+    password: str
+    org_name: str
+
+
+class AuthLoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+@app.post("/v1/auth/signup", status_code=status.HTTP_201_CREATED)
+async def auth_signup(request: AuthSignupRequest):
+    """
+    Sign up a new user and create their organization.
+    
+    1. Creates user in Supabase Auth (sends confirmation email)
+    2. Stores pending org_name for post-confirmation setup
+    """
+    try:
+        # Create user via Supabase Auth (admin API)
+        auth_response = supabase.auth.admin.create_user({
+            "email": request.email,
+            "password": request.password,
+            "email_confirm": False,  # Require email confirmation
+            "user_metadata": {"org_name": request.org_name}
+        })
+        
+        user = auth_response.user
+        if not user:
+            raise HTTPException(status_code=400, detail="Failed to create user")
+        
+        # Send confirmation email via Supabase magic link
+        # (Supabase handles email sending automatically with create_user when email_confirm=False)
+        # We need to manually trigger the confirmation email
+        try:
+            supabase.auth.admin.generate_link({
+                "type": "signup",
+                "email": request.email,
+                "password": request.password,
+            })
+        except Exception:
+            pass  # Link generation may fail if email already sent
+        
+        return {
+            "message": "Account created! Check your email for confirmation.",
+            "user_id": user.id,
+            "email": request.email,
+            "org_name": request.org_name,
+            "email_confirmed": False
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        if "already been registered" in error_msg or "already exists" in error_msg:
+            raise HTTPException(status_code=409, detail="Email already registered. Try 'hashed login' instead.")
+        raise HTTPException(status_code=400, detail=f"Signup failed: {error_msg}")
+
+
+@app.post("/v1/auth/login")
+async def auth_login(request: AuthLoginRequest):
+    """
+    Login and return org info + API key.
+    
+    If org doesn't exist yet (first login after email confirmation), creates it.
+    """
+    try:
+        # Sign in via Supabase Auth
+        auth_response = supabase.auth.sign_in_with_password({
+            "email": request.email,
+            "password": request.password
+        })
+        
+        user = auth_response.user
+        session = auth_response.session
+        
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        
+        if not user.email_confirmed_at:
+            raise HTTPException(status_code=403, detail="Email not confirmed. Check your inbox.")
+        
+        # Check if user already has an organization
+        user_org = supabase.table("user_organizations")\
+            .select("*, organizations(*)")\
+            .eq("user_id", str(user.id))\
+            .execute()
+        
+        if user_org.data and len(user_org.data) > 0:
+            # Existing user - return their org info
+            org = user_org.data[0]["organizations"]
+            return {
+                "message": "Login successful",
+                "email": user.email,
+                "org_name": org["name"],
+                "api_key": org["api_key"],
+                "org_id": org["id"],
+                "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
+            }
+        
+        # New user (first login after confirmation) - create organization
+        org_name = (user.user_metadata or {}).get("org_name", f"{request.email.split('@')[0]}'s Organization")
+        
+        # Generate API key with prefix
+        import secrets
+        api_key = f"hashed_{secrets.token_hex(32)}"
+        
+        # Create organization
+        org_response = supabase.table("organizations").insert({
+            "name": org_name,
+            "api_key": api_key,
+            "is_active": True
+        }).execute()
+        
+        org = org_response.data[0]
+        
+        # Link user to organization
+        supabase.table("user_organizations").insert({
+            "user_id": str(user.id),
+            "organization_id": org["id"],
+            "role": "owner"
+        }).execute()
+        
+        return {
+            "message": "Login successful! Organization created.",
+            "email": user.email,
+            "org_name": org["name"],
+            "api_key": api_key,
+            "org_id": org["id"],
+            "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        if "Invalid login" in error_msg or "invalid" in error_msg.lower():
+            raise HTTPException(status_code=401, detail="Invalid email or password")
+        raise HTTPException(status_code=400, detail=f"Login failed: {error_msg}")
+
+
+@app.get("/v1/auth/check-confirmation")
+async def check_email_confirmation(email: str):
+    """
+    Check if a user's email has been confirmed.
+    Used by CLI polling during signup flow.
+    """
+    try:
+        # List users and find by email
+        users = supabase.auth.admin.list_users()
+        
+        for user in users:
+            if user.email == email:
+                confirmed = user.email_confirmed_at is not None
+                return {
+                    "email": email,
+                    "confirmed": confirmed,
+                    "confirmed_at": user.email_confirmed_at
+                }
+        
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Check failed: {str(e)}")
+
+
+@app.get("/v1/auth/me")
+async def auth_me(org: dict = Depends(verify_api_key)):
+    """Get current user/org info from API key."""
+    return {
+        "org_name": org["name"],
+        "org_id": org["id"],
+        "api_key_prefix": org["api_key"][:20] + "...",
+        "is_active": org["is_active"],
+        "created_at": org.get("created_at")
+    }
+
+
+# ============================================================================
 # SDK COMPATIBILITY ENDPOINTS (No /v1/ prefix for backward compatibility)
 # ============================================================================
 
