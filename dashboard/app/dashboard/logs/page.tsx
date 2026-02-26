@@ -61,7 +61,7 @@ export default function LogsPage() {
           .from('ledger_logs')
           .select(`
             *,
-            agents!inner(name, agent_type)
+            agents(name, agent_type)
           `)
           .eq('organization_id', orgId)
           .order('timestamp', { ascending: false })

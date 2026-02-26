@@ -219,7 +219,7 @@ export default function DashboardOverview() {
         supabase.from('policies').select('*', { count: 'exact', head: true }).eq('organization_id', org.id),
         supabase.from('ledger_logs').select(`
           *,
-          agents!inner(name, icon, color)
+          agents(name, icon, color)
         `).eq('organization_id', org.id).order('timestamp', { ascending: false}).limit(500),
       ]);
 
