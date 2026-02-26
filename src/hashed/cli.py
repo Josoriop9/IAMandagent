@@ -670,6 +670,201 @@ def policy_test(
 
 
 # ============================================================================
+# POLICY SYNC (push/pull)
+# ============================================================================
+
+@policy_app.command("push")
+def policy_push(
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+):
+    """
+    ⬆️  Push local policies to backend (JSON → Supabase).
+    
+    Reads .hashed_policies.json and syncs all policies to the backend.
+    Requires: .env with HASHED_API_KEY and HASHED_BACKEND_URL
+    
+    Example:
+        hashed policy push
+    """
+    async def _push():
+        try:
+            import httpx
+            from dotenv import load_dotenv
+            load_dotenv()
+            
+            config = get_config()
+            if not config.backend_url or not config.api_key:
+                error("Missing HASHED_BACKEND_URL or HASHED_API_KEY in .env")
+                raise typer.Exit(1)
+            
+            policies = _load_policies(config_file)
+            headers = {"X-API-KEY": config.api_key}
+            pushed = 0
+            errors_count = 0
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Get existing agents from backend
+                agents_resp = await client.get(
+                    f"{config.backend_url}/v1/agents", headers=headers
+                )
+                agent_map = {}  # snake_name → agent_id
+                if agents_resp.is_success:
+                    for a in agents_resp.json().get("agents", []):
+                        snake = _to_snake_case(a["name"])
+                        agent_map[snake] = a["id"]
+                
+                # Push global policies (agent_id = None)
+                for tool_name, pol in policies.get("global", {}).items():
+                    try:
+                        resp = await client.post(
+                            f"{config.backend_url}/v1/policies",
+                            headers=headers,
+                            json={
+                                "tool_name": tool_name,
+                                "allowed": pol["allowed"],
+                                "max_amount": pol.get("max_amount"),
+                                "metadata": {"source": "cli_push"}
+                            }
+                        )
+                        if resp.is_success:
+                            pushed += 1
+                            success(f"  ✓ {tool_name} (global)")
+                        else:
+                            # Try to handle duplicate - means it exists
+                            warning(f"  ⚠ {tool_name} (global) - {resp.status_code}: may already exist")
+                            pushed += 1
+                    except Exception as e:
+                        error(f"  ✗ {tool_name} (global): {e}")
+                        errors_count += 1
+                
+                # Push agent-specific policies
+                for agent_snake, tools in policies.get("agents", {}).items():
+                    agent_id = agent_map.get(agent_snake)
+                    if not agent_id:
+                        warning(f"  Agent '{agent_snake}' not registered on backend. Skipping.")
+                        info(f"    Run the agent first to register it, then push again.")
+                        continue
+                    
+                    for tool_name, pol in tools.items():
+                        try:
+                            resp = await client.post(
+                                f"{config.backend_url}/v1/policies",
+                                params={"agent_id": agent_id},
+                                headers=headers,
+                                json={
+                                    "tool_name": tool_name,
+                                    "allowed": pol["allowed"],
+                                    "max_amount": pol.get("max_amount"),
+                                    "metadata": {"source": "cli_push"}
+                                }
+                            )
+                            if resp.is_success:
+                                pushed += 1
+                                success(f"  ✓ {tool_name} (agent:{agent_snake})")
+                            else:
+                                warning(f"  ⚠ {tool_name} (agent:{agent_snake}) - {resp.status_code}")
+                                pushed += 1
+                        except Exception as e:
+                            error(f"  ✗ {tool_name} (agent:{agent_snake}): {e}")
+                            errors_count += 1
+            
+            console.print()
+            if pushed > 0:
+                success(f"Pushed {pushed} policies to backend")
+            if errors_count > 0:
+                error(f"{errors_count} policies failed")
+                
+        except Exception as e:
+            error(f"Push failed: {e}")
+            raise typer.Exit(1)
+    
+    console.print(Panel.fit("[bold cyan]Policy Push → Backend[/bold cyan]", border_style="cyan"))
+    asyncio.run(_push())
+
+
+@policy_app.command("pull")
+def policy_pull(
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+):
+    """
+    ⬇️  Pull policies from backend to local JSON (Supabase → JSON).
+    
+    Downloads all policies from backend and saves to .hashed_policies.json
+    
+    Example:
+        hashed policy pull
+    """
+    async def _pull():
+        try:
+            import httpx
+            from dotenv import load_dotenv
+            load_dotenv()
+            
+            config = get_config()
+            if not config.backend_url or not config.api_key:
+                error("Missing HASHED_BACKEND_URL or HASHED_API_KEY in .env")
+                raise typer.Exit(1)
+            
+            headers = {"X-API-KEY": config.api_key}
+            
+            async with httpx.AsyncClient(timeout=30) as client:
+                # Get all policies
+                pol_resp = await client.get(
+                    f"{config.backend_url}/v1/policies", headers=headers
+                )
+                if not pol_resp.is_success:
+                    error(f"Failed to fetch policies: {pol_resp.status_code}")
+                    raise typer.Exit(1)
+                
+                backend_policies = pol_resp.json().get("policies", [])
+                
+                # Get agents for name mapping
+                agents_resp = await client.get(
+                    f"{config.backend_url}/v1/agents", headers=headers
+                )
+                agent_id_to_name = {}
+                if agents_resp.is_success:
+                    for a in agents_resp.json().get("agents", []):
+                        agent_id_to_name[a["id"]] = _to_snake_case(a["name"])
+            
+            # Build local structure
+            local = {"global": {}, "agents": {}}
+            
+            for pol in backend_policies:
+                entry = {
+                    "allowed": pol["allowed"],
+                    "max_amount": pol.get("max_amount"),
+                    "created_at": pol.get("created_at", datetime.now().isoformat())
+                }
+                
+                if pol.get("agent_id"):
+                    agent_snake = agent_id_to_name.get(pol["agent_id"], "unknown")
+                    if agent_snake not in local["agents"]:
+                        local["agents"][agent_snake] = {}
+                    local["agents"][agent_snake][pol["tool_name"]] = entry
+                else:
+                    local["global"][pol["tool_name"]] = entry
+            
+            _save_policies(local, config_file)
+            
+            global_count = len(local["global"])
+            agent_count = sum(len(t) for t in local["agents"].values())
+            agents_list = list(local["agents"].keys())
+            
+            success(f"Pulled {global_count} global + {agent_count} agent policies")
+            if agents_list:
+                info(f"  Agents: {', '.join(agents_list)}")
+            info(f"  Saved to: {config_file}")
+            
+        except Exception as e:
+            error(f"Pull failed: {e}")
+            raise typer.Exit(1)
+    
+    console.print(Panel.fit("[bold cyan]Policy Pull ← Backend[/bold cyan]", border_style="cyan"))
+    asyncio.run(_pull())
+
+
+# ============================================================================
 # AGENT COMMANDS
 # ============================================================================
 
