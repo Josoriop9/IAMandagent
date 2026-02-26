@@ -272,11 +272,12 @@ async def auth_login(request: AuthLoginRequest):
         import secrets
         api_key = f"hashed_{secrets.token_hex(32)}"
         
-        # Create organization
+        # Create organization (with owner_id for dashboard compatibility)
         org_response = supabase.table("organizations").insert({
             "name": org_name,
             "api_key": api_key,
-            "is_active": True
+            "is_active": True,
+            "owner_id": str(user.id)
         }).execute()
         
         org = org_response.data[0]
