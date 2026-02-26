@@ -8,6 +8,7 @@ without needing access to the web dashboard.
 import asyncio
 import json
 import os
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -83,17 +84,29 @@ def warning(message: str) -> None:
 # MAIN COMMANDS
 # ============================================================================
 
+def _to_snake_case(name: str) -> str:
+    """Convert 'My Agent Name' to 'my_agent_name'."""
+    # Replace non-alphanumeric with spaces, then join with underscores
+    cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', name)
+    return re.sub(r'\s+', '_', cleaned.strip()).lower()
+
+
 @app.command()
 def init(
     name: str = typer.Option(..., "--name", "-n", help="Agent name"),
     agent_type: str = typer.Option("general", "--type", "-t", help="Agent type"),
-    identity_file: str = typer.Option("./secrets/agent_key.pem", "--identity", "-i", help="Identity file path"),
     create_config: bool = typer.Option(True, "--config/--no-config", help="Create .env config file"),
+    force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
 ):
     """
-    🚀 Initialize a new Hashed agent project.
+    🚀 Initialize a new Hashed agent.
     
-    Creates identity, configuration, and project structure.
+    Creates identity, configuration, and agent script.
+    Each agent gets its own unique identity and script file.
+    
+    Example:
+        hashed init --name "Support Bot" --type customer_service
+        hashed init --name "Payment Agent" --type finance
     """
     console.print(Panel.fit(
         "[bold cyan]Hashed Agent Initialization[/bold cyan]",
@@ -101,8 +114,13 @@ def init(
     ))
     
     try:
+        # Derive file names from agent name
+        snake_name = _to_snake_case(name)
+        identity_file = f"./secrets/{snake_name}_key.pem"
+        script_file = f"{snake_name}.py"
+        
         # Create secrets directory
-        secrets_dir = Path(identity_file).parent
+        secrets_dir = Path("./secrets")
         secrets_dir.mkdir(parents=True, exist_ok=True)
         success(f"Created directory: {secrets_dir}")
         
@@ -125,6 +143,8 @@ def init(
         table.add_row("[cyan]Public Key[/cyan]", identity.public_key_hex)
         table.add_row("[cyan]Agent Name[/cyan]", name)
         table.add_row("[cyan]Agent Type[/cyan]", agent_type)
+        table.add_row("[cyan]Identity[/cyan]", identity_file)
+        table.add_row("[cyan]Script[/cyan]", script_file)
         console.print(table)
         
         # Create .env file if requested
@@ -135,8 +155,6 @@ def init(
 HASHED_BACKEND_URL=http://localhost:8000
 HASHED_API_KEY=your_api_key_here
 HASHED_IDENTITY_PASSWORD={password}
-HASHED_AGENT_NAME={name}
-HASHED_AGENT_TYPE={agent_type}
 """
                 env_file.write_text(env_content)
                 success(f"Created configuration: {env_file}")
@@ -144,10 +162,33 @@ HASHED_AGENT_TYPE={agent_type}
             else:
                 info(".env file already exists, skipping")
         
-        # Create example script
-        example_file = Path("agent.py")
-        if not example_file.exists():
-            example_content = f'''"""
+        # Create agent script
+        script_path = Path(script_file)
+        if script_path.exists() and not force:
+            overwrite = typer.confirm(f"  {script_file} already exists. Overwrite?", default=False)
+            if not overwrite:
+                info(f"Skipped {script_file}")
+            else:
+                _write_agent_script(script_path, name, agent_type, identity_file)
+        else:
+            _write_agent_script(script_path, name, agent_type, identity_file)
+        
+        # Final instructions
+        console.print()
+        console.print("[bold green]✓ Agent initialized![/bold green]")
+        console.print(f"\n[cyan]Next steps:[/cyan]")
+        console.print(f"  1. Update .env with your HASHED_API_KEY")
+        console.print(f"  2. Run: [bold]python3 {script_file}[/bold]")
+        console.print(f"  3. View logs: [bold]hashed logs list[/bold]")
+        
+    except Exception as e:
+        error(f"Initialization failed: {e}")
+        raise typer.Exit(1)
+
+
+def _write_agent_script(path: Path, name: str, agent_type: str, identity_file: str) -> None:
+    """Write the agent template script to disk."""
+    content = f'''"""
 {name} - Hashed AI Agent
 """
 
@@ -159,15 +200,16 @@ from hashed import HashedCore, HashedConfig, load_or_create_identity
 # Load environment variables from .env file
 load_dotenv()
 
+
 async def main():
     """Main agent logic."""
     # Load configuration
     config = HashedConfig()
-    
+
     # Load identity (password from .env or environment)
     password = os.getenv("HASHED_IDENTITY_PASSWORD")
     identity = load_or_create_identity("{identity_file}", password)
-    
+
     # Create core
     core = HashedCore(
         config=config,
@@ -175,33 +217,30 @@ async def main():
         agent_name="{name}",
         agent_type="{agent_type}"
     )
-    
+
     # Initialize
     await core.initialize()
-    
+
     # Define guarded operations
     @core.guard("example_operation")
     async def example_operation(param: str):
         """Example guarded operation."""
         print(f"Executing: {{param}}")
         return {{"status": "success", "param": param}}
-    
+
     # Execute
     result = await example_operation("test")
     print(f"Result: {{result}}")
-    
+
     # Cleanup
     await core.shutdown()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
 '''
-        console.print("  2. Run: python agent.py")
-        console.print("  3. View logs: hashed logs list")
-        
-    except Exception as e:
-        error(f"Initialization failed: {e}")
-        raise typer.Exit(1)
+    path.write_text(content)
+    success(f"Created agent script: {path}")
 
 
 @app.command()
