@@ -187,9 +187,73 @@ HASHED_IDENTITY_PASSWORD={password}
 
 
 def _write_agent_script(path: Path, name: str, agent_type: str, identity_file: str) -> None:
-    """Write the agent template script to disk."""
+    """Write the agent template script, auto-generating @core.guard() from policies."""
+    snake_name = _to_snake_case(name)
+    
+    # Read policies for this agent
+    policies = _load_policies()
+    agent_pols = policies.get("agents", {}).get(snake_name, {})
+    global_pols = policies.get("global", {})
+    
+    # Build guarded operations from policies
+    guard_blocks = ""
+    execute_blocks = ""
+    
+    if agent_pols or global_pols:
+        # Agent-specific policies first
+        all_tools = {}
+        for tool, pol in global_pols.items():
+            all_tools[tool] = {**pol, "_scope": "global"}
+        for tool, pol in agent_pols.items():
+            all_tools[tool] = {**pol, "_scope": "agent"}
+        
+        for tool, pol in all_tools.items():
+            allowed = pol["allowed"]
+            max_amt = pol.get("max_amount")
+            scope = pol["_scope"]
+            status_comment = "allowed" if allowed else "DENIED by policy"
+            
+            # Build function signature
+            if max_amt is not None:
+                params = "amount: float"
+                execute_arg = "100.0"
+                doc_extra = f" (max: ${max_amt})"
+            else:
+                params = "data: str"
+                execute_arg = '"test"'
+                doc_extra = ""
+            
+            guard_blocks += f'''
+    @core.guard("{tool}")
+    async def {tool}({params}):
+        """{tool} - {status_comment}{doc_extra} [{scope}]"""
+        print(f"Executing {tool}")
+        return {{"status": "success", "tool": "{tool}"}}
+'''
+            execute_blocks += f'''
+    try:
+        result = await {tool}({execute_arg})
+        print(f"  ✓ {tool}: {{result}}")
+    except Exception as e:
+        print(f"  ✗ {tool}: {{e}}")
+'''
+    else:
+        # No policies found - generate example
+        guard_blocks = '''
+    @core.guard("example_operation")
+    async def example_operation(param: str):
+        """Example guarded operation."""
+        print(f"Executing: {param}")
+        return {"status": "success", "param": param}
+'''
+        execute_blocks = '''
+    result = await example_operation("test")
+    print(f"Result: {result}")
+'''
+    
     content = f'''"""
 {name} - Hashed AI Agent
+Auto-generated with policies from .hashed_policies.json
 """
 
 import asyncio
@@ -202,7 +266,7 @@ load_dotenv()
 
 
 async def main():
-    """Main agent logic."""
+    """Main agent logic for {name}."""
     # Load configuration
     config = HashedConfig()
 
@@ -220,20 +284,20 @@ async def main():
 
     # Initialize
     await core.initialize()
+    print(f"🤖 {name} ({agent_type}) initialized\\n")
 
-    # Define guarded operations
-    @core.guard("example_operation")
-    async def example_operation(param: str):
-        """Example guarded operation."""
-        print(f"Executing: {{param}}")
-        return {{"status": "success", "param": param}}
-
-    # Execute
-    result = await example_operation("test")
-    print(f"Result: {{result}}")
-
+    # ================================================================
+    # Guarded Operations (from .hashed_policies.json)
+    # ================================================================
+{guard_blocks}
+    # ================================================================
+    # Execute Operations
+    # ================================================================
+    print("Running operations...")
+{execute_blocks}
     # Cleanup
     await core.shutdown()
+    print(f"\\n✓ {name} finished")
 
 
 if __name__ == "__main__":
@@ -241,6 +305,10 @@ if __name__ == "__main__":
 '''
     path.write_text(content)
     success(f"Created agent script: {path}")
+    
+    if agent_pols or global_pols:
+        tool_count = len(agent_pols) + len(global_pols)
+        info(f"  Generated {tool_count} @core.guard() operations from policies")
 
 
 @app.command()
@@ -350,6 +418,41 @@ def identity_sign(
 
 
 # ============================================================================
+# POLICY HELPERS
+# ============================================================================
+
+POLICY_FILE = ".hashed_policies.json"
+
+
+def _load_policies(config_file: str = POLICY_FILE) -> dict:
+    """Load policy file with global + per-agent structure."""
+    config_path = Path(config_file)
+    if config_path.exists():
+        data = json.loads(config_path.read_text())
+        # Migrate old flat format → new structure
+        if "global" not in data and "agents" not in data:
+            return {"global": data, "agents": {}}
+        return data
+    return {"global": {}, "agents": {}}
+
+
+def _save_policies(policies: dict, config_file: str = POLICY_FILE) -> None:
+    """Save policy file."""
+    Path(config_file).write_text(json.dumps(policies, indent=2))
+
+
+def _resolve_policy(policies: dict, tool_name: str, agent_name: Optional[str] = None) -> Optional[dict]:
+    """Resolve a policy: agent-specific first, then global fallback."""
+    if agent_name:
+        snake = _to_snake_case(agent_name)
+        agent_policies = policies.get("agents", {}).get(snake, {})
+        if tool_name in agent_policies:
+            return agent_policies[tool_name]
+    # Fallback to global
+    return policies.get("global", {}).get(tool_name)
+
+
+# ============================================================================
 # POLICY COMMANDS
 # ============================================================================
 
@@ -358,33 +461,41 @@ def policy_add(
     tool_name: str = typer.Argument(..., help="Tool/operation name"),
     allowed: bool = typer.Option(True, "--allow/--deny", help="Allow or deny"),
     max_amount: Optional[float] = typer.Option(None, "--max-amount", "-m", help="Maximum amount"),
-    config_file: str = typer.Option(".hashed_policies.json", "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent name (omit for global)"),
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
 ):
     """
-    ➕ Add a new policy rule.
+    ➕ Add a policy rule (global or per-agent).
     
-    Defines access control for operations.
+    Examples:
+        hashed policy add send_email --allow                        # Global
+        hashed policy add process_payment --allow -m 500 -a payment_agent
+        hashed policy add delete_data --deny -a support_bot
     """
     try:
-        # Load existing policies
-        policies = {}
-        config_path = Path(config_file)
-        if config_path.exists():
-            policies = json.loads(config_path.read_text())
+        policies = _load_policies(config_file)
         
-        # Add new policy
-        policies[tool_name] = {
+        entry = {
             "allowed": allowed,
             "max_amount": max_amount,
             "created_at": datetime.now().isoformat()
         }
         
-        # Save
-        config_path.write_text(json.dumps(policies, indent=2))
+        if agent_name:
+            snake = _to_snake_case(agent_name)
+            if snake not in policies["agents"]:
+                policies["agents"][snake] = {}
+            policies["agents"][snake][tool_name] = entry
+            scope = f"agent:{snake}"
+        else:
+            policies["global"][tool_name] = entry
+            scope = "global"
         
-        success(f"Policy added: {tool_name}")
+        _save_policies(policies, config_file)
+        
+        success(f"Policy added: {tool_name} ({scope})")
         console.print(f"  Allowed: [{'green' if allowed else 'red'}]{allowed}[/]")
-        if max_amount:
+        if max_amount is not None:
             console.print(f"  Max Amount: [cyan]{max_amount}[/cyan]")
         
     except Exception as e:
@@ -394,75 +505,118 @@ def policy_add(
 
 @policy_app.command("list")
 def policy_list(
-    config_file: str = typer.Option(".hashed_policies.json", "--config", "-c", help="Policy config file"),
-    format: str = typer.Option("table", "--format", "-f", help="Output format (table/json)"),
+    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Filter by agent"),
+    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table/json)"),
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
 ):
     """
-    📋 List all policies.
+    📋 List policies (all, global, or per-agent).
     
-    Shows current policy configuration.
+    Examples:
+        hashed policy list                    # All policies
+        hashed policy list -a payment_agent   # Only payment_agent
     """
     try:
-        config_path = Path(config_file)
-        if not config_path.exists():
-            warning("No policies found")
+        policies = _load_policies(config_file)
+        
+        if output_format == "json":
+            console.print_json(data=policies)
             return
         
-        policies = json.loads(config_path.read_text())
+        global_policies = policies.get("global", {})
+        agent_policies = policies.get("agents", {})
         
-        if format == "json":
-            console.print_json(data=policies)
-        else:
-            table = Table(title="Policies", box=box.ROUNDED)
+        has_any = False
+        
+        # Show global policies
+        if global_policies and not agent_name:
+            has_any = True
+            table = Table(title="🌐 Global Policies", box=box.ROUNDED)
             table.add_column("Tool", style="cyan")
             table.add_column("Allowed", style="bold")
             table.add_column("Max Amount", style="yellow")
             table.add_column("Created", style="dim")
             
-            for tool_name, policy in policies.items():
-                allowed = "✓ Yes" if policy["allowed"] else "✗ No"
-                allowed_style = "green" if policy["allowed"] else "red"
-                max_amt = str(policy.get("max_amount", "-"))
-                created = policy.get("created_at", "-")[:10]
-                
-                table.add_row(
-                    tool_name,
-                    f"[{allowed_style}]{allowed}[/]",
-                    max_amt,
-                    created
-                )
-            
+            for tool, pol in global_policies.items():
+                _add_policy_row(table, tool, pol)
             console.print(table)
+        
+        # Show agent policies
+        agents_to_show = {}
+        if agent_name:
+            snake = _to_snake_case(agent_name)
+            if snake in agent_policies:
+                agents_to_show = {snake: agent_policies[snake]}
+            else:
+                warning(f"No policies for agent '{agent_name}'")
+                return
+        else:
+            agents_to_show = agent_policies
+        
+        for agent_key, tools in agents_to_show.items():
+            if tools:
+                has_any = True
+                table = Table(title=f"🤖 Agent: {agent_key}", box=box.ROUNDED)
+                table.add_column("Tool", style="cyan")
+                table.add_column("Allowed", style="bold")
+                table.add_column("Max Amount", style="yellow")
+                table.add_column("Created", style="dim")
+                
+                for tool, pol in tools.items():
+                    _add_policy_row(table, tool, pol)
+                console.print(table)
+        
+        if not has_any:
+            warning("No policies found. Add with: hashed policy add <tool> --allow")
         
     except Exception as e:
         error(f"Failed to list policies: {e}")
         raise typer.Exit(1)
 
 
+def _add_policy_row(table: Table, tool_name: str, policy: dict) -> None:
+    """Add a formatted row to a policy table."""
+    allowed = "✓ Yes" if policy["allowed"] else "✗ No"
+    style = "green" if policy["allowed"] else "red"
+    max_amt = str(policy.get("max_amount")) if policy.get("max_amount") is not None else "-"
+    created = policy.get("created_at", "-")[:10]
+    table.add_row(tool_name, f"[{style}]{allowed}[/]", max_amt, created)
+
+
 @policy_app.command("remove")
 def policy_remove(
     tool_name: str = typer.Argument(..., help="Tool/operation name"),
-    config_file: str = typer.Option(".hashed_policies.json", "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent name (omit for global)"),
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
 ):
     """
     ➖ Remove a policy rule.
+    
+    Examples:
+        hashed policy remove send_email               # Remove global
+        hashed policy remove process_payment -a pay    # Remove from agent
     """
     try:
-        config_path = Path(config_file)
-        if not config_path.exists():
-            warning("No policies found")
-            return
+        policies = _load_policies(config_file)
         
-        policies = json.loads(config_path.read_text())
+        if agent_name:
+            snake = _to_snake_case(agent_name)
+            agent_pols = policies.get("agents", {}).get(snake, {})
+            if tool_name not in agent_pols:
+                error(f"Policy not found: {tool_name} (agent: {snake})")
+                raise typer.Exit(1)
+            del policies["agents"][snake][tool_name]
+            if not policies["agents"][snake]:
+                del policies["agents"][snake]
+        else:
+            if tool_name not in policies.get("global", {}):
+                error(f"Global policy not found: {tool_name}")
+                raise typer.Exit(1)
+            del policies["global"][tool_name]
         
-        if tool_name not in policies:
-            error(f"Policy not found: {tool_name}")
-            raise typer.Exit(1)
-        
-        del policies[tool_name]
-        config_path.write_text(json.dumps(policies, indent=2))
-        
-        success(f"Policy removed: {tool_name}")
+        _save_policies(policies, config_file)
+        scope = f"agent:{_to_snake_case(agent_name)}" if agent_name else "global"
+        success(f"Policy removed: {tool_name} ({scope})")
         
     except Exception as e:
         error(f"Failed to remove policy: {e}")
@@ -472,39 +626,43 @@ def policy_remove(
 @policy_app.command("test")
 def policy_test(
     tool_name: str = typer.Argument(..., help="Tool to test"),
-    amount: Optional[float] = typer.Option(None, "--amount", "-a", help="Amount to test"),
-    config_file: str = typer.Option(".hashed_policies.json", "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent to test as"),
+    amount: Optional[float] = typer.Option(None, "--amount", "-m", help="Amount to test"),
+    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
 ):
     """
     🧪 Test if an operation would be allowed.
+    
+    Resolves agent-specific first, then falls back to global.
+    
+    Examples:
+        hashed policy test process_payment -a payment_agent -m 200
+        hashed policy test delete_data -a support_bot
     """
     try:
-        config_path = Path(config_file)
-        if not config_path.exists():
-            info("No policies found - operation would be allowed by default")
-            return
+        policies = _load_policies(config_file)
+        policy = _resolve_policy(policies, tool_name, agent_name)
         
-        policies = json.loads(config_path.read_text())
-        policy = policies.get(tool_name)
+        scope = f"agent:{_to_snake_case(agent_name)}" if agent_name else "global"
         
         if not policy:
-            info(f"No policy for '{tool_name}' - would use default (allowed)")
+            info(f"No policy for '{tool_name}' ({scope}) → default: [green]ALLOWED[/green]")
             return
         
         # Check allowed
         if not policy["allowed"]:
-            console.print(f"[red]✗ DENIED[/red] - Policy explicitly denies '{tool_name}'")
+            console.print(f"[red]✗ DENIED[/red] - Policy denies '{tool_name}' ({scope})")
             return
         
         # Check amount
-        if amount and policy.get("max_amount"):
+        if amount is not None and policy.get("max_amount") is not None:
             if amount > policy["max_amount"]:
-                console.print(f"[red]✗ DENIED[/red] - Amount {amount} exceeds max {policy['max_amount']}")
+                console.print(f"[red]✗ DENIED[/red] - Amount ${amount} exceeds max ${policy['max_amount']}")
                 return
+            console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted (${amount} ≤ ${policy['max_amount']})")
+            return
         
-        console.print(f"[green]✓ ALLOWED[/green] - Operation '{tool_name}' would be permitted")
-        if amount and policy.get("max_amount"):
-            console.print(f"  Amount {amount} is within limit {policy['max_amount']}")
+        console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted ({scope})")
         
     except Exception as e:
         error(f"Failed to test policy: {e}")
