@@ -673,6 +673,34 @@ def policy_test(
 # POLICY SYNC (push/pull)
 # ============================================================================
 
+def _normalize_name(name: str) -> str:
+    """Normalize agent name for matching: remove all non-alphanumeric, lowercase."""
+    return re.sub(r'[^a-z0-9]', '', name.lower())
+
+
+def _get_sync_credentials() -> tuple:
+    """Get API key and backend URL for sync, preferring ~/.hashed/credentials.json."""
+    from dotenv import load_dotenv
+    load_dotenv()
+    
+    # Priority: credentials.json > .env > HashedConfig
+    creds = load_credentials()
+    api_key = None
+    backend_url = None
+    
+    if creds:
+        api_key = creds.get("api_key")
+        backend_url = creds.get("backend_url")
+    
+    # Fallback to config (env vars)
+    if not api_key or not backend_url:
+        config = get_config()
+        api_key = api_key or config.api_key
+        backend_url = backend_url or config.backend_url
+    
+    return api_key, backend_url
+
+
 @policy_app.command("push")
 def policy_push(
     config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
@@ -681,7 +709,7 @@ def policy_push(
     ⬆️  Push local policies to backend (JSON → Supabase).
     
     Reads .hashed_policies.json and syncs all policies to the backend.
-    Requires: .env with HASHED_API_KEY and HASHED_BACKEND_URL
+    Uses credentials from ~/.hashed/credentials.json (from hashed login).
     
     Example:
         hashed policy push
@@ -689,35 +717,42 @@ def policy_push(
     async def _push():
         try:
             import httpx
-            from dotenv import load_dotenv
-            load_dotenv()
             
-            config = get_config()
-            if not config.backend_url or not config.api_key:
-                error("Missing HASHED_BACKEND_URL or HASHED_API_KEY in .env")
+            api_key, backend_url = _get_sync_credentials()
+            if not backend_url or not api_key:
+                error("No credentials found. Run: hashed login")
                 raise typer.Exit(1)
             
+            info(f"Using backend: {backend_url}")
+            
             policies = _load_policies(config_file)
-            headers = {"X-API-KEY": config.api_key}
+            headers = {"X-API-KEY": api_key}
             pushed = 0
             errors_count = 0
             
             async with httpx.AsyncClient(timeout=30) as client:
-                # Get existing agents from backend
+                # Get existing agents from backend (normalized name → agent_id)
                 agents_resp = await client.get(
-                    f"{config.backend_url}/v1/agents", headers=headers
+                    f"{backend_url}/v1/agents", headers=headers
                 )
-                agent_map = {}  # snake_name → agent_id
-                if agents_resp.is_success:
-                    for a in agents_resp.json().get("agents", []):
-                        snake = _to_snake_case(a["name"])
-                        agent_map[snake] = a["id"]
+                if not agents_resp.is_success:
+                    error(f"Failed to fetch agents: {agents_resp.status_code}")
+                    error("Check your credentials: hashed whoami")
+                    raise typer.Exit(1)
+                
+                # Build normalized agent map for flexible matching
+                agent_map = {}  # normalized_name → agent_id
+                agent_display = {}  # normalized_name → original name
+                for a in agents_resp.json().get("agents", []):
+                    norm = _normalize_name(a["name"])
+                    agent_map[norm] = a["id"]
+                    agent_display[norm] = a["name"]
                 
                 # Push global policies (agent_id = None)
                 for tool_name, pol in policies.get("global", {}).items():
                     try:
                         resp = await client.post(
-                            f"{config.backend_url}/v1/policies",
+                            f"{backend_url}/v1/policies",
                             headers=headers,
                             json={
                                 "tool_name": tool_name,
@@ -730,25 +765,34 @@ def policy_push(
                             pushed += 1
                             success(f"  ✓ {tool_name} (global)")
                         else:
-                            # Try to handle duplicate - means it exists
                             warning(f"  ⚠ {tool_name} (global) - {resp.status_code}: may already exist")
                             pushed += 1
                     except Exception as e:
                         error(f"  ✗ {tool_name} (global): {e}")
                         errors_count += 1
                 
-                # Push agent-specific policies
-                for agent_snake, tools in policies.get("agents", {}).items():
-                    agent_id = agent_map.get(agent_snake)
+                # Push agent-specific policies (fuzzy name matching)
+                for agent_key, tools in policies.get("agents", {}).items():
+                    norm_key = _normalize_name(agent_key)
+                    agent_id = agent_map.get(norm_key)
+                    
                     if not agent_id:
-                        warning(f"  Agent '{agent_snake}' not registered on backend. Skipping.")
-                        info(f"    Run the agent first to register it, then push again.")
+                        # Show available agents for debugging
+                        available = [f"'{v}'" for v in agent_display.values()]
+                        warning(f"  Agent '{agent_key}' not found on backend. Skipping.")
+                        if available:
+                            info(f"    Available agents: {', '.join(available)}")
+                        else:
+                            info(f"    No agents registered. Run the agent first.")
                         continue
+                    
+                    matched_name = agent_display.get(norm_key, agent_key)
+                    info(f"  Matched '{agent_key}' → '{matched_name}'")
                     
                     for tool_name, pol in tools.items():
                         try:
                             resp = await client.post(
-                                f"{config.backend_url}/v1/policies",
+                                f"{backend_url}/v1/policies",
                                 params={"agent_id": agent_id},
                                 headers=headers,
                                 json={
@@ -760,12 +804,12 @@ def policy_push(
                             )
                             if resp.is_success:
                                 pushed += 1
-                                success(f"  ✓ {tool_name} (agent:{agent_snake})")
+                                success(f"  ✓ {tool_name} (agent:{agent_key})")
                             else:
-                                warning(f"  ⚠ {tool_name} (agent:{agent_snake}) - {resp.status_code}")
+                                warning(f"  ⚠ {tool_name} (agent:{agent_key}) - {resp.status_code}")
                                 pushed += 1
                         except Exception as e:
-                            error(f"  ✗ {tool_name} (agent:{agent_snake}): {e}")
+                            error(f"  ✗ {tool_name} (agent:{agent_key}): {e}")
                             errors_count += 1
             
             console.print()
@@ -797,20 +841,18 @@ def policy_pull(
     async def _pull():
         try:
             import httpx
-            from dotenv import load_dotenv
-            load_dotenv()
             
-            config = get_config()
-            if not config.backend_url or not config.api_key:
-                error("Missing HASHED_BACKEND_URL or HASHED_API_KEY in .env")
+            api_key, backend_url = _get_sync_credentials()
+            if not backend_url or not api_key:
+                error("No credentials found. Run: hashed login")
                 raise typer.Exit(1)
             
-            headers = {"X-API-KEY": config.api_key}
+            headers = {"X-API-KEY": api_key}
             
             async with httpx.AsyncClient(timeout=30) as client:
                 # Get all policies
                 pol_resp = await client.get(
-                    f"{config.backend_url}/v1/policies", headers=headers
+                    f"{backend_url}/v1/policies", headers=headers
                 )
                 if not pol_resp.is_success:
                     error(f"Failed to fetch policies: {pol_resp.status_code}")
@@ -820,7 +862,7 @@ def policy_pull(
                 
                 # Get agents for name mapping
                 agents_resp = await client.get(
-                    f"{config.backend_url}/v1/agents", headers=headers
+                    f"{backend_url}/v1/agents", headers=headers
                 )
                 agent_id_to_name = {}
                 if agents_resp.is_success:

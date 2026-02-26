@@ -855,12 +855,36 @@ async def create_policy(
             "metadata": policy.metadata
         }
         
-        response = supabase.table("policies").insert(policy_data).execute()
+        # Check if policy already exists (same tool + agent + org)
+        existing_query = supabase.table("policies")\
+            .select("id")\
+            .eq("organization_id", org["id"])\
+            .eq("tool_name", policy.tool_name)
         
-        return {
-            "policy": response.data[0],
-            "message": "Policy created successfully"
-        }
+        if agent_id:
+            existing_query = existing_query.eq("agent_id", agent_id)
+        else:
+            existing_query = existing_query.is_("agent_id", "null")
+        
+        existing = existing_query.execute()
+        
+        if existing.data and len(existing.data) > 0:
+            # Update existing policy
+            response = supabase.table("policies")\
+                .update(policy_data)\
+                .eq("id", existing.data[0]["id"])\
+                .execute()
+            return {
+                "policy": response.data[0],
+                "message": "Policy updated successfully"
+            }
+        else:
+            # Insert new policy
+            response = supabase.table("policies").insert(policy_data).execute()
+            return {
+                "policy": response.data[0],
+                "message": "Policy created successfully"
+            }
     
     except Exception as e:
         raise HTTPException(
