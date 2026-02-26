@@ -47,7 +47,34 @@ dev = [
     "ruff>=0.0.285",
     "types-httpx",
 ]
-examples = [
+# Framework integrations
+langchain = [
+    "langchain>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-core>=0.2.0",
+    "openai>=1.0.0",
+]
+crewai = [
+    "crewai>=0.55.0",
+    "openai>=1.0.0",
+]
+strands = [
+    "strands-agents>=0.1.0",
+    "boto3>=1.34.0",
+]
+autogen = [
+    "pyautogen>=0.3.0",
+    "openai>=1.0.0",
+]
+# Install all framework integrations
+all = [
+    "langchain>=0.2.0",
+    "langchain-openai>=0.1.0",
+    "langchain-core>=0.2.0",
+    "crewai>=0.55.0",
+    "strands-agents>=0.1.0",
+    "boto3>=1.34.0",
+    "pyautogen>=0.3.0",
     "openai>=1.0.0",
 ]
 

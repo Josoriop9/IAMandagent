@@ -24,6 +24,7 @@ from rich import box
 from hashed import HashedCore, HashedConfig, load_or_create_identity
 from hashed.identity import IdentityManager
 from hashed.guard import PermissionError
+from hashed.templates import render_agent_script, FRAMEWORKS, FRAMEWORK_LABELS, FRAMEWORK_INSTALL
 
 # Initialize Typer app
 app = typer.Typer(
@@ -95,73 +96,101 @@ def _to_snake_case(name: str) -> str:
 def init(
     name: str = typer.Option(..., "--name", "-n", help="Agent name"),
     agent_type: str = typer.Option("general", "--type", "-t", help="Agent type"),
+    framework: str = typer.Option(
+        "plain",
+        "--framework", "--fw",
+        help=f"AI framework: {', '.join(FRAMEWORKS)}",
+        show_default=True,
+    ),
+    interactive: bool = typer.Option(
+        False,
+        "--interactive", "-i",
+        help="Add interactive REPL loop (chat mode in terminal)",
+    ),
     create_config: bool = typer.Option(True, "--config/--no-config", help="Create .env config file"),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
 ):
     """
     🚀 Initialize a new Hashed agent.
-    
-    Creates identity, configuration, and agent script.
-    Each agent gets its own unique identity and script file.
-    
-    Example:
-        hashed init --name "Support Bot" --type customer_service
-        hashed init --name "Payment Agent" --type finance
+
+    Creates identity, configuration, and an agent script for your chosen framework.
+    Each agent gets its own unique identity file and script.
+
+    Examples:
+        hashed init --name "Support Bot" --type assistant
+        hashed init --name "Payment Agent" --type finance --framework langchain
+        hashed init --name "Research Agent" --type analyst --framework crewai --interactive
+        hashed init --name "AWS Agent" --type cloud --framework strands
+        hashed init --name "Multi Agent" --type orchestrator --framework autogen --interactive
     """
+    # Validate framework
+    if framework not in FRAMEWORKS:
+        error(f"Unknown framework '{framework}'. Choose from: {', '.join(FRAMEWORKS)}")
+        raise typer.Exit(1)
+
+    fw_label = FRAMEWORK_LABELS[framework]
     console.print(Panel.fit(
-        "[bold cyan]Hashed Agent Initialization[/bold cyan]",
+        f"[bold cyan]Hashed Agent Initialization[/bold cyan]\n"
+        f"[dim]Framework: {fw_label}{'  ·  Interactive' if interactive else ''}[/dim]",
         border_style="cyan"
     ))
-    
+
     try:
         # Derive file names from agent name
         snake_name = _to_snake_case(name)
         identity_file = f"./secrets/{snake_name}_key.pem"
         script_file = f"{snake_name}.py"
-        
+
         # Create secrets directory
         secrets_dir = Path("./secrets")
         secrets_dir.mkdir(parents=True, exist_ok=True)
         success(f"Created directory: {secrets_dir}")
-        
+
         # Create .gitignore for secrets
         gitignore_path = secrets_dir / ".gitignore"
         if not gitignore_path.exists():
             gitignore_path.write_text("*.pem\n*.key\n")
             success(f"Created .gitignore: {gitignore_path}")
-        
+
         # Generate or load identity
         password = os.getenv("HASHED_IDENTITY_PASSWORD")
         if not password:
             password = typer.prompt("Enter password for identity encryption", hide_input=True)
-        
+
         identity = load_or_create_identity(identity_file, password)
         success(f"Identity ready: {identity_file}")
-        
-        # Display public key
+
+        # Display summary table
         table = Table(show_header=False, box=box.ROUNDED)
         table.add_row("[cyan]Public Key[/cyan]", identity.public_key_hex)
         table.add_row("[cyan]Agent Name[/cyan]", name)
         table.add_row("[cyan]Agent Type[/cyan]", agent_type)
+        table.add_row("[cyan]Framework[/cyan]", fw_label)
+        table.add_row("[cyan]Interactive[/cyan]", "✓ Yes" if interactive else "No")
         table.add_row("[cyan]Identity[/cyan]", identity_file)
         table.add_row("[cyan]Script[/cyan]", script_file)
         console.print(table)
-        
+
         # Create .env file if requested
         if create_config:
             env_file = Path(".env")
             if not env_file.exists():
-                env_content = f"""# Hashed Configuration
-HASHED_BACKEND_URL=http://localhost:8000
-HASHED_API_KEY=your_api_key_here
-HASHED_IDENTITY_PASSWORD={password}
-"""
+                env_content = f"# Hashed Configuration\n"
+                env_content += f"HASHED_BACKEND_URL=http://localhost:8000\n"
+                env_content += f"HASHED_API_KEY=your_api_key_here\n"
+                env_content += f"HASHED_IDENTITY_PASSWORD={password}\n"
+                if framework in ("langchain", "crewai", "autogen"):
+                    env_content += f"OPENAI_API_KEY=your_openai_key_here\n"
+                    env_content += f"OPENAI_MODEL=gpt-4o-mini\n"
+                if framework == "strands":
+                    env_content += f"AWS_REGION=us-east-1\n"
+                    env_content += f"BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0\n"
                 env_file.write_text(env_content)
                 success(f"Created configuration: {env_file}")
-                warning("⚠️  Remember to update HASHED_API_KEY in .env")
+                warning("⚠️  Update HASHED_API_KEY in .env (from: hashed whoami)")
             else:
                 info(".env file already exists, skipping")
-        
+
         # Create agent script
         script_path = Path(script_file)
         if script_path.exists() and not force:
@@ -169,146 +198,73 @@ HASHED_IDENTITY_PASSWORD={password}
             if not overwrite:
                 info(f"Skipped {script_file}")
             else:
-                _write_agent_script(script_path, name, agent_type, identity_file)
+                _write_agent_script(script_path, name, agent_type, identity_file, framework, interactive)
         else:
-            _write_agent_script(script_path, name, agent_type, identity_file)
-        
+            _write_agent_script(script_path, name, agent_type, identity_file, framework, interactive)
+
         # Final instructions
         console.print()
         console.print("[bold green]✓ Agent initialized![/bold green]")
+
+        install_cmd = FRAMEWORK_INSTALL.get(framework)
         console.print(f"\n[cyan]Next steps:[/cyan]")
-        console.print(f"  1. Update .env with your HASHED_API_KEY")
-        console.print(f"  2. Run: [bold]python3 {script_file}[/bold]")
-        console.print(f"  3. View logs: [bold]hashed logs list[/bold]")
-        
+        step = 1
+        if install_cmd:
+            console.print(f"  {step}. Install deps: [bold]{install_cmd}[/bold]")
+            step += 1
+        console.print(f"  {step}. Update .env with your API keys")
+        step += 1
+        console.print(f"  {step}. Add policies: [bold]hashed policy add <tool> --allow --agent \"{name}\"[/bold]")
+        step += 1
+        console.print(f"  {step}. Run: [bold]python3 {script_file}[/bold]")
+        step += 1
+        console.print(f"  {step}. View logs: [bold]hashed logs list[/bold]")
+
     except Exception as e:
         error(f"Initialization failed: {e}")
         raise typer.Exit(1)
 
 
-def _write_agent_script(path: Path, name: str, agent_type: str, identity_file: str) -> None:
-    """Write the agent template script, auto-generating @core.guard() from policies."""
+def _write_agent_script(
+    path: Path,
+    name: str,
+    agent_type: str,
+    identity_file: str,
+    framework: str = "plain",
+    interactive: bool = False,
+) -> None:
+    """Write the agent template script using the templates module."""
     snake_name = _to_snake_case(name)
-    
-    # Read policies for this agent
+
+    # Load policies for this agent
     policies = _load_policies()
     agent_pols = policies.get("agents", {}).get(snake_name, {})
     global_pols = policies.get("global", {})
-    
-    # Build guarded operations from policies
-    guard_blocks = ""
-    execute_blocks = ""
-    
-    if agent_pols or global_pols:
-        # Agent-specific policies first
-        all_tools = {}
-        for tool, pol in global_pols.items():
-            all_tools[tool] = {**pol, "_scope": "global"}
-        for tool, pol in agent_pols.items():
-            all_tools[tool] = {**pol, "_scope": "agent"}
-        
-        for tool, pol in all_tools.items():
-            allowed = pol["allowed"]
-            max_amt = pol.get("max_amount")
-            scope = pol["_scope"]
-            status_comment = "allowed" if allowed else "DENIED by policy"
-            
-            # Build function signature
-            if max_amt is not None:
-                params = "amount: float"
-                execute_arg = "100.0"
-                doc_extra = f" (max: ${max_amt})"
-            else:
-                params = "data: str"
-                execute_arg = '"test"'
-                doc_extra = ""
-            
-            guard_blocks += f'''
-    @core.guard("{tool}")
-    async def {tool}({params}):
-        """{tool} - {status_comment}{doc_extra} [{scope}]"""
-        print(f"Executing {tool}")
-        return {{"status": "success", "tool": "{tool}"}}
-'''
-            execute_blocks += f'''
-    try:
-        result = await {tool}({execute_arg})
-        print(f"  ✓ {tool}: {{result}}")
-    except Exception as e:
-        print(f"  ✗ {tool}: {{e}}")
-'''
-    else:
-        # No policies found - generate example
-        guard_blocks = '''
-    @core.guard("example_operation")
-    async def example_operation(param: str):
-        """Example guarded operation."""
-        print(f"Executing: {param}")
-        return {"status": "success", "param": param}
-'''
-        execute_blocks = '''
-    result = await example_operation("test")
-    print(f"Result: {result}")
-'''
-    
-    content = f'''"""
-{name} - Hashed AI Agent
-Auto-generated with policies from .hashed_policies.json
-"""
 
-import asyncio
-import os
-from dotenv import load_dotenv
-from hashed import HashedCore, HashedConfig, load_or_create_identity
-
-# Load environment variables from .env file
-load_dotenv()
-
-
-async def main():
-    """Main agent logic for {name}."""
-    # Load configuration
-    config = HashedConfig()
-
-    # Load identity (password from .env or environment)
-    password = os.getenv("HASHED_IDENTITY_PASSWORD")
-    identity = load_or_create_identity("{identity_file}", password)
-
-    # Create core
-    core = HashedCore(
-        config=config,
-        identity=identity,
-        agent_name="{name}",
-        agent_type="{agent_type}"
+    content = render_agent_script(
+        framework=framework,
+        name=name,
+        agent_type=agent_type,
+        identity_file=identity_file,
+        agent_pols=agent_pols,
+        global_pols=global_pols,
+        interactive=interactive,
     )
 
-    # Initialize
-    await core.initialize()
-    print(f"🤖 {name} ({agent_type}) initialized\\n")
-
-    # ================================================================
-    # Guarded Operations (from .hashed_policies.json)
-    # ================================================================
-{guard_blocks}
-    # ================================================================
-    # Execute Operations
-    # ================================================================
-    print("Running operations...")
-{execute_blocks}
-    # Cleanup
-    await core.shutdown()
-    print(f"\\n✓ {name} finished")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
-'''
     path.write_text(content)
     success(f"Created agent script: {path}")
-    
-    if agent_pols or global_pols:
-        tool_count = len(agent_pols) + len(global_pols)
-        info(f"  Generated {tool_count} @core.guard() operations from policies")
+
+    fw_label = FRAMEWORK_LABELS.get(framework, framework)
+    info(f"  Framework: {fw_label}")
+    if interactive:
+        info(f"  Mode: Interactive (REPL)")
+
+    total_pols = len(agent_pols) + len(global_pols)
+    if total_pols > 0:
+        info(f"  Generated {total_pols} @core.guard() tool(s) from policies")
+    else:
+        info(f"  No policies found → example tool generated")
+        info(f"  Add policies: hashed policy add <tool> --allow --agent \"{name}\"")
 
 
 @app.command()
