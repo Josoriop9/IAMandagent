@@ -461,16 +461,16 @@ def policy_add(
     tool_name: str = typer.Argument(..., help="Tool/operation name"),
     allowed: bool = typer.Option(True, "--allow/--deny", help="Allow or deny"),
     max_amount: Optional[float] = typer.Option(None, "--max-amount", "-m", help="Maximum amount"),
-    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent name (omit for global)"),
+    agent_name: Optional[str] = typer.Option(None, "--agent", help="Agent name (omit for global)"),
     config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
 ):
     """
     ➕ Add a policy rule (global or per-agent).
     
     Examples:
-        hashed policy add send_email --allow                        # Global
-        hashed policy add process_payment --allow -m 500 -a payment_agent
-        hashed policy add delete_data --deny -a support_bot
+        hashed policy add send_email --allow                                  # Global
+        hashed policy add process_payment --allow -m 500 --agent payment_agent
+        hashed policy add delete_data --deny --agent support_bot
     """
     try:
         policies = _load_policies(config_file)
