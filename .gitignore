@@ -158,3 +158,6 @@ dashboard/.next/
 *.sqlite
 .env.local
 .env.*.local
+
+# Dashboard — lives in separate private repo (hashed-dashboard)
+dashboard/
