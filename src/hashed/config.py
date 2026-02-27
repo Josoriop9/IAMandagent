@@ -61,9 +61,9 @@ class HashedConfig(BaseModel):
             os.getenv("BACKEND_URL") or
             os.getenv("HASHED_BACKEND_URL") or
             _load_credential("backend_url") or
-            None
+            "https://iamandagent-production.up.railway.app"
         ),
-        description="Backend Control Plane URL (e.g., http://localhost:8000)",
+        description="Backend Control Plane URL",
     )
     
     # Legacy API Configuration (deprecated, use backend_url)
