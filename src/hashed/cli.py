@@ -923,6 +923,102 @@ def agent_list():
     asyncio.run(_list())
 
 
+@agent_app.command("delete")
+def agent_delete(
+    name: str = typer.Argument(..., help="Agent name to delete"),
+    agent_id: Optional[str] = typer.Option(None, "--id", help="Agent ID (use instead of name)"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    🗑️  Delete an agent from the backend (deregisters it).
+
+    Finds the agent by name (or --id) and permanently removes it from
+    the Hashed backend. The local .pem identity file is NOT deleted.
+
+    Examples:
+        hashed agent delete "Research Agent 4"
+        hashed agent delete "Research Agent 4" --yes
+        hashed agent delete --id abc123-...
+    """
+    async def _delete():
+        try:
+            config = get_config()
+
+            if not config.backend_url:
+                error("Backend URL not configured")
+                info("Set HASHED_BACKEND_URL environment variable")
+                raise typer.Exit(1)
+
+            import httpx
+            async with httpx.AsyncClient() as client:
+                headers = {"X-API-KEY": config.api_key or ""}
+
+                # Resolve agent_id by name if not provided directly
+                resolved_id = agent_id
+                resolved_name = name
+
+                if not resolved_id:
+                    # Fetch all agents and find by name
+                    resp = await client.get(
+                        f"{config.backend_url}/v1/agents",
+                        headers=headers,
+                    )
+                    if not resp.is_success:
+                        error(f"Failed to fetch agents: {resp.status_code}")
+                        raise typer.Exit(1)
+
+                    agents = resp.json().get("agents", [])
+                    match = next(
+                        (a for a in agents if a["name"].lower() == name.lower()),
+                        None,
+                    )
+                    if not match:
+                        error(f"No agent named '{name}' found")
+                        info("Run 'hashed agent list' to see all agents")
+                        raise typer.Exit(1)
+
+                    resolved_id = match["id"]
+                    resolved_name = match["name"]
+
+                # Confirmation prompt
+                if not yes:
+                    console.print(
+                        f"\n[bold red]⚠️  This will permanently delete agent:[/bold red] "
+                        f"[cyan]{resolved_name}[/cyan] ([dim]{resolved_id}[/dim])"
+                    )
+                    confirmed = typer.confirm("Are you sure?")
+                    if not confirmed:
+                        info("Cancelled.")
+                        return
+
+                # Call DELETE endpoint
+                resp = await client.delete(
+                    f"{config.backend_url}/v1/agents/{resolved_id}",
+                    headers=headers,
+                )
+
+                if resp.status_code == 404:
+                    error(f"Agent '{resolved_name}' not found on backend")
+                    raise typer.Exit(1)
+
+                if not resp.is_success:
+                    error(f"Failed to delete agent: {resp.status_code} - {resp.text}")
+                    raise typer.Exit(1)
+
+                console.print(
+                    f"\n[bold green]✓[/bold green] Agent [cyan]{resolved_name}[/cyan] deleted successfully"
+                )
+                info("Note: the local .pem identity file was NOT removed.")
+
+        except typer.Exit:
+            raise
+        except Exception as e:
+            error(f"Failed to delete agent: {e}")
+            raise typer.Exit(1)
+
+    asyncio.run(_delete())
+
+
 # ============================================================================
 # LOGS COMMANDS
 # ============================================================================

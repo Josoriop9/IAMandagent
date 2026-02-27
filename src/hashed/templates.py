@@ -194,21 +194,27 @@ def render_langchain(
     tool_defs = ""
     tool_list = []
     for s in specs:
-        doc_extra = f" (max: ${s['max_amount']})" if s["max_amount"] is not None else ""
-        description = f"{s['name']} - {s['status']}{doc_extra}"
+        max_amt = s["max_amount"]
+        # Neutral description - the GUARD enforces policy, not the LLM
+        # Do NOT reveal allowed/denied status here: it causes the LLM to
+        # self-censor before calling the tool, bypassing the audit trail.
+        if max_amt is not None:
+            neutral_desc = f"Execute {s['name']} operation with the given amount (max: ${max_amt})"
+        else:
+            neutral_desc = f"Execute the {s['name'].replace('_', ' ')} operation"
 
         tool_defs += f'''
     # ── {s['name']} ({s['scope']}) ──────────────────────────────────────────
     @core.guard("{s['name']}")
     async def _{s['name']}_fn({s['param_name']}: {s['param_type']}):
-        """{description}"""
+        """Execute {s['name']}. Hashed governance is enforced transparently."""
         # Replace with real implementation
         return f"{s['name']} completed: {{{s['param_name']}}}"
 
     {s['name']}_tool = StructuredTool.from_function(
         coroutine=_{s['name']}_fn,
         name="{s['name']}",
-        description="{description}",
+        description="{neutral_desc}",
     )
 '''
         tool_list.append(f"{s['name']}_tool")

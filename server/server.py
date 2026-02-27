@@ -636,6 +636,66 @@ async def list_agents(org: dict = Depends(verify_api_key)):
         )
 
 
+@app.delete("/v1/agents/{agent_id}", status_code=status.HTTP_200_OK)
+async def delete_agent(
+    agent_id: str,
+    org: dict = Depends(verify_api_key),
+):
+    """
+    Delete (deregister) an agent from the organization.
+
+    This permanently removes the agent record, all its policies,
+    and deactivates it. Audit logs are preserved for compliance.
+
+    Args:
+        agent_id: UUID of the agent to delete
+        org: Organization from API key authentication
+
+    Returns:
+        Confirmation message
+
+    Raises:
+        404: If agent not found or does not belong to this org
+    """
+    try:
+        # Verify agent belongs to this org before deleting
+        existing = (
+            supabase.table("agents")
+            .select("id, name")
+            .eq("id", agent_id)
+            .eq("organization_id", org["id"])
+            .execute()
+        )
+
+        if not existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent '{agent_id}' not found in this organization",
+            )
+
+        agent_name = existing.data[0]["name"]
+
+        # Delete agent-specific policies first (FK constraint)
+        supabase.table("policies").delete().eq("agent_id", agent_id).execute()
+
+        # Delete the agent record
+        supabase.table("agents").delete().eq("id", agent_id).execute()
+
+        return {
+            "message": f"Agent '{agent_name}' deleted successfully",
+            "agent_id": agent_id,
+            "deleted_at": datetime.utcnow().isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete agent: {str(e)}",
+        )
+
+
 # ============================================================================
 # POLICY SYNC
 # ============================================================================
