@@ -8,7 +8,10 @@ audit logging.
 
 import asyncio
 import functools
+import json
 import logging
+import re
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 import httpx
@@ -118,13 +121,29 @@ class HashedCore:
             )
             
             # Auto-register agent
+            is_new_agent = False
             try:
-                await self._register_agent()
-                logger.info(f"Agent '{self._agent_name}' registered successfully")
+                is_new_agent = await self._register_agent()
+                if is_new_agent:
+                    logger.info(f"Agent '{self._agent_name}' registered for the first time")
+                else:
+                    logger.info(f"Agent '{self._agent_name}' already registered")
             except Exception as e:
                 logger.warning(f"Agent registration failed: {e}")
-            
-            # Initial policy sync
+
+            # On first run: push local JSON policies to backend automatically
+            # so the user doesn't need to stop → push → restart the agent.
+            if is_new_agent:
+                try:
+                    pushed = await self._push_local_json_policies()
+                    if pushed > 0:
+                        logger.info(
+                            f"First-run auto-push: {pushed} policies uploaded to backend"
+                        )
+                except Exception as e:
+                    logger.warning(f"First-run policy push failed (non-fatal): {e}")
+
+            # Initial policy sync (backend → in-memory PolicyEngine)
             try:
                 await self.sync_policies_from_backend()
                 logger.info("Initial policy sync completed")
@@ -391,16 +410,20 @@ class HashedCore:
         """Async context manager exit."""
         await self.shutdown()
 
-    async def _register_agent(self) -> None:
+    async def _register_agent(self) -> bool:
         """
         Register agent with the backend.
-        
+
+        Returns:
+            True if the agent was newly registered (first time),
+            False if it already existed (409 Conflict).
+
         Raises:
-            Exception: If registration fails
+            Exception: If registration fails for an unexpected reason.
         """
         if not self._http_client or self._agent_registered:
-            return
-        
+            return False
+
         try:
             response = await self._http_client.post(
                 "/register",
@@ -408,23 +431,126 @@ class HashedCore:
                     "name": self._agent_name,
                     "public_key": self._identity.public_key_hex,
                     "agent_type": self._agent_type,
-                    "description": f"Auto-registered {self._agent_type} agent"
-                }
+                    "description": f"Auto-registered {self._agent_type} agent",
+                },
             )
-            
+
             if response.status_code == 409:
-                # Agent already exists, that's OK
+                # Agent already existed — not a first run
                 logger.info(f"Agent already registered: {self._agent_name}")
                 self._agent_registered = True
+                return False
             elif response.is_success:
+                # Freshly created — first run!
                 self._agent_registered = True
                 logger.debug(f"Agent registered: {response.json()}")
+                return True
             else:
-                raise Exception(f"Registration failed: {response.status_code} - {response.text}")
-        
+                raise Exception(
+                    f"Registration failed: {response.status_code} - {response.text}"
+                )
+
         except Exception as e:
             logger.error(f"Failed to register agent: {e}")
             raise
+
+    async def _push_local_json_policies(self) -> int:
+        """
+        Read .hashed_policies.json and push all policies to the backend.
+
+        Called automatically on first run (newly registered agent) so that
+        policies defined before the first launch are visible immediately in
+        the dashboard without requiring a separate 'hashed policy push'.
+
+        Returns:
+            Number of policies successfully pushed.
+        """
+        if not self._http_client:
+            return 0
+
+        # Locate .hashed_policies.json — search CWD and parent dirs
+        policy_file = None
+        for candidate in [
+            Path(".hashed_policies.json"),
+            Path("../.hashed_policies.json"),
+        ]:
+            if candidate.exists():
+                policy_file = candidate
+                break
+
+        if not policy_file:
+            logger.debug("No .hashed_policies.json found — skipping first-run push")
+            return 0
+
+        try:
+            raw = json.loads(policy_file.read_text())
+        except Exception as e:
+            logger.warning(f"Could not read {policy_file}: {e}")
+            return 0
+
+        # Normalize flat vs structured format
+        if "global" not in raw and "agents" not in raw:
+            raw = {"global": raw, "agents": {}}
+
+        global_pols: dict = raw.get("global", {})
+        agents_pols: dict = raw.get("agents", {})
+
+        # Find our agent's ID from the backend (needed for agent-scoped policies)
+        try:
+            agents_resp = await self._http_client.get("/v1/agents")
+            our_agent_id: Optional[str] = None
+            if agents_resp.is_success:
+                for a in agents_resp.json().get("agents", []):
+                    if a["public_key"] == self._identity.public_key_hex:
+                        our_agent_id = a["id"]
+                        break
+        except Exception as e:
+            logger.warning(f"Could not fetch agent list: {e}")
+            our_agent_id = None
+
+        # Helper to convert "My Agent Name" → "my_agent_name"
+        def _snake(name: str) -> str:
+            cleaned = re.sub(r"[^a-zA-Z0-9\s]", "", name)
+            return re.sub(r"\s+", "_", cleaned.strip()).lower()
+
+        agent_snake = _snake(self._agent_name)
+
+        pushed = 0
+
+        async def _upsert(tool_name: str, pol: dict, agent_id: Optional[str]) -> None:
+            nonlocal pushed
+            params = {"agent_id": agent_id} if agent_id else {}
+            try:
+                resp = await self._http_client.post(
+                    "/v1/policies",
+                    params=params,
+                    json={
+                        "tool_name": tool_name,
+                        "allowed": pol.get("allowed", True),
+                        "max_amount": pol.get("max_amount"),
+                        "metadata": {"source": "first_run_auto_push"},
+                    },
+                )
+                if resp.is_success or resp.status_code == 409:
+                    pushed += 1
+                    logger.debug(f"Auto-pushed policy '{tool_name}' (agent_id={agent_id})")
+                else:
+                    logger.warning(
+                        f"Auto-push failed for '{tool_name}': {resp.status_code}"
+                    )
+            except Exception as exc:
+                logger.warning(f"Error auto-pushing policy '{tool_name}': {exc}")
+
+        # Push global policies
+        for tool_name, pol in global_pols.items():
+            await _upsert(tool_name, pol, agent_id=None)
+
+        # Push this agent's specific policies (matched by snake_case name)
+        if our_agent_id and agent_snake in agents_pols:
+            for tool_name, pol in agents_pols[agent_snake].items():
+                await _upsert(tool_name, pol, agent_id=our_agent_id)
+
+        return pushed
 
     async def push_policies_to_backend(self) -> None:
         """
