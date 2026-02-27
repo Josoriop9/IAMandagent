@@ -1006,8 +1006,21 @@ def agent_delete(
                     raise typer.Exit(1)
 
                 console.print(
-                    f"\n[bold green]✓[/bold green] Agent [cyan]{resolved_name}[/cyan] deleted successfully"
+                    f"\n[bold green]✓[/bold green] Agent [cyan]{resolved_name}[/cyan] deleted from backend"
                 )
+
+                # Clean up local .hashed_policies.json for this agent
+                snake = _to_snake_case(resolved_name)
+                policies = _load_policies()
+                agent_pols = policies.get("agents", {})
+                if snake in agent_pols:
+                    del agent_pols[snake]
+                    policies["agents"] = agent_pols
+                    _save_policies(policies)
+                    success(f"Removed '{snake}' policies from {POLICY_FILE}")
+                else:
+                    info(f"No local policies found for '{snake}' in {POLICY_FILE}")
+
                 info("Note: the local .pem identity file was NOT removed.")
 
         except typer.Exit:
