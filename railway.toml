@@ -9,7 +9,7 @@
 
 [build]
 builder = "dockerfile"
-dockerfilePath = "server/Dockerfile"
+dockerfilePath = "Dockerfile"
 buildCommand = ""
 
 [deploy]
