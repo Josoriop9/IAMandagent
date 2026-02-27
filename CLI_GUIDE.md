@@ -1,510 +1,504 @@
-# Hashed CLI Guide
+# Hashed CLI — Complete Reference
 
-**Professional Command-Line Interface for AI Agent Governance**
+> Version: 0.2.0  
+> Install: `pip install "git+https://github.com/Josoriop9/IAMandagent.git"`
 
-The Hashed CLI provides a complete set of tools for managing AI agents, identities, policies, and audit logs without requiring access to the paid web dashboard.
-
----
-
-## 🚀 Installation
-
-```bash
-# Install the SDK with CLI
-pip install -e git+https://github.com/YOUR-REPO/hashed-sdk.git#egg=hashed-sdk
-
-# Or from local directory
-cd hashed-sdk
-pip install -e .
-```
-
-After installation, the `hashed` command will be available globally.
+The `hashed` CLI lets you manage AI agent identities, governance policies, and audit logs without touching the web dashboard.
 
 ---
 
-## 📚 Quick Start
-
-### Initialize a New Agent Project
+## Installation & Setup
 
 ```bash
-# Create a new agent with interactive prompts
-hashed init --name "My Agent" --type "customer_service"
+pip install "git+https://github.com/Josoriop9/IAMandagent.git"
 
-# This creates:
-# - ./secrets/agent_key.pem (encrypted identity)
-# - .env (configuration file)
-# - agent.py (example script)
-# - ./secrets/.gitignore
+# Verify
+hashed --help
 ```
+
+---
+
+## Authentication
+
+### `hashed signup`
+
+Create a new account and organization.
+
+```bash
+hashed signup
+hashed signup --backend http://localhost:8000
+```
+
+**Interactive prompts:**
+- Email
+- Password (min 6 chars)
+- Organization name
+
+After signup, a confirmation email is sent. The CLI polls for confirmation automatically (up to 6 minutes). On confirmation, your API key is saved to `~/.hashed/credentials.json`.
+
+---
+
+### `hashed login`
+
+Authenticate and save credentials locally.
+
+```bash
+hashed login
+hashed login --email user@company.com
+hashed login --email user@company.com --backend https://api.hashed.dev
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--email`, `-e` | (prompted) | Email address |
+| `--password`, `-p` | (prompted) | Password |
+| `--backend`, `-b` | `http://localhost:8000` | Backend URL |
+
+Credentials are saved to `~/.hashed/credentials.json` with `600` permissions.
+
+---
+
+### `hashed logout`
+
+Remove saved credentials.
+
+```bash
+hashed logout
+```
+
+---
+
+### `hashed whoami`
+
+Show current session info.
+
+```bash
+hashed whoami
+```
+
+**Output:**
+```
+╭─────────────────────────────────╮
+│  Current Session                │
+├──────────────┬──────────────────┤
+│ Email        │ you@company.com  │
+│ Organization │ Acme Corp        │
+│ API Key      │ hashed_abc123... │
+│ Backend      │ http://localhost │
+╰──────────────┴──────────────────╯
+```
+
+---
+
+## Agent Management
+
+### `hashed init`
+
+Initialize a new AI agent — creates identity keypair, `.env` config, and agent script.
+
+```bash
+hashed init --name "Research Agent" --type analyst
+hashed init --name "Payment Bot" --type finance --framework langchain
+hashed init --name "Support Bot" --type assistant --framework crewai --interactive
+hashed init --name "Cloud Agent" --type cloud --framework strands
+hashed init --name "Multi Agent" --type orchestrator --framework autogen -i --force
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--name`, `-n` | **required** | Agent display name |
+| `--type`, `-t` | `general` | Agent type (finance, analyst, assistant, cloud…) |
+| `--framework`, `--fw` | `plain` | AI framework: `plain`, `langchain`, `crewai`, `strands`, `autogen` |
+| `--interactive`, `-i` | `false` | Add interactive REPL loop (chat mode) |
+| `--force`, `-f` | `false` | Overwrite existing files |
+| `--config/--no-config` | `true` | Create `.env` config file |
+
+**What it creates:**
+```
+./secrets/research_agent_key.pem   ← encrypted Ed25519 identity
+./research_agent.py                ← agent script with @core.guard() tools
+./.env                             ← config (HASHED_BACKEND_URL, HASHED_API_KEY...)
+```
+
+**Supported frameworks:**
+
+| Framework | Install |
+|-----------|---------|
+| `plain` | No extra deps |
+| `langchain` | `pip install "hashed-sdk[langchain]"` |
+| `crewai` | `pip install "hashed-sdk[crewai]"` |
+| `strands` | `pip install "hashed-sdk[strands]"` |
+| `autogen` | `pip install "hashed-sdk[autogen]"` |
+
+---
+
+### `hashed agent list`
+
+List all agents registered in the backend.
+
+```bash
+hashed agent list
+```
+
+**Output:**
+```
+╭──────────────────────────────────────────────────────╮
+│  Registered Agents                                   │
+├──────────────────┬──────────┬──────────────┬────────┤
+│ Name             │ Type     │ Public Key   │ Status │
+├──────────────────┼──────────┼──────────────┼────────┤
+│ Research Agent 5 │ analyst  │ a3f1b2c4...  │ 🟢     │
+│ Payment Bot      │ finance  │ 9e7d2a1f...  │ 🟢     │
+╰──────────────────┴──────────┴──────────────┴────────╯
+```
+
+---
+
+### `hashed agent delete`
+
+Permanently delete an agent from the backend and clean up its local policies.
+
+```bash
+# By name (case-insensitive)
+hashed agent delete "Research Agent 5"
+
+# Skip confirmation prompt
+hashed agent delete "Research Agent 5" --yes
+
+# By agent ID (from hashed agent list)
+hashed agent delete --id abc123-uuid-here
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `name` | **required** (unless --id) | Agent name (case-insensitive match) |
+| `--id` | none | Agent UUID (alternative to name) |
+| `--yes`, `-y` | false | Skip "Are you sure?" confirmation |
 
 **What it does:**
-- ✅ Generates cryptographic identity (Ed25519)
-- ✅ Creates encrypted key file
-- ✅ Sets up project structure
-- ✅ Creates example agent code
+1. Finds agent by name or ID
+2. Prompts for confirmation (unless `--yes`)
+3. Calls `DELETE /v1/agents/{id}` — removes agent + its backend policies
+4. Removes agent's entry from `.hashed_policies.json`
+5. Does **NOT** delete the local `.pem` identity file
 
 ---
 
-## 🔑 Identity Management
+## Policy Management
 
-### Create a New Identity
+### `hashed policy add`
+
+Add or update a policy rule (global or per-agent).
 
 ```bash
-# Interactive (prompts for password)
-hashed identity create
+# Global policy (applies to all agents)
+hashed policy add search_web --allow
+hashed policy add delete_production_db --deny
 
-# With custom path
-hashed identity create --output ./my-keys/agent.pem
+# Agent-specific policy
+hashed policy add process_payment --allow --agent "Payment Bot"
+hashed policy add process_payment --allow -m 500 --agent "Payment Bot"
 
-# Non-interactive (from env var)
-export HASHED_IDENTITY_PASSWORD="strong_password"
-hashed identity create
+# Deny a specific tool for a specific agent
+hashed policy add delete_data --deny --agent "Research Agent 5"
 ```
 
-### Show Identity Information
+| Flag | Default | Description |
+|------|---------|-------------|
+| `tool_name` | **required** | Tool/operation name |
+| `--allow/--deny` | `--allow` | Allow or deny the operation |
+| `--max-amount`, `-m` | none | Maximum allowed amount (for financial ops) |
+| `--agent` | none | Agent name (omit for global policy) |
+| `--config`, `-c` | `.hashed_policies.json` | Policy file path |
+
+---
+
+### `hashed policy list`
+
+List policies from the local `.hashed_policies.json`.
 
 ```bash
-# Display public key and details
+hashed policy list                        # All policies
+hashed policy list -a "Payment Bot"       # Only for one agent
+hashed policy list --format json          # JSON output
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--agent`, `-a` | none | Filter by agent name |
+| `--format`, `-f` | `table` | Output format: `table` or `json` |
+| `--config`, `-c` | `.hashed_policies.json` | Policy file path |
+
+---
+
+### `hashed policy remove`
+
+Remove a policy from the local JSON. Run `hashed policy push` afterward to sync to backend.
+
+```bash
+# Remove global policy
+hashed policy remove search_web
+
+# Remove agent-specific policy
+hashed policy remove delete_data -a "Research Agent 5"
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `tool_name` | **required** | Tool/operation name |
+| `--agent`, `-a` | none | Agent name (omit for global) |
+| `--config`, `-c` | `.hashed_policies.json` | Policy file path |
+
+---
+
+### `hashed policy test`
+
+Test if an operation would be allowed (dry-run, local only).
+
+```bash
+hashed policy test process_payment -a "Payment Bot" -m 200
+hashed policy test delete_data -a "Research Agent 5"
+hashed policy test search_web
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `tool_name` | **required** | Tool to test |
+| `--agent`, `-a` | none | Test as a specific agent |
+| `--amount`, `-m` | none | Amount to test against max_amount |
+| `--config`, `-c` | `.hashed_policies.json` | Policy file path |
+
+**Resolution order:** agent-specific → global → default allow
+
+---
+
+### `hashed policy push`
+
+Full sync: local JSON → backend (Supabase). Upserts new/updated policies AND deletes removed ones.
+
+```bash
+hashed policy push
+hashed policy push --config ./custom_policies.json
+```
+
+**Algorithm:**
+1. Fetch current backend policies
+2. Upsert all local policies (POST)
+3. Find backend policies not in local → DELETE them
+
+**Output example:**
+```
+ℹ Using backend: http://localhost:8000
+✓ search_web (global)
+✓ process_payment (agent:payment_bot)
+
+ℹ Checking for removed policies...
+🗑️  delete_data (agent:research_agent_5) — removed from backend
+
+✓ Policy sync complete: 2 upserted, 1 removed
+```
+
+---
+
+### `hashed policy pull`
+
+Download policies from backend → overwrite local JSON.
+
+```bash
+hashed policy pull
+```
+
+Useful for: syncing a new machine, restoring from backend, or seeing what another team member pushed.
+
+---
+
+## Audit Logs
+
+### `hashed logs list`
+
+View recent audit logs from the backend.
+
+```bash
+hashed logs list                    # Last 10 logs
+hashed logs list -l 50             # Last 50
+hashed logs list --status denied   # Only blocked operations
+hashed logs list --status success  # Only successful
+hashed logs list --status error    # Only errors
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--limit`, `-l` | `10` | Number of logs to show |
+| `--status`, `-s` | none | Filter: `success`, `denied`, `error` |
+
+**Output example:**
+```
+╭─────────────────────────────────────────────────────────────────╮
+│  Recent Logs (last 10)                                          │
+├─────────────────────┬────────────────────┬──────────┬──────────┤
+│ Time                │ Tool               │ Status   │ Agent    │
+├─────────────────────┼────────────────────┼──────────┼──────────┤
+│ 2026-02-26 22:00:01 │ process_payment    │ ✓ success│ Pay Bot  │
+│ 2026-02-26 22:00:03 │ delete_data        │ ✗ denied │ Research │
+╰─────────────────────┴────────────────────┴──────────┴──────────╯
+```
+
+---
+
+## Identity Management
+
+### `hashed identity create`
+
+Generate a new Ed25519 keypair and save encrypted to file.
+
+```bash
+hashed identity create
+hashed identity create -o ./secrets/my_agent.pem
+hashed identity create -o ./secrets/my_agent.pem -p mypassword
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--output`, `-o` | `./secrets/agent_key.pem` | Output file path |
+| `--password`, `-p` | (prompted) | Encryption password |
+
+---
+
+### `hashed identity show`
+
+Display identity info (public key).
+
+```bash
 hashed identity show
-
-# From custom file
-hashed identity show --file ./my-keys/agent.pem
+hashed identity show -f ./secrets/research_agent_key.pem
 ```
 
-**Output:**
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Identity Information                     │
-├─────────────┬───────────────────────────────────────────────┤
-│ File        │ ./secrets/agent_key.pem                       │
-│ Public Key  │ a1b2c3d4e5f6...                               │
-│ Algorithm   │ Ed25519                                        │
-└─────────────┴───────────────────────────────────────────────┘
-```
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--file`, `-f` | `./secrets/agent_key.pem` | Identity file path |
+| `--password`, `-p` | `$HASHED_IDENTITY_PASSWORD` | Decryption password |
 
-### Sign a Message
+---
+
+### `hashed identity sign`
+
+Sign a message with the identity keypair.
 
 ```bash
-# Sign data with your identity
-hashed identity sign "important message"
+hashed identity sign "hello world"
+hashed identity sign "hello world" -f ./secrets/research_agent_key.pem
 ```
 
 ---
 
-## 🛡️ Policy Management
+## Complete Workflow
 
-Policies define what operations agents can perform. The CLI stores policies locally in `.hashed_policies.json`.
-
-### Add a Policy
+### First-time setup
 
 ```bash
-# Allow operation with no limits
-hashed policy add send_email --allow
+# 1. Create account
+hashed signup
 
-# Allow with max amount limit
-hashed policy add transfer_money --allow --max-amount 1000.0
+# 2. Define policies (before creating agent)
+hashed policy add search_web --allow --agent "Research Agent 5"
+hashed policy add summarize_text --allow --agent "Research Agent 5"
+hashed policy add delete_data --deny --agent "Research Agent 5"
 
-# Deny operation completely
-hashed policy add delete_database --deny
-```
+# 3. Create agent (generates script + identity)
+hashed init --name "Research Agent 5" --type analyst --framework langchain --interactive
 
-### List All Policies
+# 4. Run agent — first launch auto-registers + pushes policies
+python3 research_agent_5.py
 
-```bash
-# Table format (default)
-hashed policy list
-
-# JSON format
-hashed policy list --format json
-```
-
-**Output:**
-```
-┌─────────────────┬─────────┬────────────┬────────────┐
-│ Tool            │ Allowed │ Max Amount │ Created    │
-├─────────────────┼─────────┼────────────┼────────────┤
-│ send_email      │ ✓ Yes   │ -          │ 2026-02-24 │
-│ transfer_money  │ ✓ Yes   │ 1000.0     │ 2026-02-24 │
-│ delete_database │ ✗ No    │ -          │ 2026-02-24 │
-└─────────────────┴─────────┴────────────┴────────────┘
-```
-
-### Test a Policy
-
-Test if an operation would be allowed without actually executing it:
-
-```bash
-# Test basic operation
-hashed policy test send_email
-
-# Test with amount
-hashed policy test transfer_money --amount 500.0
-# ✓ ALLOWED - Amount 500.0 is within limit 1000.0
-
-hashed policy test transfer_money --amount 1500.0
-# ✗ DENIED - Amount 1500.0 exceeds max 1000.0
-```
-
-### Remove a Policy
-
-```bash
-hashed policy remove send_email
-```
-
----
-
-## 🤖 Agent Management
-
-**Note:** Agent commands require a running backend server.
-
-### List Registered Agents
-
-```bash
-# Show all agents in your organization
-hashed agent list
-```
-
-**Output:**
-```
-┌────────────────────────┬──────────────┬──────────────────┬──────────┐
-│ Name                   │ Type         │ Public Key       │ Status   │
-├────────────────────────┼──────────────┼──────────────────┼──────────┤
-│ Customer Support Bot   │ service      │ a1b2c3d4e5f6...  │ 🟢 Active│
-│ Data Analysis Agent    │ analysis     │ f6e5d4c3b2a1...  │ 🟢 Active│
-│ Security Monitor       │ security     │ 1a2b3c4d5e6f...  │ 🔴 Inactive│
-└────────────────────────┴──────────────┴──────────────────┴──────────┘
-```
-
----
-
-## 📝 Audit Logs
-
-**Note:** Log commands require a running backend server.
-
-### View Recent Logs
-
-```bash
-# Show last 10 logs
+# 5. View audit logs
 hashed logs list
-
-# Show last 50 logs
-hashed logs list --limit 50
-
-# Filter by status
-hashed logs list --status success
-hashed logs list --status denied
-hashed logs list --status error
 ```
 
-**Output:**
+### Update policies on existing agent
+
+```bash
+# Add new policy
+hashed policy add send_email --allow --agent "Research Agent 5"
+
+# Remove a policy
+hashed policy remove search_web --agent "Research Agent 5"
+
+# Sync to backend (diff-sync: adds new, removes deleted)
+hashed policy push
 ```
-┌──────────────────────┬──────────────┬────────────┬────────────────────┐
-│ Time                 │ Tool         │ Status     │ Agent              │
-├──────────────────────┼──────────────┼────────────┼────────────────────┤
-│ 2026-02-24 22:15:30  │ send_email   │ ✓ success  │ Customer Support   │
-│ 2026-02-24 22:14:12  │ refund       │ ✓ success  │ Customer Support   │
-│ 2026-02-24 22:13:45  │ delete_user  │ ✗ denied   │ Security Monitor   │
-│ 2026-02-24 22:12:03  │ query_db     │ ⚠ error    │ Data Agent         │
-└──────────────────────┴──────────────┴────────────┴────────────────────┘
+
+### Delete an agent
+
+```bash
+hashed agent delete "Research Agent 5" --yes
+# ✓ Agent deleted from backend
+# ✓ Policies removed from .hashed_policies.json
 ```
 
 ---
 
-## ⚙️ Configuration
+## Environment Variables
 
-The CLI reads configuration from environment variables or `.env` file:
-
-```bash
-# .env file
-HASHED_BACKEND_URL=http://localhost:8000
-HASHED_API_KEY=your_api_key_here
-HASHED_IDENTITY_PASSWORD=your_strong_password
-```
-
-### Required Environment Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `HASHED_BACKEND_URL` | Backend API URL | `http://localhost:8000` |
-| `HASHED_API_KEY` | API key for authentication | None |
-| `HASHED_IDENTITY_PASSWORD` | Password for identity encryption | None (prompts) |
+| Variable | Description |
+|----------|-------------|
+| `HASHED_BACKEND_URL` | Backend URL (e.g. `http://localhost:8000`) |
+| `HASHED_API_KEY` | API key for authentication |
+| `HASHED_IDENTITY_PASSWORD` | Password for identity file decryption |
+| `OPENAI_API_KEY` | Required for LangChain / CrewAI / AutoGen |
+| `OPENAI_MODEL` | Default: `gpt-4o-mini` |
+| `AWS_REGION` | Required for Strands (Bedrock) |
+| `BEDROCK_MODEL_ID` | Default: `us.amazon.nova-pro-v1:0` |
 
 ---
 
-## 🎯 Common Workflows
+## Credentials File
 
-### 1. Start a New Agent Project
+Saved to `~/.hashed/credentials.json` (permissions: `600`):
 
-```bash
-# Initialize project
-hashed init --name "My Bot" --type "chatbot"
-
-# View your identity
-hashed identity show
-
-# Add policies
-hashed policy add send_message --allow --max-amount 100.0
-hashed policy add access_database --allow
-
-# Test policies
-hashed policy test send_message --amount 50
-# ✓ ALLOWED
-
-# Run your agent
-python agent.py
-```
-
-### 2. Develop Without Backend (Offline Mode)
-
-```bash
-# Create identity
-hashed identity create
-
-# Manage policies locally
-hashed policy add operation1 --allow
-hashed policy add operation2 --deny
-hashed policy list
-
-# Test policies
-hashed policy test operation1  # ✓ ALLOWED
-hashed policy test operation2  # ✗ DENIED
-
-# Your agent will work with local policies only
-# (no backend required)
-```
-
-### 3. Monitor Production Agent
-
-```bash
-# List all agents
-hashed agent list
-
-# View recent activity
-hashed logs list --limit 100
-
-# Filter for errors
-hashed logs list --status error
-
-# Filter for denied operations
-hashed logs list --status denied
-```
-
-### 4. Policy Development & Testing
-
-```bash
-# Add test policies
-hashed policy add test_op --allow --max-amount 100.0
-
-# Test various scenarios
-hashed policy test test_op --amount 50   # Within limit
-hashed policy test test_op --amount 150  # Exceeds limit
-
-# Adjust policy
-hashed policy remove test_op
-hashed policy add test_op --allow --max-amount 200.0
-
-# Test again
-hashed policy test test_op --amount 150  # Now allowed
+```json
+{
+  "email": "you@company.com",
+  "org_name": "Acme Corp",
+  "api_key": "hashed_abc123...",
+  "org_id": "uuid-here",
+  "backend_url": "http://localhost:8000",
+  "logged_in_at": "2026-02-26T22:00:00"
+}
 ```
 
 ---
 
-## 🔒 Security Best Practices
+## Policy File Format
 
-### Identity Files
+`.hashed_policies.json` structure:
 
-```bash
-# ✅ DO: Store in ./secrets/ (gitignored)
-hashed identity create --output ./secrets/agent.pem
-
-# ✅ DO: Use strong passwords
-export HASHED_IDENTITY_PASSWORD="$(openssl rand -base64 32)"
-
-# ❌ DON'T: Hardcode passwords
-hashed identity create --password "weak123"  # BAD
-
-# ❌ DON'T: Commit .pem files to git
-# (./secrets/.gitignore prevents this)
+```json
+{
+  "global": {
+    "search_web": {
+      "allowed": true,
+      "max_amount": null,
+      "created_at": "2026-02-26T22:00:00"
+    }
+  },
+  "agents": {
+    "research_agent_5": {
+      "process_payment": {
+        "allowed": true,
+        "max_amount": 500.0,
+        "created_at": "2026-02-26T22:00:00"
+      },
+      "delete_data": {
+        "allowed": false,
+        "max_amount": null,
+        "created_at": "2026-02-26T22:00:00"
+      }
+    }
+  }
+}
 ```
 
-### Password Management
-
-```bash
-# ✅ DO: Use environment variables
-export HASHED_IDENTITY_PASSWORD="strong_password_from_vault"
-
-# ✅ DO: Use secrets manager in production
-# AWS Secrets Manager, HashiCorp Vault, etc.
-
-# ❌ DON'T: Store in plain text files
-```
-
----
-
-## 📦 CLI Command Reference
-
-### Global Commands
-
-```bash
-hashed version              # Show version
-hashed --help               # Show help
-```
-
-### Identity Commands
-
-```bash
-hashed identity create      # Create new identity
-hashed identity show        # Show identity info
-hashed identity sign MSG    # Sign a message
-```
-
-### Policy Commands
-
-```bash
-hashed policy add TOOL      # Add policy
-hashed policy list          # List all policies
-hashed policy remove TOOL   # Remove policy
-hashed policy test TOOL     # Test if allowed
-```
-
-### Agent Commands
-
-```bash
-hashed agent list           # List agents (requires backend)
-```
-
-### Log Commands
-
-```bash
-hashed logs list            # View audit logs (requires backend)
-```
-
----
-
-## 🐛 Troubleshooting
-
-### Command Not Found
-
-```bash
-# Reinstall the package
-pip install -e .
-
-# Verify installation
-which hashed
-pip show hashed-sdk
-```
-
-### Backend Connection Errors
-
-```bash
-# Check if backend is running
-curl http://localhost:8000/health
-
-# Verify configuration
-echo $HASHED_BACKEND_URL
-echo $HASHED_API_KEY
-
-# Test with curl
-curl -H "X-API-KEY: $HASHED_API_KEY" \
-     $HASHED_BACKEND_URL/v1/agents
-```
-
-### Identity Password Issues
-
-```bash
-# If you forgot password, you need to create new identity
-# (old identity cannot be recovered)
-mv ./secrets/agent_key.pem ./secrets/agent_key.pem.old
-hashed identity create
-
-# Or use password from environment
-export HASHED_IDENTITY_PASSWORD="your_password"
-hashed identity show
-```
-
----
-
-## 💡 Tips & Tricks
-
-### Bash Aliases
-
-```bash
-# Add to ~/.bashrc or ~/.zshrc
-alias hi='hashed identity'
-alias hp='hashed policy'
-alias ha='hashed agent'
-alias hl='hashed logs'
-
-# Now you can use:
-hi show
-hp list
-ha list
-hl list
-```
-
-### Output to JSON
-
-```bash
-# Parse with jq
-hashed policy list --format json | jq '.send_email'
-
-# Export policies
-hashed policy list --format json > policies_backup.json
-```
-
-### Watch Logs in Real-time
-
-```bash
-# Poor man's live tail (refresh every 2 seconds)
-watch -n 2 "hashed logs list --limit 10"
-```
-
----
-
-## 🔄 Migrating from Dashboard to CLI
-
-If you're currently using the web dashboard, here's how to transition:
-
-| Dashboard Feature | CLI Equivalent |
-|-------------------|----------------|
-| View Agents | `hashed agent list` |
-| View Policies | `hashed policy list` |
-| Add Policy | `hashed policy add TOOL --allow` |
-| View Logs | `hashed logs list` |
-| Filter Logs | `hashed logs list --status denied` |
-| Agent Setup | `hashed init --name "Agent"` |
-
----
-
-## 📖 Examples
-
-See `/examples` directory for complete agent examples:
-
-- `examples/persistent_agent.py` - Agent with persistent identity
-- `examples/basic_usage.py` - Simple getting started
-- `examples/async_usage.py` - Async patterns
-
-Run examples:
-
-```bash
-cd examples
-python persistent_agent.py
-```
-
----
-
-## 🤝 Support
-
-- **Issues**: [GitHub Issues](https://github.com/yourrepo/hashed-sdk/issues)
-- **Docs**: [Full Documentation](https://docs.hashed.example.com)
-- **CLI Help**: `hashed --help` or `hashed COMMAND --help`
-
----
-
-## 🎉 That's It!
-
-You now have a fully functional CLI for managing AI agents without needing the paid dashboard. Happy coding! 🚀
-
-```bash
-# Start building!
-hashed init --name "My Awesome Agent"
-```
+**Policy resolution order:**
+1. Agent-specific policy (highest priority)
+2. Global policy
+3. Default: **allow** (if no policy found)

@@ -1,818 +1,722 @@
-# Hashed SDK - Complete API Reference
+# Hashed Control Plane API — Reference
 
-Complete API documentation for the Hashed SDK - AI Agent Governance & Security Layer.
-
----
-
-## Table of Contents
-
-- [Installation](#installation)
-- [Core Classes](#core-classes)
-  - [HashedCore](#hashedcore)
-  - [HashedConfig](#hashedconfig)
-  - [PolicyEngine](#policyengine)
-  - [IdentityManager](#identitymanager)
-  - [AsyncLedger](#asyncledger)
-- [Decorators](#decorators)
-- [Models](#models)
-- [Exceptions](#exceptions)
-- [Utilities](#utilities)
+> Version: 0.1.0  
+> Base URL: `http://localhost:8000` (dev) / `https://api.hashed.dev` (prod)  
+> Authentication: `X-API-KEY: hashed_<your_key>` header on all `/v1/*` endpoints
 
 ---
 
-## Installation
+## Authentication
+
+All `/v1/*` endpoints require the `X-API-KEY` header:
 
 ```bash
-# From local (development)
-pip install -e /path/to/hashed-sdk
-
-# From GitHub
-pip install git+https://github.com/YOUR-USER/hashed-sdk.git
-
-# From PyPI (when published)
-pip install hashed-sdk
-
-# With LLM support
-pip install hashed-sdk[examples]
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/agents
 ```
 
 ---
 
-## Core Classes
+## Health
 
-### HashedCore
+### `GET /health`
 
-Main entry point for the Hashed SDK. Provides agent identity, policy enforcement, and audit logging.
-
-#### Constructor
-
-```python
-HashedCore(
-    config: Optional[HashedConfig] = None,
-    agent_name: Optional[str] = None,
-    agent_type: Optional[str] = None
-)
-```
-
-**Parameters:**
-- `config` (HashedConfig, optional): Configuration object. If None, uses default config.
-- `agent_name` (str, optional): Human-readable name for the agent
-- `agent_type` (str, optional): Type/category of agent (e.g., "customer_service", "financial")
-
-**Returns:** HashedCore instance
-
-**Example:**
-```python
-from hashed import HashedCore
-from hashed.config import HashedConfig
-
-# Simple usage
-core = HashedCore()
-
-# With configuration
-config = HashedConfig(
-    backend_url="http://localhost:8000",
-    api_key="your-key-here"
-)
-core = HashedCore(
-    config=config,
-    agent_name="Customer Support Bot",
-    agent_type="customer_service"
-)
-```
-
-#### Methods
-
-##### `initialize()`
-
-```python
-async def initialize() -> None
-```
-
-Initialize the agent: registers with backend, syncs policies, starts background tasks.
-
-**Returns:** None
-
-**Raises:**
-- `ConnectionError`: If backend is unreachable
-- `AuthenticationError`: If API key is invalid
-
-**Example:**
-```python
-core = HashedCore(config=config)
-await core.initialize()
-```
-
-##### `shutdown()`
-
-```python
-async def shutdown() -> None
-```
-
-Gracefully shutdown the agent: syncs remaining logs, closes connections.
-
-**Returns:** None
-
-**Example:**
-```python
-await core.shutdown()
-```
-
-##### `guard(tool_name: str)`
-
-```python
-def guard(tool_name: str) -> Callable
-```
-
-Decorator to protect functions with policy enforcement and audit logging.
-
-**Parameters:**
-- `tool_name` (str): Name of the operation/tool to guard
-
-**Returns:** Decorator function
-
-**Raises:**
-- `PermissionError`: If operation is not allowed by policy
-- `PolicyNotFoundError`: If policy doesn't exist (in strict mode)
-
-**Example:**
-```python
-@core.guard("transfer_money")
-async def transfer(amount: float, to: str):
-    # Your business logic here
-    return {"status": "success"}
-
-# Usage
-await transfer(100.0, "user@example.com")
-# ✓ Validated against policy
-# ✓ Logged with crypto signature
-# ✓ Error handling automatic
-```
-
-#### Properties
-
-##### `identity`
-
-```python
-@property
-def identity() -> IdentityManager
-```
-
-Access to the agent's cryptographic identity.
-
-**Returns:** IdentityManager instance
-
-**Example:**
-```python
-print(core.identity.public_key_hex)  # Agent's public key
-signature = core.identity.sign_message("data")  # Sign data
-```
-
-##### `policy_engine`
-
-```python
-@property
-def policy_engine() -> PolicyEngine
-```
-
-Access to the policy engine for managing policies.
-
-**Returns:** PolicyEngine instance
-
-**Example:**
-```python
-# Add local policy
-core.policy_engine.add_policy("operation", allowed=True, max_amount=1000.0)
-
-# List all policies
-policies = core.policy_engine.list_policies()
-
-# Get specific policy
-policy = core.policy_engine.get_policy("operation")
-```
-
-##### `ledger`
-
-```python
-@property
-def ledger() -> AsyncLedger
-```
-
-Access to the audit ledger.
-
-**Returns:** AsyncLedger instance
-
-**Example:**
-```python
-# Ledger logs automatically via @guard
-# Access for custom logging if needed
-await core.ledger.log_operation(...)
-```
-
-#### Context Manager Support
-
-```python
-async with HashedCore(config=config) as core:
-    @core.guard("operation")
-    async def do_thing():
-        return "done"
-    
-    await do_thing()
-
-# Automatically initialized and shutdown
-```
-
----
-
-### HashedConfig
-
-Configuration object for HashedCore.
-
-#### Constructor
-
-```python
-HashedConfig(
-    backend_url: Optional[str] = None,
-    api_key: Optional[str] = None,
-    timeout: int = 30,
-    enable_auto_sync: bool = False,
-    sync_interval: int = 300,
-    verify_ssl: bool = True
-)
-```
-
-**Parameters:**
-- `backend_url` (str, optional): Backend API URL. Defaults to env var `BACKEND_URL` or `http://localhost:8000`
-- `api_key` (str, optional): API key for backend. Defaults to env var `API_KEY`
-- `timeout` (int): Request timeout in seconds. Default: 30
-- `enable_auto_sync` (bool): Enable automatic policy sync. Default: False
-- `sync_interval` (int): Sync interval in seconds. Default: 300 (5 min)
-- `verify_ssl` (bool): Verify SSL certificates. Default: True
-
-**Example:**
-```python
-from hashed.config import HashedConfig
-
-# Auto-load from .env
-config = HashedConfig()
-
-# Manual configuration
-config = HashedConfig(
-    backend_url="https://api.your-domain.com",
-    api_key="hashed_admin_abc123...",
-    enable_auto_sync=True,
-    sync_interval=300
-)
-```
-
-#### Environment Variables
-
-The config automatically reads from environment variables:
+Check if the server is running.
 
 ```bash
-# .env file
-BACKEND_URL=http://localhost:8000
-API_KEY=your-api-key-here
+curl http://localhost:8000/health
+```
+
+**Response:**
+```json
+{
+  "status": "healthy",
+  "timestamp": "2026-02-26T22:00:00",
+  "service": "hashed-control-plane"
+}
 ```
 
 ---
 
-### PolicyEngine
+## Auth Endpoints
 
-Manages and validates policies for operations.
+### `POST /v1/auth/signup`
 
-#### Methods
-
-##### `add_policy()`
-
-```python
-def add_policy(
-    tool_name: str,
-    allowed: bool = True,
-    max_amount: Optional[float] = None,
-    requires_approval: bool = False,
-    metadata: Optional[dict] = None
-) -> None
-```
-
-Add or update a policy.
-
-**Parameters:**
-- `tool_name` (str): Name of the tool/operation
-- `allowed` (bool): Whether operation is allowed. Default: True
-- `max_amount` (float, optional): Maximum amount limit (for financial ops)
-- `requires_approval` (bool): Whether operation requires approval. Default: False
-- `metadata` (dict, optional): Additional metadata
-
-**Example:**
-```python
-engine = core.policy_engine
-
-engine.add_policy("transfer_money", allowed=True, max_amount=500.0)
-engine.add_policy("delete_user", allowed=False)
-engine.add_policy("send_email", allowed=True)
-```
-
-##### `get_policy()`
-
-```python
-def get_policy(tool_name: str) -> Optional[Policy]
-```
-
-Get policy for a specific tool.
-
-**Parameters:**
-- `tool_name` (str): Name of the tool
-
-**Returns:** Policy object or None if not found
-
-**Example:**
-```python
-policy = engine.get_policy("transfer_money")
-if policy and policy.allowed:
-    print(f"Max amount: ${policy.max_amount}")
-```
-
-##### `list_policies()`
-
-```python
-def list_policies() -> Dict[str, Policy]
-```
-
-Get all policies.
-
-**Returns:** Dictionary mapping tool names to Policy objects
-
-**Example:**
-```python
-policies = engine.list_policies()
-for tool_name, policy in policies.items():
-    print(f"{tool_name}: {policy.allowed}")
-```
-
-##### `validate()`
-
-```python
-def validate(
-    tool_name: str,
-    amount: Optional[float] = None,
-    **context
-) -> bool
-```
-
-Validate an operation against its policy.
-
-**Parameters:**
-- `tool_name` (str): Name of the tool
-- `amount` (float, optional): Amount for financial operations
-- `**context`: Additional context
-
-**Returns:** True if allowed, False otherwise
-
-**Raises:**
-- `PermissionError`: If operation is not allowed
-
-**Example:**
-```python
-try:
-    engine.validate("transfer_money", amount=250.0)
-    print("Operation allowed")
-except PermissionError as e:
-    print(f"Blocked: {e}")
-```
-
----
-
-### IdentityManager
-
-Manages cryptographic identity for the agent.
-
-#### Methods
-
-##### `generate_keypair()`
-
-```python
-@staticmethod
-def generate_keypair() -> Tuple[bytes, bytes]
-```
-
-Generate a new Ed25519 keypair.
-
-**Returns:** Tuple of (private_key_bytes, public_key_bytes)
-
-**Example:**
-```python
-from hashed.identity import IdentityManager
-
-private_key, public_key = IdentityManager.generate_keypair()
-```
-
-##### `sign_message()`
-
-```python
-def sign_message(self, message: Union[str, bytes]) -> bytes
-```
-
-Sign a message with the agent's private key.
-
-**Parameters:**
-- `message` (str | bytes): Message to sign
-
-**Returns:** Signature bytes
-
-**Example:**
-```python
-identity = core.identity
-signature = identity.sign_message("important data")
-```
-
-##### `verify_signature()`
-
-```python
-@staticmethod
-def verify_signature(
-    public_key: bytes,
-    message: Union[str, bytes],
-    signature: bytes
-) -> bool
-```
-
-Verify a signature.
-
-**Parameters:**
-- `public_key` (bytes): Public key to verify with
-- `message` (str | bytes): Original message
-- `signature` (bytes): Signature to verify
-
-**Returns:** True if signature is valid, False otherwise
-
-**Example:**
-```python
-is_valid = IdentityManager.verify_signature(
-    public_key=identity.public_key,
-    message="data",
-    signature=signature
-)
-```
-
-#### Properties
-
-##### `public_key`
-
-```python
-@property
-def public_key() -> bytes
-```
-
-Agent's public key (raw bytes).
-
-##### `public_key_hex`
-
-```python
-@property
-def public_key_hex() -> str
-```
-
-Agent's public key as hex string.
-
-**Example:**
-```python
-print(f"Agent ID: {core.identity.public_key_hex}")
-```
-
----
-
-### AsyncLedger
-
-Manages audit logging to backend.
-
-#### Methods
-
-##### `log_operation()`
-
-```python
-async def log_operation(
-    tool_name: str,
-    status: str,
-    duration_ms: float,
-    parameters: dict,
-    result: Optional[dict] = None,
-    error: Optional[str] = None,
-    metadata: Optional[dict] = None
-) -> None
-```
-
-Log an operation to the audit trail.
-
-**Parameters:**
-- `tool_name` (str): Name of the operation
-- `status` (str): Status ("success", "denied", "error")
-- `duration_ms` (float): Duration in milliseconds
-- `parameters` (dict): Operation parameters
-- `result` (dict, optional): Operation result
-- `error` (str, optional): Error message if failed
-- `metadata` (dict, optional): Additional metadata
-
-**Note:** Logging is automatic when using `@core.guard()`. Manual logging is rarely needed.
-
-**Example:**
-```python
-await core.ledger.log_operation(
-    tool_name="custom_operation",
-    status="success",
-    duration_ms=15.5,
-    parameters={"param": "value"},
-    result={"output": "data"}
-)
-```
-
----
-
-## Decorators
-
-### @core.guard()
-
-The primary way to protect functions with Hashed.
-
-**Signature:**
-```python
-@core.guard(tool_name: str)
-async def your_function(...) -> Any:
-    ...
-```
-
-**What it does:**
-1. ✅ Validates operation against policy
-2. ✅ Signs operation with crypto identity
-3. ✅ Executes function if allowed
-4. ✅ Logs result to audit trail
-5. ✅ Handles errors gracefully
-
-**Example:**
-```python
-@core.guard("process_refund")
-async def process_refund(amount: float, order_id: str, reason: str):
-    """Process customer refund."""
-    # Your logic here
-    stripe.refunds.create(amount=amount, order_id=order_id)
-    return {"status": "refunded", "amount": amount}
-
-# Usage
-try:
-    result = await process_refund(100.0, "ORD-123", "damaged")
-    print(f"Success: {result}")
-except PermissionError as e:
-    print(f"Blocked: {e}")
-```
-
----
-
-## Models
-
-All models use Pydantic for validation and serialization.
-
-### Policy
-
-```python
-class Policy(BaseModel):
-    tool_name: str
-    allowed: bool = True
-    max_amount: Optional[float] = None
-    requires_approval: bool = False
-    metadata: Optional[dict] = None
-```
-
-**Example:**
-```python
-from hashed.models import Policy
-
-policy = Policy(
-    tool_name="transfer_money",
-    allowed=True,
-    max_amount=500.0
-)
-```
-
-### Agent
-
-```python
-class Agent(BaseModel):
-    name: str
-    type: str
-    public_key: str
-    status: str = "active"
-```
-
-### LogEntry
-
-```python
-class LogEntry(BaseModel):
-    tool_name: str
-    status: str
-    timestamp: datetime
-    duration_ms: float
-    parameters: dict
-    result: Optional[dict] = None
-    error: Optional[str] = None
-    public_key: str
-    signature: str
-```
-
----
-
-## Exceptions
-
-### PermissionError
-
-```python
-class PermissionError(Exception):
-    """Raised when operation is not allowed by policy."""
-    
-    def __init__(self, message: str, details: Optional[dict] = None):
-        self.details = details
-        super().__init__(message)
-```
-
-**Example:**
-```python
-from hashed.exceptions import PermissionError
-
-try:
-    await transfer_money(10000)
-except PermissionError as e:
-    print(e)  # "Amount 10000 exceeds maximum allowed 500.0"
-    print(e.details)  # {'tool_name': 'transfer_money', 'amount': 10000, ...}
-```
-
-### PolicyNotFoundError
-
-```python
-class PolicyNotFoundError(Exception):
-    """Raised when policy is not found."""
-```
-
-### AuthenticationError
-
-```python
-class AuthenticationError(Exception):
-    """Raised when API key is invalid."""
-```
-
----
-
-## Utilities
-
-### HTTP Client
-
-```python
-from hashed.utils.http_client import AsyncHTTPClient
-
-# Used internally, but available if needed
-client = AsyncHTTPClient(
-    base_url="http://localhost:8000",
-    api_key="your-key",
-    timeout=30
-)
-
-response = await client.get("/endpoint")
-```
-
-### Crypto Utilities
-
-```python
-from hashed.crypto.hasher import hash_data, verify_hash
-
-# Hash data
-hash_value = hash_data("sensitive data")
-
-# Verify
-is_valid = verify_hash("sensitive data", hash_value)
-```
-
----
-
-## Complete Usage Example
-
-```python
-import asyncio
-from hashed import HashedCore
-from hashed.config import HashedConfig
-from hashed.exceptions import PermissionError
-
-async def main():
-    # 1. Configuration
-    config = HashedConfig(
-        backend_url="http://localhost:8000",
-        api_key="your-api-key",
-        enable_auto_sync=True
-    )
-    
-    # 2. Initialize
-    core = HashedCore(
-        config=config,
-        agent_name="My Agent",
-        agent_type="custom"
-    )
-    await core.initialize()
-    
-    # 3. Define operations
-    @core.guard("send_email")
-    async def send_email(to: str, subject: str, body: str):
-        # Your email logic
-        print(f"Sending email to {to}")
-        return {"sent": True}
-    
-    @core.guard("transfer_money")
-    async def transfer_money(amount: float, to: str):
-        # Your transfer logic
-        print(f"Transferring ${amount} to {to}")
-        return {"status": "success", "amount": amount}
-    
-    # 4. Use operations
-    try:
-        # Allowed
-        await send_email("user@example.com", "Hello", "World")
-        
-        # May be blocked by policy
-        await transfer_money(10000.0, "recipient")
-        
-    except PermissionError as e:
-        print(f"Operation blocked: {e}")
-        print(f"Details: {e.details}")
-    
-    finally:
-        # 5. Cleanup
-        await core.shutdown()
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
----
-
-## Backend Requirements
-
-The SDK requires a running backend server:
+Create a new user account and organization.
 
 ```bash
-# Start backend
-cd /path/to/hashed-sdk/server
-python3 server.py
-
-# Backend runs on http://localhost:8000
+curl -X POST http://localhost:8000/v1/auth/signup \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@company.com", "password": "secret", "org_name": "Acme Corp"}'
 ```
 
-Optional dashboard:
+**Body:**
+```json
+{
+  "email": "you@company.com",
+  "password": "secret",
+  "org_name": "Acme Corp"
+}
+```
+
+**Response `201`:**
+```json
+{
+  "message": "Account created! Check your email for confirmation.",
+  "user_id": "uuid",
+  "email": "you@company.com",
+  "org_name": "Acme Corp",
+  "email_confirmed": false
+}
+```
+
+---
+
+### `POST /v1/auth/login`
+
+Authenticate and get API key.
+
 ```bash
-cd /path/to/hashed-sdk/dashboard
-npm run dev
+curl -X POST http://localhost:8000/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email": "you@company.com", "password": "secret"}'
+```
 
-# Dashboard on http://localhost:3000
+**Response `200`:**
+```json
+{
+  "message": "Login successful",
+  "email": "you@company.com",
+  "org_name": "Acme Corp",
+  "api_key": "hashed_abc123...",
+  "org_id": "uuid",
+  "backend_url": "http://localhost:8000"
+}
+```
+
+**Errors:**
+- `401` — Invalid credentials
+- `403` — Email not confirmed
+
+---
+
+### `GET /v1/auth/check-confirmation`
+
+Check if a user's email has been confirmed (used by CLI during signup polling).
+
+```bash
+curl "http://localhost:8000/v1/auth/check-confirmation?email=you@company.com"
+```
+
+**Response:**
+```json
+{
+  "email": "you@company.com",
+  "confirmed": true,
+  "confirmed_at": "2026-02-26T22:00:00"
+}
 ```
 
 ---
 
-## Type Hints
+### `GET /v1/auth/me`
 
-All public APIs include complete type hints for IDE support:
+Get current organization info from API key.
 
-```python
-from hashed import HashedCore
-from hashed.config import HashedConfig
-from hashed.models import Policy
-from typing import Optional
+```bash
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/auth/me
+```
 
-# Full IntelliSense/autocomplete support
-config: HashedConfig = HashedConfig()
-core: HashedCore = HashedCore(config=config)
-policy: Optional[Policy] = core.policy_engine.get_policy("tool")
+**Response:**
+```json
+{
+  "org_name": "Acme Corp",
+  "org_id": "uuid",
+  "api_key_prefix": "hashed_abc123...",
+  "is_active": true,
+  "created_at": "2026-02-26T22:00:00"
+}
 ```
 
 ---
 
-## Quick Reference
+## Agent Management
 
-```python
-# Initialize
-from hashed import HashedCore
-from hashed.config import HashedConfig
+### `POST /v1/agents/register`
 
-config = HashedConfig()  # Auto-loads from .env
-core = HashedCore(config=config, agent_name="Agent", agent_type="type")
-await core.initialize()
+Register a new AI agent with the organization.
 
-# Guard functions
-@core.guard("operation_name")
-async def my_operation(param: str):
-    return {"result": "value"}
+```bash
+curl -X POST http://localhost:8000/v1/agents/register \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Research Agent 5",
+    "public_key": "a3f1b2c4...",
+    "agent_type": "analyst",
+    "description": "Research and summarization agent"
+  }'
+```
 
-# Use
-result = await my_operation("test")
+**Body:**
+```json
+{
+  "name": "Research Agent 5",
+  "public_key": "a3f1b2c4...",
+  "agent_type": "analyst",
+  "description": "Optional description"
+}
+```
 
-# Shutdown
-await core.shutdown()
+**Response `201`:**
+```json
+{
+  "agent": {
+    "id": "uuid",
+    "name": "Research Agent 5",
+    "public_key": "a3f1b2c4...",
+    "agent_type": "analyst",
+    "organization_id": "org-uuid",
+    "is_active": true,
+    "created_at": "2026-02-26T22:00:00"
+  },
+  "message": "Agent registered successfully"
+}
+```
+
+**Errors:**
+- `409` — Agent with this public key already exists
+
+> **Note:** The SDK calls this automatically on `await core.initialize()`. On first run (201 response), it also auto-pushes local policies.
+
+---
+
+### `GET /v1/agents`
+
+List all agents for the organization.
+
+```bash
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/agents
+```
+
+**Response:**
+```json
+{
+  "agents": [
+    {
+      "id": "uuid",
+      "name": "Research Agent 5",
+      "public_key": "a3f1b2c4...",
+      "agent_type": "analyst",
+      "is_active": true,
+      "created_at": "2026-02-26T22:00:00"
+    }
+  ],
+  "count": 1
+}
 ```
 
 ---
 
-For more examples, see `/examples` directory in the SDK repository.
+### `DELETE /v1/agents/{agent_id}`
+
+Permanently delete an agent and all its policies. Audit logs are preserved.
+
+```bash
+curl -X DELETE \
+  -H "X-API-KEY: hashed_abc123..." \
+  http://localhost:8000/v1/agents/uuid-here
+```
+
+**Response `200`:**
+```json
+{
+  "message": "Agent 'Research Agent 5' deleted successfully",
+  "agent_id": "uuid",
+  "deleted_at": "2026-02-26T22:00:00"
+}
+```
+
+**Errors:**
+- `404` — Agent not found or not in this organization
+
+> **Note:** Use `hashed agent delete "Research Agent 5"` from the CLI — it also cleans up `.hashed_policies.json`.
+
+---
+
+## Policy Management
+
+### `POST /v1/policies`
+
+Create or update a policy. If a policy for the same `tool_name` + `agent_id` already exists, it is updated.
+
+```bash
+# Global policy (no agent_id)
+curl -X POST http://localhost:8000/v1/policies \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name": "search_web", "allowed": true}'
+
+# Agent-specific policy
+curl -X POST "http://localhost:8000/v1/policies?agent_id=uuid-here" \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"tool_name": "process_payment", "allowed": true, "max_amount": 500.0}'
+```
+
+**Query params:**
+| Param | Description |
+|-------|-------------|
+| `agent_id` | Optional. If omitted, policy is global (applies to all agents). |
+
+**Body:**
+```json
+{
+  "tool_name": "process_payment",
+  "allowed": true,
+  "max_amount": 500.0,
+  "requires_approval": false,
+  "time_window": null,
+  "rate_limit_per": null,
+  "rate_limit_count": null,
+  "metadata": {}
+}
+```
+
+**Response `201`:**
+```json
+{
+  "policy": {
+    "id": "policy-uuid",
+    "tool_name": "process_payment",
+    "allowed": true,
+    "max_amount": 500.0,
+    "agent_id": "agent-uuid",
+    "organization_id": "org-uuid"
+  },
+  "message": "Policy created successfully"
+}
+```
+
+---
+
+### `GET /v1/policies`
+
+List all policies for the organization.
+
+```bash
+# All policies
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/policies
+
+# Filter by agent
+curl -H "X-API-KEY: hashed_abc123..." \
+  "http://localhost:8000/v1/policies?agent_id=uuid-here"
+```
+
+**Query params:**
+| Param | Description |
+|-------|-------------|
+| `agent_id` | Optional. Filter by agent UUID. |
+
+**Response:**
+```json
+{
+  "policies": [
+    {
+      "id": "policy-uuid",
+      "tool_name": "search_web",
+      "allowed": true,
+      "max_amount": null,
+      "agent_id": null,
+      "organization_id": "org-uuid",
+      "created_at": "2026-02-26T22:00:00"
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### `DELETE /v1/policies/{policy_id}`
+
+Delete a specific policy by ID. Used by `hashed policy push` to remove policies that were deleted locally.
+
+```bash
+curl -X DELETE \
+  -H "X-API-KEY: hashed_abc123..." \
+  http://localhost:8000/v1/policies/policy-uuid-here
+```
+
+**Response `200`:**
+```json
+{
+  "message": "Policy 'search_web' deleted successfully",
+  "policy_id": "policy-uuid",
+  "deleted_at": "2026-02-26T22:00:00"
+}
+```
+
+**Errors:**
+- `404` — Policy not found or not in this organization
+
+---
+
+### `GET /v1/policies/sync`
+
+Download all active policies for a specific agent (used by the SDK on startup).
+
+```bash
+curl -H "X-API-KEY: hashed_abc123..." \
+  "http://localhost:8000/v1/policies/sync?agent_public_key=a3f1b2c4..."
+```
+
+**Query params:**
+| Param | Description |
+|-------|-------------|
+| `agent_public_key` | Ed25519 public key hex of the agent |
+
+**Response:**
+```json
+{
+  "agent": {
+    "id": "agent-uuid",
+    "name": "Research Agent 5",
+    "public_key": "a3f1b2c4...",
+    "agent_type": "analyst"
+  },
+  "policies": {
+    "search_web": {
+      "allowed": true,
+      "max_amount": null,
+      "requires_approval": false
+    },
+    "process_payment": {
+      "allowed": true,
+      "max_amount": 500.0,
+      "requires_approval": false
+    }
+  },
+  "sync_interval": 300,
+  "synced_at": "2026-02-26T22:00:00"
+}
+```
+
+**Policy resolution:** agent-specific policies override global ones.
+
+---
+
+## Guard (SDK Compatibility)
+
+### `POST /guard`
+
+Check if an operation is allowed before executing. Called by the SDK's `@core.guard()` decorator.
+
+```bash
+curl -X POST http://localhost:8000/guard \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "process_payment",
+    "agent_public_key": "a3f1b2c4...",
+    "data": {"amount": 200.0}
+  }'
+```
+
+**Body:**
+```json
+{
+  "operation": "process_payment",
+  "agent_public_key": "a3f1b2c4...",
+  "data": {"amount": 200.0}
+}
+```
+
+**Response — Allowed:**
+```json
+{
+  "allowed": true,
+  "policy": { "tool_name": "process_payment", "max_amount": 500.0 },
+  "message": "Operation allowed"
+}
+```
+
+**Response — Denied:**
+```json
+{
+  "allowed": false,
+  "policy": { "tool_name": "delete_data", "allowed": false },
+  "message": "Operation delete_data is not allowed by policy"
+}
+```
+
+**Response — Requires Approval:**
+```json
+{
+  "allowed": false,
+  "requires_approval": true,
+  "approval_id": "approval-uuid",
+  "message": "Operation requires approval"
+}
+```
+
+---
+
+## Audit Logging
+
+### `POST /log`
+
+Log a completed operation to the audit trail. Called by the SDK after each guarded operation.
+
+```bash
+curl -X POST http://localhost:8000/log \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "operation": "process_payment",
+    "agent_public_key": "a3f1b2c4...",
+    "status": "success",
+    "data": {"amount": 200.0, "result": "payment completed"},
+    "metadata": {"signature": "sig_hex..."}
+  }'
+```
+
+**Response `202`:**
+```json
+{
+  "log_id": "log-uuid",
+  "status": "logged",
+  "timestamp": "2026-02-26T22:00:00"
+}
+```
+
+---
+
+### `GET /v1/logs`
+
+Query audit logs with filters.
+
+```bash
+# Recent logs
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/logs
+
+# Filter by agent and status
+curl -H "X-API-KEY: hashed_abc123..." \
+  "http://localhost:8000/v1/logs?agent_id=uuid&status_filter=denied&limit=50"
+```
+
+**Query params:**
+| Param | Default | Description |
+|-------|---------|-------------|
+| `agent_id` | none | Filter by agent UUID |
+| `tool_name` | none | Filter by tool name |
+| `status_filter` | none | `success`, `denied`, `error` |
+| `limit` | `100` | Max records to return |
+| `offset` | `0` | Pagination offset |
+
+**Response:**
+```json
+{
+  "logs": [
+    {
+      "id": "log-uuid",
+      "tool_name": "process_payment",
+      "status": "success",
+      "amount": 200.0,
+      "agent_id": "agent-uuid",
+      "signature": "sig_hex...",
+      "timestamp": "2026-02-26T22:00:00"
+    }
+  ],
+  "count": 1,
+  "limit": 100,
+  "offset": 0
+}
+```
+
+---
+
+### `POST /v1/logs/batch`
+
+Batch log ingestion (used by the SDK's `AsyncLedger`).
+
+```bash
+curl -X POST http://localhost:8000/v1/logs/batch \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent_public_key": "a3f1b2c4...",
+    "logs": [
+      {
+        "event_type": "process_payment.success",
+        "data": {"amount": 200.0},
+        "metadata": {"signature": "sig_hex..."},
+        "timestamp": "2026-02-26T22:00:00"
+      }
+    ]
+  }'
+```
+
+**Response `202`:**
+```json
+{
+  "received": 1,
+  "status": "accepted",
+  "processed_at": "2026-02-26T22:00:00"
+}
+```
+
+---
+
+## Approval Queue (Human-in-the-Loop)
+
+### `GET /v1/approvals/pending`
+
+List pending approval requests.
+
+```bash
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/approvals/pending
+```
+
+**Response:**
+```json
+{
+  "approvals": [
+    {
+      "id": "approval-uuid",
+      "tool_name": "delete_production_db",
+      "agent_id": "agent-uuid",
+      "request_data": {},
+      "status": "pending",
+      "created_at": "2026-02-26T22:00:00"
+    }
+  ],
+  "count": 1
+}
+```
+
+---
+
+### `POST /v1/approvals/{approval_id}/decide`
+
+Approve or reject a pending request.
+
+```bash
+# Approve
+curl -X POST http://localhost:8000/v1/approvals/approval-uuid/decide \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"approved": true, "approved_by": "admin@company.com"}'
+
+# Reject
+curl -X POST http://localhost:8000/v1/approvals/approval-uuid/decide \
+  -H "X-API-KEY: hashed_abc123..." \
+  -H "Content-Type: application/json" \
+  -d '{"approved": false, "approved_by": "admin@company.com", "rejection_reason": "Too risky"}'
+```
+
+**Response:**
+```json
+{
+  "approval": {
+    "id": "approval-uuid",
+    "status": "approved",
+    "approved_by": "admin@company.com",
+    "reviewed_at": "2026-02-26T22:00:00"
+  },
+  "message": "Request approved successfully"
+}
+```
+
+---
+
+## Analytics
+
+### `GET /v1/analytics/summary`
+
+Get activity summary across all agents.
+
+```bash
+curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/analytics/summary
+```
+
+**Response:**
+```json
+{
+  "agents": [
+    {
+      "agent_name": "Research Agent 5",
+      "total_operations": 142,
+      "denied_operations": 3,
+      "last_active": "2026-02-26T22:00:00"
+    }
+  ],
+  "policy_effectiveness": [
+    {
+      "tool_name": "delete_data",
+      "total_attempts": 5,
+      "denied_count": 5,
+      "denial_rate": 1.0
+    }
+  ],
+  "generated_at": "2026-02-26T22:00:00"
+}
+```
+
+---
+
+## SDK Compatibility Endpoints
+
+These endpoints have no `/v1/` prefix for backward compatibility with older SDK versions:
+
+| Endpoint | Equivalent |
+|----------|------------|
+| `POST /register` | `POST /v1/agents/register` |
+| `POST /guard` | Policy check (see above) |
+| `POST /log` | Operation log (see above) |
+
+---
+
+## Error Responses
+
+All errors follow this format:
+
+```json
+{
+  "detail": "Error message here"
+}
+```
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Bad request / validation error |
+| `401` | Invalid or missing API key |
+| `403` | Email not confirmed |
+| `404` | Resource not found |
+| `409` | Conflict (duplicate resource) |
+| `500` | Internal server error |
+
+---
+
+## Endpoint Summary
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| GET | `/health` | ❌ | Health check |
+| POST | `/v1/auth/signup` | ❌ | Create account |
+| POST | `/v1/auth/login` | ❌ | Login + get API key |
+| GET | `/v1/auth/check-confirmation` | ❌ | Check email confirmation |
+| GET | `/v1/auth/me` | ✅ | Current org info |
+| POST | `/v1/agents/register` | ✅ | Register agent |
+| GET | `/v1/agents` | ✅ | List agents |
+| DELETE | `/v1/agents/{id}` | ✅ | Delete agent |
+| POST | `/v1/policies` | ✅ | Create/update policy |
+| GET | `/v1/policies` | ✅ | List policies |
+| DELETE | `/v1/policies/{id}` | ✅ | Delete policy |
+| GET | `/v1/policies/sync` | ✅ | Sync policies to agent |
+| POST | `/guard` | ✅ | Check operation allowed |
+| POST | `/log` | ✅ | Log an operation |
+| GET | `/v1/logs` | ✅ | Query audit logs |
+| POST | `/v1/logs/batch` | ✅ | Batch log ingestion |
+| GET | `/v1/approvals/pending` | ✅ | List pending approvals |
+| POST | `/v1/approvals/{id}/decide` | ✅ | Approve/reject |
+| GET | `/v1/analytics/summary` | ✅ | Activity summary |
