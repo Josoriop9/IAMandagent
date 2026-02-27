@@ -36,11 +36,15 @@ if allowed_origins:
     )
 
 # Initialize Supabase client
+# Supports both SUPABASE_SERVICE_KEY and SUPABASE_KEY for Railway compatibility
 supabase_url = os.getenv("SUPABASE_URL")
-supabase_key = os.getenv("SUPABASE_SERVICE_KEY")
+supabase_key = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY")
 
 if not supabase_url or not supabase_key:
-    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY must be set")
+    raise ValueError(
+        "Missing required environment variables. "
+        "Set SUPABASE_URL and SUPABASE_SERVICE_KEY (or SUPABASE_KEY) in Railway Variables."
+    )
 
 supabase: Client = create_client(supabase_url, supabase_key)
 
