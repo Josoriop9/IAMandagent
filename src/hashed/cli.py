@@ -673,21 +673,22 @@ def policy_push(
     async def _push():
         try:
             import httpx
-            
+
             api_key, backend_url = _get_sync_credentials()
             if not backend_url or not api_key:
                 error("No credentials found. Run: hashed login")
                 raise typer.Exit(1)
-            
+
             info(f"Using backend: {backend_url}")
-            
-            policies = _load_policies(config_file)
+
+            local = _load_policies(config_file)
             headers = {"X-API-KEY": api_key}
-            pushed = 0
+            upserted = 0
+            deleted = 0
             errors_count = 0
-            
+
             async with httpx.AsyncClient(timeout=30) as client:
-                # Get existing agents from backend (normalized name → agent_id)
+                # ── Fetch agents ──────────────────────────────────────────
                 agents_resp = await client.get(
                     f"{backend_url}/v1/agents", headers=headers
                 )
@@ -695,85 +696,123 @@ def policy_push(
                     error(f"Failed to fetch agents: {agents_resp.status_code}")
                     error("Check your credentials: hashed whoami")
                     raise typer.Exit(1)
-                
-                # Build normalized agent map for flexible matching
-                agent_map = {}  # normalized_name → agent_id
-                agent_display = {}  # normalized_name → original name
+
+                agent_map: dict = {}     # normalized_name → agent_id
+                agent_display: dict = {}  # normalized_name → original name
                 for a in agents_resp.json().get("agents", []):
                     norm = _normalize_name(a["name"])
                     agent_map[norm] = a["id"]
                     agent_display[norm] = a["name"]
-                
-                # Push global policies (agent_id = None)
-                for tool_name, pol in policies.get("global", {}).items():
+
+                # ── Fetch current backend policies ────────────────────────
+                backend_resp = await client.get(
+                    f"{backend_url}/v1/policies", headers=headers
+                )
+                if not backend_resp.is_success:
+                    error(f"Failed to fetch backend policies: {backend_resp.status_code}")
+                    raise typer.Exit(1)
+
+                # Build backend index: (tool_name, agent_id_or_None) → policy_id
+                backend_index: dict = {}
+                for pol in backend_resp.json().get("policies", []):
+                    key = (pol["tool_name"], pol.get("agent_id"))
+                    backend_index[key] = pol["id"]
+
+                # ── Build local index ─────────────────────────────────────
+                # (tool_name, agent_id_or_None)
+                local_keys: set = set()
+
+                async def _upsert(tool_name, pol_data, agent_id=None, scope="global"):
+                    """Upsert one policy and track the key."""
+                    nonlocal upserted, errors_count
+                    local_keys.add((tool_name, agent_id))
                     try:
+                        params = {}
+                        if agent_id:
+                            params["agent_id"] = agent_id
                         resp = await client.post(
                             f"{backend_url}/v1/policies",
+                            params=params,
                             headers=headers,
                             json={
                                 "tool_name": tool_name,
-                                "allowed": pol["allowed"],
-                                "max_amount": pol.get("max_amount"),
-                                "metadata": {"source": "cli_push"}
-                            }
+                                "allowed": pol_data["allowed"],
+                                "max_amount": pol_data.get("max_amount"),
+                                "metadata": {"source": "cli_push"},
+                            },
                         )
                         if resp.is_success:
-                            pushed += 1
-                            success(f"  ✓ {tool_name} (global)")
+                            upserted += 1
+                            success(f"  ✓ {tool_name} ({scope})")
                         else:
-                            warning(f"  ⚠ {tool_name} (global) - {resp.status_code}: may already exist")
-                            pushed += 1
-                    except Exception as e:
-                        error(f"  ✗ {tool_name} (global): {e}")
+                            warning(f"  ⚠ {tool_name} ({scope}) - {resp.status_code}")
+                            upserted += 1
+                    except Exception as exc:
+                        error(f"  ✗ {tool_name} ({scope}): {exc}")
                         errors_count += 1
-                
-                # Push agent-specific policies (fuzzy name matching)
-                for agent_key, tools in policies.get("agents", {}).items():
+
+                # Upsert global policies
+                for tool_name, pol in local.get("global", {}).items():
+                    await _upsert(tool_name, pol, agent_id=None, scope="global")
+
+                # Upsert agent-specific policies
+                for agent_key, tools in local.get("agents", {}).items():
                     norm_key = _normalize_name(agent_key)
                     agent_id = agent_map.get(norm_key)
-                    
+
                     if not agent_id:
-                        # Show available agents for debugging
                         available = [f"'{v}'" for v in agent_display.values()]
                         warning(f"  Agent '{agent_key}' not found on backend. Skipping.")
                         if available:
-                            info(f"    Available agents: {', '.join(available)}")
+                            info(f"    Available: {', '.join(available)}")
                         else:
-                            info(f"    No agents registered. Run the agent first.")
+                            info(f"    No agents registered yet. Run the agent first.")
                         continue
-                    
+
                     matched_name = agent_display.get(norm_key, agent_key)
                     info(f"  Matched '{agent_key}' → '{matched_name}'")
-                    
+
                     for tool_name, pol in tools.items():
+                        await _upsert(
+                            tool_name, pol,
+                            agent_id=agent_id,
+                            scope=f"agent:{agent_key}",
+                        )
+
+                # ── Delete backend policies not in local ──────────────────
+                console.print()
+                info("Checking for removed policies...")
+                for (tool_name, agent_id), policy_id in backend_index.items():
+                    # Resolve the key: if agent_id matches a local agent, use it
+                    local_key = (tool_name, agent_id)
+                    if local_key not in local_keys:
                         try:
-                            resp = await client.post(
-                                f"{backend_url}/v1/policies",
-                                params={"agent_id": agent_id},
+                            del_resp = await client.delete(
+                                f"{backend_url}/v1/policies/{policy_id}",
                                 headers=headers,
-                                json={
-                                    "tool_name": tool_name,
-                                    "allowed": pol["allowed"],
-                                    "max_amount": pol.get("max_amount"),
-                                    "metadata": {"source": "cli_push"}
-                                }
                             )
-                            if resp.is_success:
-                                pushed += 1
-                                success(f"  ✓ {tool_name} (agent:{agent_key})")
+                            if del_resp.is_success:
+                                deleted += 1
+                                scope = f"agent:{agent_id}" if agent_id else "global"
+                                console.print(f"  [red]🗑️  {tool_name} ({scope}) — removed from backend[/red]")
                             else:
-                                warning(f"  ⚠ {tool_name} (agent:{agent_key}) - {resp.status_code}")
-                                pushed += 1
-                        except Exception as e:
-                            error(f"  ✗ {tool_name} (agent:{agent_key}): {e}")
+                                warning(f"  ⚠ Could not delete {tool_name}: {del_resp.status_code}")
+                        except Exception as exc:
+                            error(f"  ✗ Delete {tool_name}: {exc}")
                             errors_count += 1
-            
+
+            # ── Summary ───────────────────────────────────────────────────
             console.print()
-            if pushed > 0:
-                success(f"Pushed {pushed} policies to backend")
-            if errors_count > 0:
-                error(f"{errors_count} policies failed")
-                
+            parts = []
+            if upserted:
+                parts.append(f"{upserted} upserted")
+            if deleted:
+                parts.append(f"{deleted} removed")
+            if errors_count:
+                parts.append(f"{errors_count} errors")
+            summary = ", ".join(parts) if parts else "no changes"
+            success(f"Policy sync complete: {summary}")
+
         except Exception as e:
             error(f"Push failed: {e}")
             raise typer.Exit(1)

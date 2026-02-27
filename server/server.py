@@ -979,6 +979,63 @@ async def list_policies(
         )
 
 
+@app.delete("/v1/policies/{policy_id}", status_code=status.HTTP_200_OK)
+async def delete_policy(
+    policy_id: str,
+    org: dict = Depends(verify_api_key),
+):
+    """
+    Delete a specific policy by ID.
+
+    Used by 'hashed policy push' to remove policies that were deleted locally.
+    Verifies org ownership before deletion.
+
+    Args:
+        policy_id: UUID of the policy to delete
+        org: Organization from API key authentication
+
+    Returns:
+        Confirmation with deleted tool_name
+
+    Raises:
+        404: If policy not found or does not belong to this org
+    """
+    try:
+        # Verify policy belongs to this org
+        existing = (
+            supabase.table("policies")
+            .select("id, tool_name, agent_id")
+            .eq("id", policy_id)
+            .eq("organization_id", org["id"])
+            .execute()
+        )
+
+        if not existing.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Policy '{policy_id}' not found in this organization",
+            )
+
+        tool_name = existing.data[0]["tool_name"]
+
+        # Delete the policy
+        supabase.table("policies").delete().eq("id", policy_id).execute()
+
+        return {
+            "message": f"Policy '{tool_name}' deleted successfully",
+            "policy_id": policy_id,
+            "deleted_at": datetime.utcnow().isoformat(),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete policy: {str(e)}",
+        )
+
+
 # ============================================================================
 # AUDIT & ANALYTICS
 # ============================================================================
