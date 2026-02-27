@@ -219,6 +219,7 @@ def render_langchain(
         run_block = '''
     # ================================================================
     # Interactive Chat Loop
+    # ainvoke() is required so StructuredTool(coroutine=...) works correctly
     # ================================================================
     print("Agent ready. Type 'exit' to quit.\\n")
     while True:
@@ -229,9 +230,7 @@ def render_langchain(
             if user_input.lower() in ["exit", "quit", "q"]:
                 print("Goodbye!")
                 break
-            result = await asyncio.to_thread(
-                executor.invoke, {"input": user_input}
-            )
+            result = await executor.ainvoke({"input": user_input})
             print(f"Agent: {result['output']}\\n")
         except KeyboardInterrupt:
             print("\\nGoodbye!")
@@ -242,9 +241,9 @@ def render_langchain(
         run_block = f'''
     # ================================================================
     # Batch Execution
+    # ainvoke() is required so StructuredTool(coroutine=...) works correctly
     # ================================================================
-    result = await asyncio.to_thread(
-        executor.invoke,
+    result = await executor.ainvoke(
         {{"input": "Run all available tools and report results: {tool_names}"}}
     )
     print(f"Result: {{result['output']}}")
