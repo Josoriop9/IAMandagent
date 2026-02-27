@@ -1,0 +1,29 @@
+# Railway configuration
+# https://docs.railway.app/reference/config-as-code
+#
+# Setup:
+#   1. Install Railway CLI: npm i -g @railway/cli
+#   2. railway login
+#   3. railway link (link to your Railway project)
+#   4. railway up
+
+[build]
+builder = "dockerfile"
+dockerfilePath = "server/Dockerfile"
+buildCommand = ""
+
+[deploy]
+startCommand = "uvicorn server:app --host 0.0.0.0 --port $PORT --workers 2"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 3
+
+# Environment variables are set in Railway dashboard or via:
+#   railway variables set KEY=VALUE
+#
+# Required variables:
+#   SUPABASE_URL         = https://xxxx.supabase.co
+#   SUPABASE_KEY         = eyJhbGc...  (service role key)
+#   SECRET_KEY           = (random 64-char string)
+#   ALLOWED_ORIGINS      = https://your-dashboard.vercel.app

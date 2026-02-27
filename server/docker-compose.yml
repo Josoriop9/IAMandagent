@@ -1,0 +1,41 @@
+# Local development — mirrors the Railway production setup
+# Usage:
+#   cd server/
+#   docker-compose up --build
+#
+# Backend will be available at http://localhost:8000
+
+version: "3.9"
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hashed-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      # Override to use 1 worker in local dev for easier debugging
+      - WORKERS=1
+    volumes:
+      # Hot-reload: mount source code in dev mode
+      - ./server.py:/app/server.py:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: run with a local Supabase instance
+  # Uncomment if you want full offline dev without cloud Supabase
+  # supabase:
+  #   image: supabase/supabase-db:latest
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_PASSWORD: postgres
