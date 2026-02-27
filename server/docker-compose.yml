@@ -33,9 +33,10 @@ services:
 
   # Optional: run with a local Supabase instance
   # Uncomment if you want full offline dev without cloud Supabase
+  # Set POSTGRES_PASSWORD in your .env file before uncommenting
   # supabase:
   #   image: supabase/supabase-db:latest
   #   ports:
   #     - "5432:5432"
   #   environment:
-  #     POSTGRES_PASSWORD: postgres
+  #     POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
