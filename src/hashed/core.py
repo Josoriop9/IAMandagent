@@ -205,30 +205,36 @@ class HashedCore:
         logger.info("HashedCore shutdown")
 
     def guard(
-        self, tool_name: str, amount_param: Optional[str] = "amount"
+        self,
+        tool_name: str,
+        amount_param: Optional[str] = "amount",
+        raise_on_deny: bool = False,
     ) -> Callable:
         """
         Decorator that guards a function with identity, policy, and logging.
 
         This decorator:
-        1. Signs the operation with the identity
-        2. Validates the operation against policies
+        1. Validates the operation against local + backend policies
+        2. Signs the operation with the identity
         3. Executes the function if allowed
-        4. Logs the operation to the ledger
-        5. Handles PermissionError if policy is violated
+        4. Logs the operation (success OR denial) to the audit trail
+        5. On denial: returns a human-readable string by default so that
+           LangChain/CrewAI/AutoGen agents can respond gracefully, or
+           raises PermissionError if raise_on_deny=True.
 
         Args:
             tool_name: Name of the tool/operation
             amount_param: Name of the parameter containing the amount value
+            raise_on_deny: If True, raise PermissionError on policy denial
+                           (for non-agent code). Default False returns a
+                           denial string so framework agents don't crash.
 
         Returns:
             Decorator function
 
-        Raises:
-            PermissionError: If the operation violates a policy
-
         Example:
-            >>> @core.guard("transfer", amount_param="amount")
+            >>> @core.guard("transfer")           # returns string on deny (safe for agents)
+            >>> @core.guard("transfer", raise_on_deny=True)  # raises PermissionError
             >>> async def transfer(amount: float, to: str):
             ...     return {"status": "success"}
         """
@@ -345,23 +351,60 @@ class HashedCore:
                     return result
 
                 except PermissionError as e:
-                    # Log permission error to ledger
-                    if self._ledger:
-                        await self._ledger.log(
-                            event_type=f"{tool_name}.permission_denied",
-                            data={
-                                "tool_name": tool_name,
-                                "amount": amount,
-                                "error": str(e),
-                            },
-                            metadata={
-                                "public_key": self._identity.public_key_hex,
-                                "details": e.details,
-                            },
-                        )
+                    # ── Audit log the denial ──────────────────────────────
+                    # 1. Log to backend (appears in dashboard)
+                    if self._http_client:
+                        try:
+                            await self._http_client.post(
+                                "/log",
+                                json={
+                                    "operation": tool_name,
+                                    "agent_public_key": self._identity.public_key_hex,
+                                    "status": "denied",
+                                    "data": {
+                                        "tool_name": tool_name,
+                                        "amount": amount,
+                                        "reason": str(e),
+                                    },
+                                    "metadata": {
+                                        "policy": "denied",
+                                    },
+                                },
+                            )
+                            logger.debug(f"Denial for '{tool_name}' logged to backend")
+                        except Exception as log_err:
+                            logger.warning(f"Failed to log denial to backend: {log_err}")
 
-                    logger.error(f"Permission denied for '{tool_name}': {e}")
-                    raise
+                    # 2. Fallback to local ledger
+                    if self._ledger:
+                        try:
+                            await self._ledger.log(
+                                event_type=f"{tool_name}.permission_denied",
+                                data={
+                                    "tool_name": tool_name,
+                                    "amount": amount,
+                                    "error": str(e),
+                                },
+                                metadata={
+                                    "public_key": self._identity.public_key_hex,
+                                    "details": getattr(e, "details", {}),
+                                },
+                            )
+                        except Exception:
+                            pass
+
+                    logger.warning(f"Permission denied for '{tool_name}': {e}")
+
+                    # ── Return or raise based on raise_on_deny ────────────
+                    if raise_on_deny:
+                        raise
+                    # Default: return human-readable string so LangChain/CrewAI
+                    # agents can explain the denial to the user instead of crashing.
+                    return (
+                        f"[HASHED BLOCKED] Permission denied for '{tool_name}': "
+                        f"This operation is not allowed by the agent's governance policies. "
+                        f"Inform the user you cannot perform this action."
+                    )
 
                 except Exception as e:
                     # Log unexpected errors to ledger
