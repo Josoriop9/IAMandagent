@@ -9,13 +9,23 @@ from typing import List, Optional
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Depends, status
+from fastapi import FastAPI, Header, HTTPException, Depends, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 from supabase import create_client, Client
 
 # Load environment variables
 load_dotenv()
+
+# ── Rate Limiter ─────────────────────────────────────────────────────────────
+# Limits are intentionally generous for SDK traffic but protect against abuse.
+# Authenticated endpoints use the API key as the identifier (not IP) so
+# legitimate SDK agents aren't blocked by shared IPs (e.g. cloud NAT).
+limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
 
 # Initialize FastAPI
 app = FastAPI(
@@ -23,6 +33,10 @@ app = FastAPI(
     description="AI Agent Governance - Policy & Audit Management",
     version="0.1.0",
 )
+
+# Wire rate limiter into the app
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS Configuration
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
@@ -179,7 +193,8 @@ class AuthLoginRequest(BaseModel):
 
 
 @app.post("/v1/auth/signup", status_code=status.HTTP_201_CREATED)
-async def auth_signup(request: AuthSignupRequest):
+@limiter.limit("5/minute")           # Prevent account creation spam
+async def auth_signup(http_request: Request, body: AuthSignupRequest):
     """
     Sign up a new user and create their organization.
     
@@ -187,35 +202,31 @@ async def auth_signup(request: AuthSignupRequest):
     2. Stores pending org_name for post-confirmation setup
     """
     try:
-        # Create user via Supabase Auth (admin API)
         auth_response = supabase.auth.admin.create_user({
-            "email": request.email,
-            "password": request.password,
-            "email_confirm": False,  # Require email confirmation
-            "user_metadata": {"org_name": request.org_name}
+            "email": body.email,
+            "password": body.password,
+            "email_confirm": False,
+            "user_metadata": {"org_name": body.org_name}
         })
         
         user = auth_response.user
         if not user:
             raise HTTPException(status_code=400, detail="Failed to create user")
         
-        # Send confirmation email via Supabase magic link
-        # (Supabase handles email sending automatically with create_user when email_confirm=False)
-        # We need to manually trigger the confirmation email
         try:
             supabase.auth.admin.generate_link({
                 "type": "signup",
-                "email": request.email,
-                "password": request.password,
+                "email": body.email,
+                "password": body.password,
             })
         except Exception:
-            pass  # Link generation may fail if email already sent
+            pass
         
         return {
             "message": "Account created! Check your email for confirmation.",
             "user_id": user.id,
-            "email": request.email,
-            "org_name": request.org_name,
+            "email": body.email,
+            "org_name": body.org_name,
             "email_confirmed": False
         }
     
@@ -229,17 +240,17 @@ async def auth_signup(request: AuthSignupRequest):
 
 
 @app.post("/v1/auth/login")
-async def auth_login(request: AuthLoginRequest):
+@limiter.limit("10/minute")          # Brute-force protection
+async def auth_login(http_request: Request, body: AuthLoginRequest):
     """
     Login and return org info + API key.
     
     If org doesn't exist yet (first login after email confirmation), creates it.
     """
     try:
-        # Sign in via Supabase Auth
         auth_response = supabase.auth.sign_in_with_password({
-            "email": request.email,
-            "password": request.password
+            "email": body.email,
+            "password": body.password
         })
         
         user = auth_response.user
@@ -270,7 +281,7 @@ async def auth_login(request: AuthLoginRequest):
             }
         
         # New user (first login after confirmation) - create organization
-        org_name = (user.user_metadata or {}).get("org_name", f"{request.email.split('@')[0]}'s Organization")
+        org_name = (user.user_metadata or {}).get("org_name", f"{body.email.split('@')[0]}'s Organization")
         
         # Generate API key with prefix
         import secrets
