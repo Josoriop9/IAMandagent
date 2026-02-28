@@ -1,13 +1,13 @@
 # Hashed SDK — Production Roadmap
 
-> Last updated: 2026-02-27  
-> Status: **v0.1.0 shipped** — backend live, dashboard live, SDK installable
+> Last updated: 2026-02-28  
+> Status: **Sprint 2 in progress** — backend hardened, retry logic added, 14 guard tests passing
 
 ---
 
 ## Current State
 
-The core product is live end-to-end:
+The core product is live end-to-end and actively hardened:
 
 - ✅ SDK (`HashedCore`, `@core.guard()`, `PolicyEngine`)
 - ✅ CLI (`hashed init / policy / agent / logs`)
@@ -18,11 +18,16 @@ The core product is live end-to-end:
 - ✅ Policy diff-sync (push deletes extras from backend)
 - ✅ Agent delete (backend + local JSON cleanup)
 - ✅ Cryptographic audit trail (Ed25519)
-- ✅ GitHub Actions CI/CD (ci.yml + deploy.yml)
+- ✅ GitHub Actions CI/CD (smoke tests post-Railway deploy)
 - ✅ Railway production deploy (Docker multi-stage)
 - ✅ Vercel dashboard deploy
 - ✅ Separate private repo for dashboard (hashed-dashboard)
 - ✅ SDK defaults to production backend URL
+- ✅ **guard() denial logged to backend** — audit trail now records denied ops
+- ✅ **guard() graceful return** — LangChain/CrewAI agents don't crash on policy denial
+- ✅ **Rate limiting** — signup 5/min, login 10/min, default 300/min (slowapi)
+- ✅ **Retry logic with jitter** — exponential backoff, respects Retry-After, 30s cap
+- ✅ **14 unit tests for @core.guard()** — all passing
 
 ---
 
@@ -30,7 +35,7 @@ The core product is live end-to-end:
 
 | Item | Effort | Status |
 |------|--------|--------|
-| **Rate limiting on all API endpoints** | 2h | ❌ Pending |
+| **Rate limiting on all API endpoints** | 2h | ✅ Done — slowapi, 300 req/min default |
 | **Force HTTPS + HSTS** | 1h | ✅ Railway handles HTTPS automatically |
 | **Verify agent signature on `/guard`** | 4h | ❌ Pending |
 | **API key expiration + rotation endpoint** | 4h | ❌ Pending |
@@ -43,9 +48,9 @@ The core product is live end-to-end:
 
 | Item | Effort | Status |
 |------|--------|--------|
-| **Retry logic with exponential backoff** | 3h | ❌ Pending |
+| **Retry logic with exponential backoff** | 3h | ✅ Done — jitter + Retry-After + 30s cap |
+| **Graceful degradation** (guard returns string on deny) | 4h | ✅ Done — raise_on_deny=False default |
 | **Ledger durability** (persist buffer to disk) | 4h | ❌ Pending |
-| **Graceful degradation** (local policy fallback) | 4h | ❌ Pending |
 | **Connection pooling** in FastAPI | 2h | ❌ Pending |
 
 ---
@@ -55,7 +60,8 @@ The core product is live end-to-end:
 | Item | Effort | Status |
 |------|--------|--------|
 | **GitHub Actions CI** (test on every push) | 2h | ✅ Done — ci.yml |
-| **Unit tests for `@core.guard()`** | 1 day | ❌ Pending |
+| **GitHub Actions smoke tests** (post-deploy) | 2h | ✅ Done — deploy.yml simplified |
+| **Unit tests for `@core.guard()`** | 1 day | ✅ Done — 14 tests, 0 failures |
 | **Integration tests for CLI commands** | 1 day | ❌ Pending |
 | **API tests for backend endpoints** | 1 day | ❌ Pending |
 | **Code coverage badge in README** | 30min | ❌ Pending |
@@ -70,7 +76,7 @@ The core product is live end-to-end:
 | **`docker-compose.yml`** | 2h | ✅ Done |
 | **Deploy to Railway** | 2h | ✅ Done — live |
 | **Supabase production project** | 1h | ⚠️ Using same project for now |
-| **Health check endpoint** | 1h | ✅ Done — `/health` |
+| **Health check endpoint** | 1h | ✅ Done — `/health` returns 200 |
 
 ---
 
@@ -78,9 +84,9 @@ The core product is live end-to-end:
 
 | Item | Effort | Status |
 |------|--------|--------|
-| **Publish to PyPI** as `hashed-sdk` | 2h | ❌ Pending |
+| **Publish to PyPI** as `hashed-sdk` | 2h | ❌ Pending — next |
 | **Semantic versioning + CHANGELOG.md** | 1h | ✅ Done — v0.1.0 |
-| **GitHub Releases** with release notes | 30min | ❌ Pending |
+| **GitHub Releases** with release notes | 30min | ❌ Pending — next |
 | **Optional extras in `pyproject.toml`** | 1h | ❌ Pending |
 
 ---
@@ -111,26 +117,31 @@ The core product is live end-to-end:
 
 ---
 
-## Suggested Next Sprint
+## Sprint Status
 
-### Sprint 2 — Harden & Distribute (1 week)
-1. **PyPI publish** → `pip install hashed-sdk`
-2. **Rate limiting** → `slowapi` on FastAPI
-3. **Unit tests** for `@core.guard()` 
-4. **API key rotation** endpoint
-5. **GitHub Release** for v0.1.0
+### ✅ Sprint 1 — MVP (complete)
+All core features live: SDK, CLI, backend, dashboard, CI/CD.
 
-### Sprint 3 — Dashboard (1 week)
+### 🔄 Sprint 2 — Harden & Distribute (in progress)
+- ✅ Rate limiting (slowapi)
+- ✅ Retry logic with jitter
+- ✅ Guard denial logging + graceful return
+- ✅ Unit tests for guard (14/14)
+- ❌ PyPI publish → `pip install hashed-sdk`
+- ❌ GitHub Release v0.1.0
+- ❌ API key rotation endpoint
+
+### Sprint 3 — Dashboard (next)
 - Pagination on all tables
-- Real-time log feed
+- Real-time log feed (Supabase realtime)
 - Policy editor UI
 - Activity charts
 
-### Sprint 4 — Reliability (1 week)
-- Ledger durability
-- Retry logic
-- Local policy fallback
+### Sprint 4 — Reliability (planned)
+- Ledger durability (write-ahead log)
+- Local policy fallback (offline mode)
 - Supabase production project (separate from dev)
+- Connection pooling in FastAPI
 
 ---
 
