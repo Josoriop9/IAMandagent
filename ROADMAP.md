@@ -1,134 +1,136 @@
 # Hashed SDK — Production Roadmap
 
-> Last updated: 2026-02-26  
-> Status: **MVP complete** — preparing for production
+> Last updated: 2026-02-27  
+> Status: **v0.1.0 shipped** — backend live, dashboard live, SDK installable
 
 ---
 
 ## Current State
 
-The core product is functional end-to-end:
+The core product is live end-to-end:
 
 - ✅ SDK (`HashedCore`, `@core.guard()`, `PolicyEngine`)
 - ✅ CLI (`hashed init / policy / agent / logs`)
-- ✅ Backend FastAPI + Supabase
-- ✅ Dashboard (Next.js)
+- ✅ Backend FastAPI + Supabase → **https://iamandagent-production.up.railway.app**
+- ✅ Dashboard (Next.js) → **https://hashed-dashboard.vercel.app** (private repo)
 - ✅ 5 framework templates (plain, LangChain, CrewAI, Strands, AutoGen)
 - ✅ Auto policy push on first agent run
 - ✅ Policy diff-sync (push deletes extras from backend)
 - ✅ Agent delete (backend + local JSON cleanup)
 - ✅ Cryptographic audit trail (Ed25519)
+- ✅ GitHub Actions CI/CD (ci.yml + deploy.yml)
+- ✅ Railway production deploy (Docker multi-stage)
+- ✅ Vercel dashboard deploy
+- ✅ Separate private repo for dashboard (hashed-dashboard)
+- ✅ SDK defaults to production backend URL
 
 ---
 
-## Priority 1 — Security (Do before any external user)
+## Priority 1 — Security
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **Rate limiting on all API endpoints** | 2h | Prevent abuse / DDoS |
-| **Force HTTPS + HSTS** | 1h | Data in transit protection |
-| **Verify agent signature on `/guard`** | 4h | Backend currently trusts public key without signature check |
-| **API key expiration + rotation endpoint** | 4h | Keys should have TTL |
-| **Move secrets to environment vault** (Railway / Render env vars, not `.env` file in repo) | 2h | No secrets in filesystem |
-| **Add CORS allowlist** (not wildcard) | 1h | Lock down who can call backend |
+| Item | Effort | Status |
+|------|--------|--------|
+| **Rate limiting on all API endpoints** | 2h | ❌ Pending |
+| **Force HTTPS + HSTS** | 1h | ✅ Railway handles HTTPS automatically |
+| **Verify agent signature on `/guard`** | 4h | ❌ Pending |
+| **API key expiration + rotation endpoint** | 4h | ❌ Pending |
+| **Move secrets to environment vault** | 2h | ✅ Done — Railway/Vercel env vars |
+| **Add CORS allowlist** (not wildcard) | 1h | ✅ Done — ALLOWED_ORIGINS configured |
 
 ---
 
 ## Priority 2 — Reliability
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **Retry logic with exponential backoff** in HTTP client | 3h | Backend blips shouldn't crash agents |
-| **Ledger durability**: persist buffer to disk before flush | 4h | Audit logs lost if process dies mid-run |
-| **Graceful degradation**: if backend is down, agents should still run (local policy fallback) | 4h | Offline-first resilience |
-| **Connection pooling** in FastAPI (Supabase client reuse) | 2h | Current: new client per request |
+| Item | Effort | Status |
+|------|--------|--------|
+| **Retry logic with exponential backoff** | 3h | ❌ Pending |
+| **Ledger durability** (persist buffer to disk) | 4h | ❌ Pending |
+| **Graceful degradation** (local policy fallback) | 4h | ❌ Pending |
+| **Connection pooling** in FastAPI | 2h | ❌ Pending |
 
 ---
 
 ## Priority 3 — CI/CD & Testing
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **GitHub Actions workflow** (test on every push to main) | 2h | Catch regressions early |
-| **Unit tests for `@core.guard()`** — allow/deny/log paths | 1 day | Core logic is untested |
-| **Integration tests for CLI commands** | 1 day | `hashed policy push`, `agent delete`, etc. |
-| **API tests for backend endpoints** | 1 day | FastAPI test client |
-| **Code coverage badge in README** | 30min | Signal quality |
+| Item | Effort | Status |
+|------|--------|--------|
+| **GitHub Actions CI** (test on every push) | 2h | ✅ Done — ci.yml |
+| **Unit tests for `@core.guard()`** | 1 day | ❌ Pending |
+| **Integration tests for CLI commands** | 1 day | ❌ Pending |
+| **API tests for backend endpoints** | 1 day | ❌ Pending |
+| **Code coverage badge in README** | 30min | ❌ Pending |
 
 ---
 
 ## Priority 4 — Deploy / Infrastructure
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **Dockerfile for backend server** | 2h | Reproducible deploys |
-| **`docker-compose.yml`** (server + local Supabase) | 2h | One-command local dev |
-| **Deploy to Railway / Render / Fly.io** | 2h | Public backend URL for SDK users |
-| **Supabase production project** (separate from dev) | 1h | Isolate prod data |
-| **Health check endpoint improvements** (DB ping) | 1h | Load balancer readiness probe |
+| Item | Effort | Status |
+|------|--------|--------|
+| **Dockerfile for backend server** | 2h | ✅ Done |
+| **`docker-compose.yml`** | 2h | ✅ Done |
+| **Deploy to Railway** | 2h | ✅ Done — live |
+| **Supabase production project** | 1h | ⚠️ Using same project for now |
+| **Health check endpoint** | 1h | ✅ Done — `/health` |
 
 ---
 
 ## Priority 5 — SDK Distribution
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **Publish to PyPI** as `hashed-sdk` | 2h | `pip install hashed-sdk` instead of git URL |
-| **Semantic versioning + CHANGELOG.md** | 1h | Track what changed between versions |
-| **GitHub Releases** with release notes | 30min | Discoverability |
-| **Optional extras in `pyproject.toml`** (`[langchain]`, `[crewai]`, etc.) | 1h | Users only install what they need |
+| Item | Effort | Status |
+|------|--------|--------|
+| **Publish to PyPI** as `hashed-sdk` | 2h | ❌ Pending |
+| **Semantic versioning + CHANGELOG.md** | 1h | ✅ Done — v0.1.0 |
+| **GitHub Releases** with release notes | 30min | ❌ Pending |
+| **Optional extras in `pyproject.toml`** | 1h | ❌ Pending |
 
 ---
 
 ## Priority 6 — Dashboard Improvements
 
-| Item | Effort | Why |
-|------|--------|-----|
-| **Pagination** on logs and agents tables | 1 day | Current: loads all records |
-| **Real-time updates** (Supabase realtime subscriptions) | 1 day | Live audit feed |
-| **Activity charts** (tool calls over time per agent) | 1 day | Visual governance |
-| **API key management UI** (create, rotate, revoke) | 1 day | Self-serve key rotation |
-| **Policy editor UI** (CRUD without CLI) | 2 days | Non-technical operators |
+| Item | Effort | Status |
+|------|--------|--------|
+| **Pagination** on logs and agents | 1 day | ❌ Pending |
+| **Real-time updates** (Supabase realtime) | 1 day | ❌ Pending |
+| **Activity charts** | 1 day | ❌ Pending |
+| **API key management UI** | 1 day | ❌ Pending |
+| **Policy editor UI** | 2 days | ❌ Pending |
 
 ---
 
-## Priority 7 — Documentation (in progress)
+## Priority 7 — Documentation
 
 | Item | Effort | Status |
 |------|--------|--------|
 | CLI Reference | 2h | ✅ `CLI_GUIDE.md` |
-| API Reference | 2h | ✅ `API_REFERENCE.md` (needs update) |
+| API Reference | 2h | ✅ `API_REFERENCE.md` |
 | SDK Integration Guide | 2h | ✅ `INTEGRATION.md` |
 | Quickstart / README | 2h | ✅ `README.md` |
+| Repository structure guide | 1h | ✅ `REPOS.md` |
 | Framework-specific guides | 4h | 🔄 Partial |
 | Video walkthrough | 1 day | ❌ Not started |
 
 ---
 
-## Suggested Sprint Order
+## Suggested Next Sprint
 
-### Sprint 1 — Harden (1 week)
-- Rate limiting
-- HTTPS + CORS
-- Dockerfile + deploy to Railway
-- GitHub Actions CI
-
-### Sprint 2 — Quality (1 week)
-- Test suite (guard, CLI, API)
-- Ledger durability
-- Retry logic
-- PyPI publish
+### Sprint 2 — Harden & Distribute (1 week)
+1. **PyPI publish** → `pip install hashed-sdk`
+2. **Rate limiting** → `slowapi` on FastAPI
+3. **Unit tests** for `@core.guard()` 
+4. **API key rotation** endpoint
+5. **GitHub Release** for v0.1.0
 
 ### Sprint 3 — Dashboard (1 week)
-- Pagination
-- Real-time logs
+- Pagination on all tables
+- Real-time log feed
 - Policy editor UI
-
-### Sprint 4 — Growth (ongoing)
-- API key management
 - Activity charts
-- More framework templates
-- Video docs
+
+### Sprint 4 — Reliability (1 week)
+- Ledger durability
+- Retry logic
+- Local policy fallback
+- Supabase production project (separate from dev)
 
 ---
 
@@ -138,5 +140,3 @@ The core product is functional end-to-end:
 - Self-hosted Supabase
 - Enterprise SSO (SAML)
 - Webhook notifications
-
-These are post-v1 features.
