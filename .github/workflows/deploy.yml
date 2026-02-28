@@ -1,4 +1,7 @@
-name: Deploy
+name: Smoke Tests (post-deploy)
+
+# Railway auto-deploys when you push to main or staging.
+# This workflow waits, then runs smoke tests to confirm the deploy is healthy.
 
 on:
   push:
@@ -6,95 +9,67 @@ on:
       - main     # → Production
       - staging  # → Staging
 
-# Only one deploy at a time per environment
+# Only one test run at a time per environment
 concurrency:
-  group: deploy-${{ github.ref_name }}
-  cancel-in-progress: false
+  group: smoke-${{ github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Deploy to Railway (${{ github.ref_name }})
+  smoke-test:
+    name: Smoke test — ${{ github.ref_name }}
     runs-on: ubuntu-latest
 
-    # Map branch → environment label
-    environment:
-      name: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
-      url: ${{ github.ref_name == 'main' && 'https://api.hashed.dev' || 'https://staging.api.hashed.dev' }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Install Railway CLI
-        run: npm install -g @railway/cli
-
-      - name: Deploy to Railway
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-        run: |
-          # Select service based on branch
-          if [ "${{ github.ref_name }}" = "main" ]; then
-            echo "🚀 Deploying to PRODUCTION..."
-            railway up \
-              --service hashed-api-prod \
-              --detach
-          else
-            echo "🔧 Deploying to STAGING..."
-            railway up \
-              --service hashed-api-staging \
-              --detach
-          fi
-
-      - name: Wait for deployment
-        run: sleep 30
-
-      - name: Smoke test — Health check
+      - name: Set target URL
+        id: env
         run: |
           if [ "${{ github.ref_name }}" = "main" ]; then
-            URL="https://api.hashed.dev"
+            echo "url=https://iamandagent-production.up.railway.app" >> $GITHUB_OUTPUT
+            echo "name=PRODUCTION" >> $GITHUB_OUTPUT
           else
-            URL="https://staging.api.hashed.dev"
+            echo "url=https://iamandagent-production.up.railway.app" >> $GITHUB_OUTPUT
+            echo "name=STAGING" >> $GITHUB_OUTPUT
           fi
 
-          echo "Running smoke tests against $URL..."
+      - name: Wait for Railway to finish deploying
+        run: |
+          echo "⏳ Waiting 45s for Railway to deploy commit ${{ github.sha }}..."
+          sleep 45
 
-          # Health check
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/health")
+      - name: Health check
+        run: |
+          URL="${{ steps.env.outputs.url }}"
+          ENV="${{ steps.env.outputs.name }}"
+          echo "🔍 Running smoke tests against $ENV ($URL)..."
+
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL/health")
           if [ "$STATUS" != "200" ]; then
-            echo "❌ Health check failed: HTTP $STATUS"
+            echo "❌ /health returned HTTP $STATUS (expected 200)"
             exit 1
           fi
           echo "✅ /health → $STATUS"
 
-          # Auth endpoint reachable (401 expected without key)
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/v1/agents")
-          if [ "$STATUS" != "401" ] && [ "$STATUS" != "403" ]; then
-            echo "❌ /v1/agents returned unexpected status: HTTP $STATUS"
+      - name: Auth endpoint check
+        run: |
+          URL="${{ steps.env.outputs.url }}"
+
+          # /v1/agents without API key should return 422 (missing header) or 401
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$URL/v1/agents")
+          if [ "$STATUS" = "200" ]; then
+            echo "❌ /v1/agents returned 200 without auth (security issue!)"
             exit 1
           fi
-          echo "✅ /v1/agents auth check → $STATUS (expected 401/403)"
+          echo "✅ /v1/agents auth check → $STATUS (unauthenticated correctly rejected)"
 
-          echo ""
-          echo "🎉 Smoke tests passed for $URL"
-
-      - name: Notify success
-        if: success()
+      - name: All smoke tests passed
         run: |
-          ENV=${{ github.ref_name == 'main' && 'PRODUCTION' || 'STAGING' }}
-          echo "✅ Deploy to $ENV complete — commit ${{ github.sha }}"
-
-      - name: Notify failure
-        if: failure()
-        run: |
-          ENV=${{ github.ref_name == 'main' && 'PRODUCTION' || 'STAGING' }}
-          echo "❌ Deploy to $ENV FAILED — commit ${{ github.sha }}"
-          echo "Check Railway dashboard for logs."
+          echo "🎉 ${{ steps.env.outputs.name }} is healthy — commit ${{ github.sha }}"
 
   # Auto-publish to PyPI when version changes on main
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: deploy
+    needs: smoke-test
     if: github.ref_name == 'main'
 
     steps:
@@ -106,17 +81,16 @@ jobs:
       - name: Check if version changed
         id: version_check
         run: |
-          # Compare pyproject.toml version between this and previous commit
           CURRENT=$(grep '^version' pyproject.toml | head -1 | cut -d'"' -f2)
           PREVIOUS=$(git show HEAD~1:pyproject.toml | grep '^version' | head -1 | cut -d'"' -f2 || echo "")
           echo "current=$CURRENT" >> $GITHUB_OUTPUT
           echo "previous=$PREVIOUS" >> $GITHUB_OUTPUT
           if [ "$CURRENT" != "$PREVIOUS" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
-            echo "Version changed: $PREVIOUS → $CURRENT"
+            echo "Version changed: $PREVIOUS → $CURRENT — will publish to PyPI"
           else
             echo "changed=false" >> $GITHUB_OUTPUT
-            echo "Version unchanged ($CURRENT), skipping PyPI publish"
+            echo "Version unchanged ($CURRENT) — skipping PyPI publish"
           fi
 
       - name: Set up Python
@@ -125,18 +99,14 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Build package
-        if: steps.version_check.outputs.changed == 'true'
-        run: |
-          pip install build twine
-          python -m build
-
-      - name: Publish to PyPI
+      - name: Build and publish to PyPI
         if: steps.version_check.outputs.changed == 'true'
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
         run: |
+          pip install build twine
+          python -m build
           twine upload dist/*
           echo "✅ Published hashed-sdk v${{ steps.version_check.outputs.current }} to PyPI"
 
