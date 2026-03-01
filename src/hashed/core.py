@@ -262,11 +262,20 @@ class HashedCore:
                     # 2. Validate against BACKEND policy (if connected)
                     if self._http_client:
                         try:
+                            # Sign the guard request so the backend can verify
+                            # this request comes from the legitimate agent.
+                            _guard_canonical = {
+                                "operation": tool_name,
+                                "agent_public_key": self._identity.public_key_hex,
+                            }
+                            _guard_signed = self._identity.sign_data(_guard_canonical)
+
                             guard_response = await self._http_client.post(
                                 "/guard",
                                 json={
                                     "operation": tool_name,
                                     "agent_public_key": self._identity.public_key_hex,
+                                    "signature": _guard_signed.get("signature"),
                                     "data": {
                                         "amount": amount,
                                         **{k: str(v) for k, v in kwargs.items()}

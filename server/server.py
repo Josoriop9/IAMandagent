@@ -3,7 +3,10 @@ Hashed SDK - Control Plane API Server
 FastAPI backend for AI Agent Governance
 """
 
+import json
+import logging
 import os
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
 
@@ -18,20 +21,38 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 from supabase import create_client, Client
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
+
 # Load environment variables
 load_dotenv()
 
 # ── Rate Limiter ─────────────────────────────────────────────────────────────
-# Limits are intentionally generous for SDK traffic but protect against abuse.
-# Authenticated endpoints use the API key as the identifier (not IP) so
-# legitimate SDK agents aren't blocked by shared IPs (e.g. cloud NAT).
 limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
+
+
+# ── Connection Pool / Lifespan ────────────────────────────────────────────────
+# FastAPI lifespan ensures resources are initialised once at startup and
+# cleanly released at shutdown. This is the recommended pattern over the
+# deprecated @app.on_event decorators.
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage server-wide resources: startup → yield → shutdown."""
+    logger.info("Hashed Control Plane starting up")
+    # Any async connection pools or background tasks can be started here.
+    # The Supabase client is already a module-level singleton; future
+    # additions (e.g., async Supabase, Redis) should be initialised here.
+    yield
+    # ── Shutdown ──────────────────────────────────────────────────────────────
+    logger.info("Hashed Control Plane shutting down")
+
 
 # Initialize FastAPI
 app = FastAPI(
     title="Hashed Control Plane API",
     description="AI Agent Governance - Policy & Audit Management",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Wire rate limiter into the app
@@ -420,9 +441,39 @@ async def guard_check(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Agent not found"
             )
-        
+
         agent = agent_response.data[0]
-        
+
+        # ── Signature verification ────────────────────────────────────────
+        # If the SDK sent a signature, verify it. This proves the request
+        # actually comes from the agent that owns the private key — not
+        # someone who merely knows the public key.
+        # Older SDK versions may omit the signature; we warn but allow them
+        # so we don't break existing deployments on upgrade.
+        guard_signature = request.get("signature")
+        if guard_signature and agent_public_key:
+            canonical = json.dumps(
+                {"operation": operation, "agent_public_key": agent_public_key},
+                sort_keys=True,
+            )
+            sig_valid = verify_signature(agent_public_key, guard_signature, canonical)
+            if not sig_valid:
+                logger.warning(
+                    f"Invalid guard signature from agent '{agent['name']}' "
+                    f"for operation '{operation}' — rejecting"
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid agent signature. Request rejected.",
+                )
+            logger.debug(f"Guard signature verified for agent '{agent['name']}'")
+        elif agent_public_key:
+            # No signature provided — log a warning but allow (backward compat)
+            logger.warning(
+                f"Guard request from agent '{agent['name']}' has no signature "
+                f"(operation='{operation}'). Upgrade SDK to enable signing."
+            )
+
         # Get policies for this operation
         # Check agent-specific policy first
         policy_response = supabase.table("policies")\
