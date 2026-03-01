@@ -1,7 +1,7 @@
 # Hashed SDK — Production Roadmap
 
 > Last updated: 2026-02-28  
-> Status: **Sprint 2 in progress** — backend hardened, retry logic added, 14 guard tests passing
+> Status: **Sprint 2 complete** — all security & reliability items done, ready for distribution
 
 ---
 
@@ -28,6 +28,9 @@ The core product is live end-to-end and actively hardened:
 - ✅ **Rate limiting** — signup 5/min, login 10/min, default 300/min (slowapi)
 - ✅ **Retry logic with jitter** — exponential backoff, respects Retry-After, 30s cap
 - ✅ **14 unit tests for @core.guard()** — all passing
+- ✅ **Ed25519 signature on `/guard`** — SDK signs + backend verifies (prevents impersonation)
+- ✅ **Ledger durability** — SQLite WAL, logs survive crashes, replayed on restart
+- ✅ **FastAPI lifespan** — proper startup/shutdown, connection pool foundation
 
 ---
 
@@ -37,7 +40,7 @@ The core product is live end-to-end and actively hardened:
 |------|--------|--------|
 | **Rate limiting on all API endpoints** | 2h | ✅ Done — slowapi, 300 req/min default |
 | **Force HTTPS + HSTS** | 1h | ✅ Railway handles HTTPS automatically |
-| **Verify agent signature on `/guard`** | 4h | ❌ Pending |
+| **Verify agent signature on `/guard`** | 4h | ✅ Done — SDK signs + backend verifies (Ed25519) |
 | **API key expiration + rotation endpoint** | 4h | ❌ Pending |
 | **Move secrets to environment vault** | 2h | ✅ Done — Railway/Vercel env vars |
 | **Add CORS allowlist** (not wildcard) | 1h | ✅ Done — ALLOWED_ORIGINS configured |
@@ -50,8 +53,8 @@ The core product is live end-to-end and actively hardened:
 |------|--------|--------|
 | **Retry logic with exponential backoff** | 3h | ✅ Done — jitter + Retry-After + 30s cap |
 | **Graceful degradation** (guard returns string on deny) | 4h | ✅ Done — raise_on_deny=False default |
-| **Ledger durability** (persist buffer to disk) | 4h | ❌ Pending |
-| **Connection pooling** in FastAPI | 2h | ❌ Pending |
+| **Ledger durability** (persist buffer to disk) | 4h | ✅ Done — SQLite WAL, crash-safe, auto-replay |
+| **Connection pooling** in FastAPI | 2h | ✅ Done — FastAPI lifespan, httpx connection limits |
 
 ---
 
@@ -122,26 +125,28 @@ The core product is live end-to-end and actively hardened:
 ### ✅ Sprint 1 — MVP (complete)
 All core features live: SDK, CLI, backend, dashboard, CI/CD.
 
-### 🔄 Sprint 2 — Harden & Distribute (in progress)
+### ✅ Sprint 2 — Harden & Distribute (complete)
 - ✅ Rate limiting (slowapi)
 - ✅ Retry logic with jitter
 - ✅ Guard denial logging + graceful return
 - ✅ Unit tests for guard (14/14)
+- ✅ Ed25519 signature on /guard (impersonation prevention)
+- ✅ Ledger durability (SQLite WAL)
+- ✅ FastAPI lifespan + connection pooling
+
+### 🚀 Sprint 3 — Distribute + Dashboard (next)
 - ❌ PyPI publish → `pip install hashed-sdk`
 - ❌ GitHub Release v0.1.0
 - ❌ API key rotation endpoint
+- ❌ Pagination on logs and agents tables
+- ❌ Real-time log feed (Supabase realtime)
+- ❌ Policy editor UI
 
-### Sprint 3 — Dashboard (next)
-- Pagination on all tables
-- Real-time log feed (Supabase realtime)
-- Policy editor UI
-- Activity charts
-
-### Sprint 4 — Reliability (planned)
-- Ledger durability (write-ahead log)
-- Local policy fallback (offline mode)
-- Supabase production project (separate from dev)
-- Connection pooling in FastAPI
+### Sprint 4 — Reliability & Scale (planned)
+- Local policy fallback (offline mode, no backend needed)
+- Supabase production project (separate from dev/staging)
+- Integration tests for CLI commands
+- API tests for backend endpoints
 
 ---
 
