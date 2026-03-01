@@ -98,6 +98,7 @@ addopts = [
     "--strict-config",
     "--cov=hashed",
     "--cov-report=term-missing",
+    "--cov-report=xml:coverage.xml",
 ]
 
 [tool.black]

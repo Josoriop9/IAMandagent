@@ -6,6 +6,8 @@ A professional Python SDK that provides cryptographic identity, policy enforceme
 
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Coverage](https://img.shields.io/badge/coverage-37%25-yellow.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
+[![Tests](https://img.shields.io/badge/tests-76%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
 
 ---
 

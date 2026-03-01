@@ -65,9 +65,9 @@ The core product is live end-to-end and actively hardened:
 | **GitHub Actions CI** (test on every push) | 2h | ✅ Done — ci.yml |
 | **GitHub Actions smoke tests** (post-deploy) | 2h | ✅ Done — deploy.yml simplified |
 | **Unit tests for `@core.guard()`** | 1 day | ✅ Done — 14 tests, 0 failures |
-| **Integration tests for CLI commands** | 1 day | ❌ Pending |
-| **API tests for backend endpoints** | 1 day | ❌ Pending |
-| **Code coverage badge in README** | 30min | ❌ Pending |
+| **Integration tests for CLI commands** | 1 day | ✅ Done — 11 CLI tests (Typer CliRunner, local commands) |
+| **API tests for backend endpoints** | 1 day | ✅ Done — 9 FastAPI tests (TestClient, Supabase mocked) |
+| **Code coverage badge in README** | 30min | ✅ Done — shields.io badge, 37% coverage, XML report |
 
 ---
 
@@ -145,8 +145,8 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 ### Sprint 4 — Reliability & Scale (planned)
 - Local policy fallback (offline mode, no backend needed)
 - Supabase production project (separate from dev/staging)
-- Integration tests for CLI commands
-- API tests for backend endpoints
+- Increase test coverage from 37% → 60%+
+- Network-mocked CLI tests (policy push, agent list)
 
 ---
 
