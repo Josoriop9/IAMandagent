@@ -198,6 +198,40 @@ async def health_check():
     }
 
 
+@app.get("/debug/config")
+async def debug_config():
+    """
+    Temporary diagnostic endpoint — shows runtime config and DNS status.
+    Remove after the Railway DNS issue is confirmed resolved.
+    """
+    import socket
+    supabase_url_raw = os.getenv("SUPABASE_URL", "NOT_SET")
+    supabase_key_raw = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or "NOT_SET"
+
+    # DNS probe — try to resolve the Supabase hostname
+    dns_ok = False
+    dns_error = None
+    hostname = supabase_url_raw.replace("https://", "").replace("http://", "").split("/")[0]
+    try:
+        socket.getaddrinfo(hostname, 443)
+        dns_ok = True
+    except Exception as exc:
+        dns_error = str(exc)
+
+    return {
+        "supabase_url_prefix": supabase_url_raw[:40],
+        "supabase_url_length": len(supabase_url_raw),
+        "supabase_url_has_newline": "\n" in supabase_url_raw or "\r" in supabase_url_raw,
+        "supabase_key_prefix": supabase_key_raw[:20],
+        "supabase_key_length": len(supabase_key_raw),
+        "railway_port": os.getenv("PORT", "NOT_SET"),
+        "dns_hostname": hostname,
+        "dns_ok": dns_ok,
+        "dns_error": dns_error,
+        "python_version": __import__("sys").version,
+    }
+
+
 # ============================================================================
 # AUTH ENDPOINTS (Signup, Login, Email Confirmation)
 # ============================================================================
