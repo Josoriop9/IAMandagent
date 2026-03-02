@@ -168,6 +168,50 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 
 ---
 
+## Release Readiness Assessment
+
+> As of 2026-03-01 — **Ready for closed beta, NOT ready for public GA**
+
+### 🔴 GA Blockers (must fix before public release)
+
+| Blocker | Risk | Sprint |
+|---------|------|--------|
+| **fail-open by default** — backend down = no governance | Critical — agents bypass all policies on connectivity failure | 4 |
+| **`/debug/config` live in production** — exposes runtime config | High — remove immediately after confirming stable | 3 |
+| **No API key rotation endpoint** — leaked key has no revocation | High — no self-serve recovery path for customers | 4 |
+| **Single Supabase for dev + prod** — migration bug = data loss | High — separate projects required before GA | 4 |
+| **No error monitoring** — outages detected by users, not alerts | Medium — Sentry + Railway alerts needed | 4 |
+| **Coverage 37%** — insufficient for production confidence | Medium — target 55%+ before GA | 4 |
+
+### 🟡 Known Acceptable Risks for Beta
+
+- Ed25519 signatures ✅ — cryptographic layer is solid
+- Rate limiting ✅ — abuse protection in place
+- Retry + jitter ✅ — network resilience handled
+- Ledger WAL ✅ — audit durability covered
+- No IP blocklist / abuse detection — acceptable for beta with trusted users
+
+### ✅ Closed Beta Recommendation (today)
+
+Safe to onboard **5-10 trusted teams** under the following conditions:
+- Users understand beta limitations
+- No production financial agents
+- Manual monitoring by team on Supabase + Railway logs
+
+---
+
+## Sprint 4 — GA Preparation (6-week plan)
+
+| Week | Deliverable | Priority |
+|------|-------------|----------|
+| **Week 1** | Remove `/debug/config` endpoint; implement `fail-closed` mode as opt-in (`HASHED_FAIL_CLOSED=true`); add Sentry error tracking | 🔴 Critical |
+| **Week 2** | `POST /v1/auth/api-key/rotate` endpoint; separate Supabase project for production; add Railway alerts | 🔴 Critical |
+| **Week 3** | Coverage 37% → 55%; network-mocked CLI tests (`policy push`, `agent list`) | 🟡 High |
+| **Week 4** | PyPI publish `pip install hashed-sdk`; GitHub Release v0.1.0; optional extras in pyproject.toml | 🟡 High |
+| **Week 5-6** | Dashboard: pagination, real-time log feed, policy editor UI, activity charts | 🟢 Medium |
+
+---
+
 ## Non-Goals (v1)
 
 - Multi-region deployment
