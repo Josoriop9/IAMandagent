@@ -249,7 +249,7 @@ class AuthLoginRequest(BaseModel):
 
 @app.post("/v1/auth/signup", status_code=status.HTTP_201_CREATED)
 @limiter.limit("5/minute")           # Prevent account creation spam
-async def auth_signup(http_request: Request, body: AuthSignupRequest):
+async def auth_signup(request: Request, body: AuthSignupRequest):
     """
     Sign up a new user and create their organization.
     
@@ -296,7 +296,7 @@ async def auth_signup(http_request: Request, body: AuthSignupRequest):
 
 @app.post("/v1/auth/login")
 @limiter.limit("10/minute")          # Brute-force protection
-async def auth_login(http_request: Request, body: AuthLoginRequest):
+async def auth_login(request: Request, body: AuthLoginRequest):
     """
     Login and return org info + API key.
     
