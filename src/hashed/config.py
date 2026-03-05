@@ -109,6 +109,23 @@ class HashedConfig(BaseModel):
         description="Enable debug mode",
     )
 
+    # ── Fail-closed mode ────────────────────────────────────────────────────
+    # When True: if the backend is unreachable, operations are DENIED by default.
+    # When False (default / fail-open): if the backend is unreachable, operations
+    # are ALLOWED so agents don't get bricked by network issues.
+    #
+    # Set HASHED_FAIL_CLOSED=true in your .env for production financial agents.
+    fail_closed: bool = Field(
+        default_factory=lambda: os.getenv("HASHED_FAIL_CLOSED", "false").lower() == "true",
+        description=(
+            "When True, operations are denied if the backend is unreachable "
+            "(fail-closed / secure-by-default). "
+            "When False (default), operations are allowed on connectivity failure "
+            "(fail-open / available-by-default). "
+            "Set HASHED_FAIL_CLOSED=true for financial or high-security agents."
+        ),
+    )
+
     class Config:
         """Pydantic configuration."""
 

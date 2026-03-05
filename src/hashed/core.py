@@ -300,6 +300,32 @@ class HashedCore:
                         except PermissionError:
                             raise
                         except Exception as e:
+                            # ── Fail-closed mode ─────────────────────────────────
+                            # If HASHED_FAIL_CLOSED=true (or config.fail_closed=True)
+                            # and the backend is unreachable, deny the operation.
+                            # This is the secure-by-default posture for financial /
+                            # high-security agents.
+                            # Default (fail-open) allows the operation so agents
+                            # aren't bricked by transient connectivity issues.
+                            if self._config.fail_closed:
+                                denial_reason = (
+                                    f"Operation '{tool_name}' blocked: backend unreachable "
+                                    f"in fail-closed mode. "
+                                    f"Set HASHED_FAIL_CLOSED=false to allow offline execution."
+                                )
+                                logger.error(
+                                    f"Backend guard check failed (fail-closed active) "
+                                    f"for '{tool_name}': {e}"
+                                )
+                                raise PermissionError(
+                                    denial_reason,
+                                    details={
+                                        "tool_name": tool_name,
+                                        "reason": "backend_unreachable",
+                                        "fail_closed": True,
+                                        "error": str(e),
+                                    },
+                                )
                             logger.warning(f"Backend guard check error (continuing): {e}")
 
                     # 3. Sign the operation

@@ -27,6 +27,27 @@ logging.basicConfig(level=logging.INFO)
 # Load environment variables
 load_dotenv()
 
+# ── Sentry error monitoring ───────────────────────────────────────────────────
+# Only activates when SENTRY_DSN is set in Railway environment variables.
+# Set SENTRY_DSN to your project's DSN from sentry.io to enable.
+_sentry_dsn = os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=_sentry_dsn,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            traces_sample_rate=0.1,   # 10% of requests traced (performance)
+            send_default_pii=False,   # Never send PII to Sentry
+            environment=os.getenv("RAILWAY_ENVIRONMENT", "production"),
+        )
+        logger.info("Sentry error monitoring enabled")
+    except ImportError:
+        logger.warning("sentry-sdk not installed — error monitoring disabled. "
+                       "Run: pip install 'sentry-sdk[fastapi]'")
+
 # ── Rate Limiter ─────────────────────────────────────────────────────────────
 limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
 
@@ -197,39 +218,6 @@ async def health_check():
         "service": "hashed-control-plane"
     }
 
-
-@app.get("/debug/config")
-async def debug_config():
-    """
-    Temporary diagnostic endpoint — shows runtime config and DNS status.
-    Remove after the Railway DNS issue is confirmed resolved.
-    """
-    import socket
-    supabase_url_raw = os.getenv("SUPABASE_URL", "NOT_SET")
-    supabase_key_raw = os.getenv("SUPABASE_SERVICE_KEY") or os.getenv("SUPABASE_KEY") or "NOT_SET"
-
-    # DNS probe — try to resolve the Supabase hostname
-    dns_ok = False
-    dns_error = None
-    hostname = supabase_url_raw.replace("https://", "").replace("http://", "").split("/")[0]
-    try:
-        socket.getaddrinfo(hostname, 443)
-        dns_ok = True
-    except Exception as exc:
-        dns_error = str(exc)
-
-    return {
-        "supabase_url_prefix": supabase_url_raw[:40],
-        "supabase_url_length": len(supabase_url_raw),
-        "supabase_url_has_newline": "\n" in supabase_url_raw or "\r" in supabase_url_raw,
-        "supabase_key_prefix": supabase_key_raw[:20],
-        "supabase_key_length": len(supabase_key_raw),
-        "railway_port": os.getenv("PORT", "NOT_SET"),
-        "dns_hostname": hostname,
-        "dns_ok": dns_ok,
-        "dns_error": dns_error,
-        "python_version": __import__("sys").version,
-    }
 
 
 # ============================================================================

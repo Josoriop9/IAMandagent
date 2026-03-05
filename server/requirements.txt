@@ -6,3 +6,4 @@ python-dotenv>=1.0.0
 cryptography>=41.0.0
 python-multipart>=0.0.6
 slowapi>=0.1.9
+sentry-sdk[fastapi]>=2.0.0
