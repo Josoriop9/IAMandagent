@@ -121,8 +121,8 @@ The core product is live end-to-end and actively hardened:
 | **Pagination** on logs and agents | 1 day | ✅ Done — logs 25/page, agents 10/page, numbered pills |
 | **Real-time log feed** (Supabase realtime) | 1 day | ✅ Done — INSERT subscription, live badge, no more polling |
 | **Real-time agent list** (Supabase realtime) | 1 day | ✅ Done — INSERT/DELETE, ecosystem view auto-updates |
-| **Activity charts** | 1 day | ❌ Pending |
-| **Policy editor UI** | 2 days | ❌ Pending |
+| **Activity charts** | 1 day | ✅ Done — agent activity leaderboard with stacked bars (success/denied/error) |
+| **Policy editor UI** | 2 days | ✅ Done — inline toggle allow/deny, requires_approval, max_amount, delete |
 
 ---
 
@@ -174,7 +174,8 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 - ❌ GitHub Release v0.1.0
 - ✅ Dashboard: pagination on logs + agents (done 2026-03-05)
 - ✅ Dashboard: real-time log/agent feed via Supabase Realtime (done 2026-03-05)
-- ❌ Dashboard: policy editor UI
+- ✅ Dashboard: activity charts — agent leaderboard (done 2026-03-05)
+- ✅ Dashboard: policy editor UI — inline toggle/amount/delete (done 2026-03-05)
 
 ---
 
