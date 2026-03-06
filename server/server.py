@@ -404,6 +404,50 @@ async def auth_me(org: dict = Depends(verify_api_key)):
     }
 
 
+@app.post("/v1/auth/rotate-key")
+@limiter.limit("3/hour")             # Prevent abuse — max 3 rotations per hour
+async def rotate_api_key(request: Request, org: dict = Depends(verify_api_key)):
+    """
+    Rotate the organization's API key.
+
+    Generates a new cryptographically secure API key, immediately invalidates
+    the old one, and returns the new key. The new key is shown ONCE — the
+    caller must save it before the response is lost.
+
+    Rate limited: 3 rotations per hour per IP.
+
+    Returns:
+        new_api_key: The new API key (save this — shown only once)
+        org_id: Organization ID for reference
+        rotated_at: Timestamp of rotation
+    """
+    import secrets as _secrets
+
+    try:
+        new_api_key = f"hashed_{_secrets.token_hex(32)}"
+
+        supabase.table("organizations").update({
+            "api_key": new_api_key,
+            "updated_at": datetime.utcnow().isoformat(),
+        }).eq("id", org["id"]).execute()
+
+        logger.info(f"API key rotated for org '{org['name']}' (id={org['id']})")
+
+        return {
+            "message": "API key rotated successfully. Save the new key — it will not be shown again.",
+            "new_api_key": new_api_key,
+            "org_id": org["id"],
+            "org_name": org["name"],
+            "rotated_at": datetime.utcnow().isoformat(),
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to rotate API key: {str(e)}"
+        )
+
+
 # ============================================================================
 # SDK COMPATIBILITY ENDPOINTS (No /v1/ prefix for backward compatibility)
 # ============================================================================

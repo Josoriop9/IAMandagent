@@ -1433,6 +1433,106 @@ def whoami():
     console.print(table)
 
 
+@app.command("rotate-key")
+def rotate_key(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
+):
+    """
+    🔄 Rotate your organization's API key.
+
+    Generates a new API key and immediately invalidates the old one.
+    Your local credentials file is updated automatically.
+
+    ⚠️  Any agents using the old key will fail until you update their .env files.
+
+    Example:
+        hashed rotate-key
+        hashed rotate-key --yes   # Skip confirmation
+    """
+    import httpx
+
+    creds = load_credentials()
+    if not creds:
+        error("Not logged in. Run: hashed login")
+        raise typer.Exit(1)
+
+    backend_url = creds.get("backend_url", "http://localhost:8000")
+    api_key = creds.get("api_key", "")
+
+    console.print(Panel.fit(
+        "[bold yellow]🔄 API Key Rotation[/bold yellow]\n"
+        "[dim]The old key will be invalidated immediately.[/dim]",
+        border_style="yellow"
+    ))
+
+    console.print(f"\n[dim]Current key:[/dim] [yellow]{api_key[:25]}...[/yellow]")
+
+    if not yes:
+        console.print(
+            "\n[bold red]⚠️  WARNING:[/bold red] All agents using the current key will "
+            "stop working until you update their [bold].env[/bold] files."
+        )
+        confirmed = typer.confirm("\nAre you sure you want to rotate the API key?")
+        if not confirmed:
+            info("Rotation cancelled.")
+            raise typer.Exit(0)
+
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.post(
+                f"{backend_url}/v1/auth/rotate-key",
+                headers={"X-API-KEY": api_key},
+            )
+
+            if response.status_code == 429:
+                error("Rate limit exceeded. You can rotate at most 3 times per hour.")
+                raise typer.Exit(1)
+
+            if response.status_code == 401:
+                error("Invalid API key. Run: hashed login")
+                raise typer.Exit(1)
+
+            if not response.is_success:
+                detail = response.json().get("detail", "Rotation failed")
+                error(f"Rotation failed: {detail}")
+                raise typer.Exit(1)
+
+            data = response.json()
+            new_key = data["new_api_key"]
+
+        # Update credentials file with new key
+        creds["api_key"] = new_key
+        creds["rotated_at"] = data["rotated_at"]
+        save_credentials(creds)
+
+        console.print()
+        success("API key rotated successfully!")
+        console.print()
+
+        table = Table(title="New API Key", box=box.ROUNDED)
+        table.add_column("Property", style="cyan")
+        table.add_column("Value", style="green")
+        table.add_row("New API Key", new_key)
+        table.add_row("Organization", data["org_name"])
+        table.add_row("Rotated At", data["rotated_at"])
+        table.add_row("Credentials File", str(CREDENTIALS_FILE))
+        console.print(table)
+
+        console.print()
+        console.print("[bold yellow]⚠️  Action required:[/bold yellow]")
+        console.print("   Update [bold]HASHED_API_KEY[/bold] in every agent's [bold].env[/bold] file:")
+        console.print(f"   [dim]HASHED_API_KEY={new_key}[/dim]")
+
+    except httpx.ConnectError:
+        error(f"Cannot connect to backend at {backend_url}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error(f"Rotation failed: {e}")
+        raise typer.Exit(1)
+
+
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
