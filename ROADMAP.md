@@ -118,8 +118,9 @@ The core product is live end-to-end and actively hardened:
 |------|--------|--------|
 | **Settings page** | 1 day | ✅ Done — org info + API key rotation UI |
 | **API key rotation UI** | 1 day | ✅ Done — 2-step confirm, copy new key, error handling |
-| **Pagination** on logs and agents | 1 day | ❌ Pending |
-| **Real-time updates** (Supabase realtime) | 1 day | ❌ Pending |
+| **Pagination** on logs and agents | 1 day | ✅ Done — logs 25/page, agents 10/page, numbered pills |
+| **Real-time log feed** (Supabase realtime) | 1 day | ✅ Done — INSERT subscription, live badge, no more polling |
+| **Real-time agent list** (Supabase realtime) | 1 day | ✅ Done — INSERT/DELETE, ecosystem view auto-updates |
 | **Activity charts** | 1 day | ❌ Pending |
 | **Policy editor UI** | 2 days | ❌ Pending |
 
@@ -171,8 +172,8 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 - ❌ Coverage 37% → 55% (network-mocked CLI tests: `policy push`, `agent list`)
 - ❌ PyPI publish → `pip install hashed-sdk`
 - ❌ GitHub Release v0.1.0
-- ❌ Dashboard: pagination on logs + agents
-- ❌ Dashboard: real-time log feed (Supabase realtime)
+- ✅ Dashboard: pagination on logs + agents (done 2026-03-05)
+- ✅ Dashboard: real-time log/agent feed via Supabase Realtime (done 2026-03-05)
 - ❌ Dashboard: policy editor UI
 
 ---
