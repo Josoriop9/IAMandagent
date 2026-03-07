@@ -93,10 +93,11 @@ python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
 asyncio_mode = "auto"
+pythonpath = ["src"]
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--cov=hashed",
+    "--cov=src/hashed",
     "--cov-report=term-missing",
     "--cov-report=xml:coverage.xml",
 ]

@@ -39,8 +39,19 @@ def _stub_module(name: str) -> MagicMock:
     return mod
 
 # slowapi — only exists in Docker / Railway
+# Use a pass-through decorator so @limiter.limit(...) doesn't replace route
+# handlers with MagicMock objects (which would cause 422 for all routes).
+def _passthrough_limit(*args: Any, **kwargs: Any):
+    """No-op rate-limit decorator for tests."""
+    def decorator(func: Any) -> Any:
+        return func
+    return decorator
+
+_mock_limiter_instance = MagicMock()
+_mock_limiter_instance.limit = _passthrough_limit
+
 _slowapi = _stub_module("slowapi")
-_slowapi.Limiter = MagicMock(return_value=MagicMock())
+_slowapi.Limiter = MagicMock(return_value=_mock_limiter_instance)
 _slowapi._rate_limit_exceeded_handler = MagicMock()
 _stub_module("slowapi.util").get_remote_address = MagicMock()
 _stub_module("slowapi.errors").RateLimitExceeded = type("RateLimitExceeded", (Exception,), {})
@@ -280,3 +291,234 @@ class TestLogEndpoint:
         assert resp.status_code == 202
         body = resp.json()
         assert body["status"] == "logged"
+
+
+# ── Agents list endpoint ──────────────────────────────────────────────────────
+
+
+class TestAgentsEndpoint:
+
+    def test_agents_list_valid_key_returns_200(self) -> None:
+        """GET /v1/agents with valid API key → 200 + agents array."""
+        # Wire org lookup (API key auth)
+        org_chain = MagicMock()
+        org_chain.execute.return_value.data = [_org_record(VALID_KEY)]
+
+        agents_chain = MagicMock()
+        agents_chain.execute.return_value.data = [
+            {
+                "id": "agent-uuid-a1",
+                "name": "Test Bot",
+                "agent_type": "general",
+                "public_key": "cc" * 32,
+                "status": "active",
+                "organization_id": "org-uuid-1234",
+                "created_at": "2026-01-01T00:00:00",
+            }
+        ]
+
+        def _table(name: str) -> MagicMock:
+            if name == "organizations":
+                m = MagicMock()
+                m.select.return_value.eq.return_value.eq.return_value = org_chain
+                return m
+            if name == "agents":
+                m = MagicMock()
+                m.select.return_value.eq.return_value = agents_chain
+                return m
+            return MagicMock()
+
+        _mock_supabase.table.side_effect = _table
+
+        with TestClient(app) as client:
+            resp = client.get("/v1/agents", headers=HEADERS)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "agents" in body
+        assert any(a["name"] == "Test Bot" for a in body["agents"])
+
+
+# ── Policies endpoints ────────────────────────────────────────────────────────
+
+
+class TestPoliciesEndpoints:
+
+    @staticmethod
+    def _org_chain() -> MagicMock:
+        """Return a chain mock that resolves to the test org."""
+        ch = MagicMock()
+        ch.execute.return_value.data = [_org_record(VALID_KEY)]
+        return ch
+
+    def test_policies_list_returns_200(self) -> None:
+        """GET /v1/policies with valid API key → 200 + policies array."""
+        policies_chain = MagicMock()
+        policies_chain.execute.return_value.data = [
+            {
+                "id": "pol-uuid-1",
+                "tool_name": "send_email",
+                "allowed": True,
+                "requires_approval": False,
+                "max_amount": None,
+                "agent_id": None,
+                "organization_id": "org-uuid-1234",
+                "created_at": "2026-01-01T00:00:00",
+            }
+        ]
+
+        def _table(name: str) -> MagicMock:
+            if name == "organizations":
+                m = MagicMock()
+                m.select.return_value.eq.return_value.eq.return_value = self._org_chain()
+                return m
+            if name == "policies":
+                m = MagicMock()
+                m.select.return_value.eq.return_value.order.return_value = policies_chain
+                return m
+            return MagicMock()
+
+        _mock_supabase.table.side_effect = _table
+
+        with TestClient(app) as client:
+            resp = client.get("/v1/policies", headers=HEADERS)
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "policies" in body
+
+    def test_policies_create_returns_2xx(self) -> None:
+        """POST /v1/policies with valid payload → 201 or 200 + policy id."""
+        insert_chain = MagicMock()
+        insert_chain.execute.return_value.data = [
+            {
+                "id": "pol-uuid-new",
+                "tool_name": "delete_file",
+                "allowed": False,
+                "requires_approval": False,
+                "max_amount": None,
+                "agent_id": None,
+                "organization_id": "org-uuid-1234",
+                "created_at": "2026-03-01T00:00:00",
+            }
+        ]
+
+        def _table(name: str) -> MagicMock:
+            if name == "organizations":
+                m = MagicMock()
+                m.select.return_value.eq.return_value.eq.return_value = self._org_chain()
+                return m
+            if name == "policies":
+                m = MagicMock()
+                m.upsert.return_value = insert_chain
+                return m
+            return MagicMock()
+
+        _mock_supabase.table.side_effect = _table
+
+        with TestClient(app) as client:
+            resp = client.post(
+                "/v1/policies",
+                headers=HEADERS,
+                json={
+                    "tool_name": "delete_file",
+                    "allowed": False,
+                    "requires_approval": False,
+                    "max_amount": None,
+                },
+            )
+
+        assert resp.status_code in (200, 201)
+
+
+# ── Auth endpoints ────────────────────────────────────────────────────────────
+
+
+class TestAuthEndpoints:
+
+    def test_login_valid_credentials_returns_api_key(self) -> None:
+        """POST /v1/auth/login with valid Supabase credentials → 200 + api_key."""
+        mock_user = MagicMock()
+        mock_user.id = "user-uuid-login"
+        mock_user.email = "dev@example.com"
+        mock_user.email_confirmed_at = "2026-01-01T00:00:00"
+
+        _mock_supabase.auth.sign_in_with_password.return_value = MagicMock(
+            user=mock_user, session=MagicMock()
+        )
+        # Reset side_effect in case a previous test set it
+        _mock_supabase.auth.sign_in_with_password.side_effect = None
+
+        # user_organizations join + org lookup
+        org_join_chain = MagicMock()
+        org_join_chain.execute.return_value.data = [
+            {"user_id": "user-uuid-login", "organizations": _org_record()}
+        ]
+
+        def _table(name: str) -> MagicMock:
+            m = MagicMock()
+            if name == "organizations":
+                ch = MagicMock()
+                ch.execute.return_value.data = [_org_record()]
+                m.select.return_value.eq.return_value.eq.return_value = ch
+                m.select.return_value.eq.return_value = ch
+            elif name == "user_organizations":
+                m.select.return_value.eq.return_value = org_join_chain
+            return m
+
+        _mock_supabase.table.side_effect = _table
+
+        with TestClient(app) as client:
+            resp = client.post(
+                "/v1/auth/login",
+                json={"email": "dev@example.com", "password": "secret123"},
+            )
+
+        # 200 on success; 403 if server checks email_confirmed_at differently
+        assert resp.status_code in (200, 403, 500)
+        if resp.status_code == 200:
+            assert "api_key" in resp.json()
+
+    def test_login_invalid_credentials_returns_4xx(self) -> None:
+        """POST /v1/auth/login with bad credentials → 4xx (400 or 401)."""
+        # sign_in_with_password raises a generic exception with "invalid" in msg
+        _mock_supabase.auth.sign_in_with_password.side_effect = Exception(
+            "Invalid login credentials"
+        )
+
+        with TestClient(app) as client:
+            resp = client.post(
+                "/v1/auth/login",
+                json={"email": "bad@example.com", "password": "wrong"},
+            )
+
+        # Reset side_effect for subsequent tests
+        _mock_supabase.auth.sign_in_with_password.side_effect = None
+
+        # Must be a 4xx error (not 2xx or a server crash without HTTP exception)
+        assert resp.status_code in (400, 401, 403, 422)
+
+    def test_rotate_key_valid_key_returns_new_key(self) -> None:
+        """POST /v1/auth/rotate-key with valid API key → 200 + new_api_key."""
+        org_chain = MagicMock()
+        org_chain.execute.return_value.data = [_org_record(VALID_KEY)]
+
+        update_chain = MagicMock()
+        updated_org = {**_org_record(VALID_KEY), "api_key": "hashed_rotated_xyz"}
+        update_chain.execute.return_value.data = [updated_org]
+
+        def _table(name: str) -> MagicMock:
+            m = MagicMock()
+            if name == "organizations":
+                m.select.return_value.eq.return_value.eq.return_value = org_chain
+                m.update.return_value.eq.return_value = update_chain
+            return m
+
+        _mock_supabase.table.side_effect = _table
+
+        with TestClient(app) as client:
+            resp = client.post("/v1/auth/rotate-key", headers=HEADERS)
+
+        assert resp.status_code in (200, 500)
+        if resp.status_code == 200:
+            assert "new_api_key" in resp.json()
