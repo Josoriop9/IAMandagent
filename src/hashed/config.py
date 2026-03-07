@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from hashed.exceptions import HashedConfigError
 
@@ -126,11 +126,10 @@ class HashedConfig(BaseModel):
         ),
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        frozen = True  # Make the config immutable
-        validate_assignment = True
+    model_config = ConfigDict(
+        frozen=True,            # Make the config immutable
+        validate_assignment=True,
+    )
 
     @field_validator("api_url")
     @classmethod

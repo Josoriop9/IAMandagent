@@ -9,7 +9,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class HashAlgorithm(str, Enum):
@@ -47,6 +47,17 @@ class HashRequest(BaseModel):
         description="Optional salt for the hash",
     )
 
+    model_config = ConfigDict(
+        use_enum_values=True,
+        json_schema_extra={
+            "example": {
+                "data": "Hello, World!",
+                "algorithm": "sha256",
+                "encoding": "utf-8",
+            }
+        },
+    )
+
     @field_validator("encoding")
     @classmethod
     def validate_encoding(cls, v: str) -> str:
@@ -56,18 +67,6 @@ class HashRequest(BaseModel):
         except LookupError:
             raise ValueError(f"Unsupported encoding: {v}")
         return v
-
-    class Config:
-        """Pydantic configuration."""
-
-        use_enum_values = True
-        json_schema_extra = {
-            "example": {
-                "data": "Hello, World!",
-                "algorithm": "sha256",
-                "encoding": "utf-8",
-            }
-        }
 
 
 class HashResponse(BaseModel):
@@ -94,17 +93,16 @@ class HashResponse(BaseModel):
         description="Additional metadata about the operation",
     )
 
-    class Config:
-        """Pydantic configuration."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "hash_value": "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e",
                 "algorithm": "sha256",
                 "timestamp": "2024-01-01T00:00:00",
                 "metadata": {},
             }
-        }
+        },
+    )
 
 
 class APIResponse(BaseModel):

@@ -53,7 +53,7 @@ jobs:
           HASHED_IDENTITY_PASSWORD: "test_password"
         run: |
           pytest tests/ \
-            --cov=hashed \
+            --cov=src/hashed \
             --cov-report=term-missing \
             --cov-report=xml \
             -v
