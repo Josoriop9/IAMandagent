@@ -1,0 +1,22 @@
+# .gitleaksignore — Gitleaks false-positive allowlist
+#
+# These entries are EXAMPLE / TEST credentials that are intentionally
+# present in the repository. They are NOT real secrets and do NOT grant
+# access to any production system.
+#
+# Format: one SHA256 fingerprint per line (gitleaks generate-baseline)
+# or glob patterns via the [allowlist] section in .gitleaks.toml.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# Files that contain placeholder / example values:
+#   server/.env.example
+#   server/.env.production.example
+#   examples/.env
+#   database/schema.sql        (test_secret_key placeholder)
+#   .github/workflows/ci.yml   (CI test credentials)
+#
+# All production secrets live exclusively in:
+#   Railway env vars  (SUPABASE_URL, SUPABASE_KEY, SECRET_KEY)
+#   Vercel env vars   (NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+#   OS keychain       (~/.hashed/credentials.json — api_key via keyring)
+# ─────────────────────────────────────────────────────────────────────────────

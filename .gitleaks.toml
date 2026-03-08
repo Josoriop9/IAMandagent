@@ -1,0 +1,27 @@
+# .gitleaks.toml — Gitleaks configuration for hashed-sdk
+# Docs: https://github.com/gitleaks/gitleaks#configuration
+#
+# Allowlist paths that intentionally contain placeholder / example credentials.
+# These are NOT real secrets — no production access is granted by these values.
+
+title = "hashed-sdk gitleaks config"
+
+[allowlist]
+  description = "Allowlist for example and test files"
+  paths = [
+    # Example environment files — contain placeholder values only
+    '''^server/\.env\.example$''',
+    '''^server/\.env\.production\.example$''',
+    '''^examples/\.env$''',
+    # CI workflow — contains test credentials for sandboxed CI runners
+    '''^\.github/workflows/ci\.yml$''',
+    # SQL schema — contains placeholder SECRET_KEY for documentation
+    '''^database/schema\.sql$''',
+    '''^database/debug.*\.sql$''',
+    '''^database/clean_slate\.sql$''',
+    # Test fixtures and conftest
+    '''^tests/conftest\.py$''',
+    # Documentation files
+    '''^SETUP_GUIDE\.md$''',
+    '''^INTEGRATION\.md$''',
+  ]
