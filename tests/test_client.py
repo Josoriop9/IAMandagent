@@ -80,14 +80,113 @@ class TestHashedClient:
         import os
         salt = os.urandom(16)
         key = client.derive_key("password", salt, length=32)
-        
+
         assert len(key) == 32
         assert isinstance(key, bytes)
-        
+
         # Same password and salt should produce same key
         key2 = client.derive_key("password", salt, length=32)
         assert key == key2
-        
+
         # Different password should produce different key
         key3 = client.derive_key("different", salt, length=32)
         assert key != key3
+
+
+# ── HTTP proxy methods + lifecycle ───────────────────────────────────────────
+
+
+class TestHashedClientHTTPAndLifecycle:
+    """Covers request_async, request_sync, close_async, close_sync."""
+
+    @pytest.mark.asyncio
+    async def test_request_async_delegates_to_http_client(
+        self, test_config: HashedConfig
+    ) -> None:
+        """request_async() delegates to the internal HTTPClient."""
+        from unittest.mock import AsyncMock, patch
+
+        client = HashedClient(config=test_config)
+        with patch.object(
+            client._http_client,
+            "request_async",
+            new_callable=AsyncMock,
+            return_value={"status": "ok"},
+        ) as mock_req:
+            result = await client.request_async("GET", "/ping")
+
+        assert result == {"status": "ok"}
+        mock_req.assert_awaited_once_with("GET", "/ping", data=None)
+
+    def test_request_sync_delegates_to_http_client(
+        self, test_config: HashedConfig
+    ) -> None:
+        """request_sync() delegates to the internal HTTPClient."""
+        from unittest.mock import MagicMock, patch
+
+        client = HashedClient(config=test_config)
+        with patch.object(
+            client._http_client,
+            "request_sync",
+            return_value={"pong": True},
+        ) as mock_req:
+            result = client.request_sync("GET", "/health")
+
+        assert result == {"pong": True}
+        mock_req.assert_called_once_with("GET", "/health", data=None)
+
+    @pytest.mark.asyncio
+    async def test_close_async_delegates_to_http_client(
+        self, test_config: HashedConfig
+    ) -> None:
+        """close_async() calls HTTPClient.close_async()."""
+        from unittest.mock import AsyncMock
+
+        client = HashedClient(config=test_config)
+        client._http_client.close_async = AsyncMock()
+
+        await client.close_async()
+
+        client._http_client.close_async.assert_awaited_once()
+
+    def test_close_sync_delegates_to_http_client(
+        self, test_config: HashedConfig
+    ) -> None:
+        """close_sync() calls HTTPClient.close_sync()."""
+        from unittest.mock import MagicMock
+
+        client = HashedClient(config=test_config)
+        client._http_client.close_sync = MagicMock()
+
+        client.close_sync()
+
+        client._http_client.close_sync.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_async_context_manager_calls_close_async(
+        self, test_config: HashedConfig
+    ) -> None:
+        """__aexit__ should call close_async()."""
+        from unittest.mock import AsyncMock
+
+        client = HashedClient(config=test_config)
+        client._http_client.close_async = AsyncMock()
+
+        async with client:
+            pass
+
+        client._http_client.close_async.assert_awaited_once()
+
+    def test_sync_context_manager_calls_close_sync(
+        self, test_config: HashedConfig
+    ) -> None:
+        """__exit__ should call close_sync()."""
+        from unittest.mock import MagicMock
+
+        client = HashedClient(config=test_config)
+        client._http_client.close_sync = MagicMock()
+
+        with client:
+            pass
+
+        client._http_client.close_sync.assert_called_once()

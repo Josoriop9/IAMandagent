@@ -605,3 +605,112 @@ class TestAsyncLedgerProperties:
             await ledger.stop(flush=False)
 
         assert ledger.is_running is False
+
+
+# ── WAL crash recovery on start() ────────────────────────────────────────────
+
+
+class TestWalCrashRecovery:
+    """start() should re-queue unsent WAL entries from previous session."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "recovery_test.db")
+        _wal_init(db)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_start_replays_unsent_entries(self, wal_db: str) -> None:
+        """Unsent WAL entries from a prior crash are re-queued on start()."""
+        # Seed two unsent entries directly in the WAL
+        e1 = {"event_type": "crash.event1", "data": {"n": 1}, "metadata": {}, "timestamp": "t1"}
+        e2 = {"event_type": "crash.event2", "data": {"n": 2}, "metadata": {}, "timestamp": "t2"}
+        _wal_insert(wal_db, e1)
+        _wal_insert(wal_db, e2)
+
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            # Both crash entries should be in the queue
+            assert ledger.queue_size == 2
+            await ledger.stop(flush=False)
+
+    @pytest.mark.asyncio
+    async def test_start_no_unsent_entries_empty_queue(self, wal_db: str) -> None:
+        """If WAL has no unsent entries, queue should be empty after start."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            assert ledger.queue_size == 0
+            await ledger.stop(flush=False)
+
+
+# ── _send_batch error paths ───────────────────────────────────────────────────
+
+
+class TestSendBatchErrorPaths:
+    """Cover the non-success and HTTP error branches in _send_batch()."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "err_test.db")
+        _wal_init(db)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_send_batch_non_success_logs_error(self, wal_db: str) -> None:
+        """_send_batch() with a non-success HTTP response logs error but does not raise."""
+        import httpx
+
+        mock_client = AsyncMock()
+        error_resp = MagicMock(is_success=False, status_code=500, text="Internal Server Error")
+        mock_client.post = AsyncMock(return_value=error_resp)
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            # Should not raise
+            logs = [{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}]
+            await ledger._send_batch(logs)
+            await ledger.stop(flush=False)
+
+    @pytest.mark.asyncio
+    async def test_send_batch_http_error_does_not_raise(self, wal_db: str) -> None:
+        """_send_batch() with httpx.HTTPError should log and not propagate."""
+        import httpx
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            logs = [{"event_type": "y", "data": {}, "metadata": {}, "timestamp": "t"}]
+            # Must not raise
+            await ledger._send_batch(logs)
+            await ledger.stop(flush=False)
+
+    @pytest.mark.asyncio
+    async def test_send_batch_unexpected_exception_does_not_raise(self, wal_db: str) -> None:
+        """_send_batch() with an unexpected exception logs and does not propagate."""
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=RuntimeError("unexpected"))
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            logs = [{"event_type": "z", "data": {}, "metadata": {}, "timestamp": "t"}]
+            await ledger._send_batch(logs)
+            await ledger.stop(flush=False)
