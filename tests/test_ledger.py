@@ -330,3 +330,278 @@ class TestAsyncLedgerLifecycle:
             await ledger.start()
             assert Path(wal_db).exists()
             await ledger.stop(flush=False)
+
+
+# ── Fernet encryption in WAL helpers ─────────────────────────────────────────
+
+
+class TestWalFernetEncryption:
+    """_wal_insert + _wal_rows_to_entries with AES encryption."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "enc_test.db")
+        _wal_init(db)
+        return db
+
+    def test_fernet_insert_stores_encrypted_data(self, wal_db: str) -> None:
+        """Inserted data should NOT be readable as plain JSON when encrypted."""
+        from cryptography.fernet import Fernet
+
+        fernet = Fernet(Fernet.generate_key())
+        entry = {
+            "event_type": "transfer.success",
+            "data": {"amount": 99.0, "to": "Alice"},
+            "metadata": {"sig": "abc"},
+            "timestamp": "2026-01-01T00:00:00",
+        }
+
+        _wal_insert(wal_db, entry, fernet=fernet)
+
+        # Raw SQLite row should be unreadable as JSON
+        rows = _wal_get_unsent(wal_db)
+        assert len(rows) == 1
+        _, _, raw_data, raw_meta, _ = rows[0]
+
+        # Should not be valid JSON (it's a Fernet token, not plaintext)
+        with pytest.raises(Exception):
+            json.loads(raw_data)
+
+    def test_fernet_round_trip(self, wal_db: str) -> None:
+        """Data encrypted on insert can be decrypted on retrieve."""
+        from cryptography.fernet import Fernet
+
+        fernet = Fernet(Fernet.generate_key())
+        entry = {
+            "event_type": "test.event",
+            "data": {"key": "value", "num": 42},
+            "metadata": {"meta_key": "meta_val"},
+            "timestamp": "2026-01-01T12:00:00",
+        }
+
+        _wal_insert(wal_db, entry, fernet=fernet)
+        rows = _wal_get_unsent(wal_db)
+        entries = _wal_rows_to_entries(rows, fernet=fernet)
+
+        assert len(entries) == 1
+        assert entries[0]["data"] == entry["data"]
+        assert entries[0]["metadata"] == entry["metadata"]
+
+    def test_fernet_decryption_fallback_on_plaintext(self, wal_db: str) -> None:
+        """_wal_rows_to_entries falls back to plaintext for unencrypted rows."""
+        from cryptography.fernet import Fernet
+
+        # Insert WITHOUT encryption (simulates pre-encryption rows on upgrade)
+        entry = {
+            "event_type": "legacy.event",
+            "data": {"old": "data"},
+            "metadata": {},
+            "timestamp": "2025-12-31T23:59:59",
+        }
+        _wal_insert(wal_db, entry, fernet=None)   # plain insert
+
+        rows = _wal_get_unsent(wal_db)
+        fernet = Fernet(Fernet.generate_key())
+
+        # Should NOT raise — falls back to JSON parse
+        entries = _wal_rows_to_entries(rows, fernet=fernet)
+        assert entries[0]["data"] == {"old": "data"}
+
+
+# ── AsyncLedger.log() ─────────────────────────────────────────────────────────
+
+
+class TestAsyncLedgerLog:
+    """Tests for AsyncLedger.log() — the primary public API."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "log_test.db")
+        _wal_init(db)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_log_enqueues_entry(self, wal_db: str) -> None:
+        """log() should enqueue the entry so queue_size increases by 1."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            before = ledger.queue_size
+            await ledger.log("test.event", {"key": "val"})
+            after = ledger.queue_size
+            assert after == before + 1
+            await ledger.stop(flush=False)
+
+    @pytest.mark.asyncio
+    async def test_log_writes_to_wal(self, wal_db: str) -> None:
+        """log() should persist the entry to the SQLite WAL before queueing."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            await ledger.log("transfer.success", {"amount": 100.0}, metadata={"sig": "xyz"})
+            await ledger.stop(flush=False)
+
+        # WAL entry should exist
+        rows = _wal_get_unsent(wal_db)
+        assert len(rows) >= 1
+        event_types = [r[1] for r in rows]
+        assert "transfer.success" in event_types
+
+    @pytest.mark.asyncio
+    async def test_log_includes_metadata_and_timestamp(self, wal_db: str) -> None:
+        """log() entry should have event_type, data, metadata, and timestamp."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            await ledger.log(
+                "payment.denied",
+                {"tool": "send_money"},
+                metadata={"policy": "max_amount exceeded"},
+            )
+
+            # Get the queued entry before stop
+            entry = await asyncio.wait_for(ledger._queue.get(), timeout=1.0)
+            ledger._queue.task_done()
+            await ledger.stop(flush=False)
+
+        assert entry["event_type"] == "payment.denied"
+        assert entry["data"]["tool"] == "send_money"
+        assert entry["metadata"]["policy"] == "max_amount exceeded"
+        assert "timestamp" in entry
+
+
+# ── AsyncLedger._send_batch() ─────────────────────────────────────────────────
+
+
+class TestAsyncLedgerSendBatch:
+    """Tests for _send_batch() — HTTP batch send + WAL acknowledgment."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "batch_test.db")
+        _wal_init(db)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_send_batch_calls_http_post(self, wal_db: str) -> None:
+        """_send_batch() should POST to the endpoint with the log payload."""
+        mock_client = AsyncMock()
+        mock_resp = MagicMock(is_success=True, status_code=202)
+        mock_client.post = AsyncMock(return_value=mock_resp)
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+
+            logs = [
+                {"event_type": "a.success", "data": {"x": 1}, "metadata": {}, "timestamp": "2026-01-01"},
+                {"event_type": "b.denied",  "data": {"y": 2}, "metadata": {}, "timestamp": "2026-01-02"},
+            ]
+            # Put tasks in queue so task_done() works
+            for _ in logs:
+                ledger._queue.put_nowait({})
+            for _ in logs:
+                ledger._queue.get_nowait()
+
+            await ledger._send_batch(logs)
+            await ledger.stop(flush=False)
+
+        assert mock_client.post.call_count >= 1
+        call_kwargs = mock_client.post.call_args
+        payload = call_kwargs[1]["json"] if call_kwargs[1] else call_kwargs[0][1]
+        assert "logs" in payload
+        assert payload["batch_size"] == 2
+
+    @pytest.mark.asyncio
+    async def test_send_batch_marks_wal_sent_on_success(self, wal_db: str) -> None:
+        """After a successful send, WAL entries should be removed."""
+        mock_client = AsyncMock()
+        mock_resp = MagicMock(is_success=True, status_code=202)
+        mock_client.post = AsyncMock(return_value=mock_resp)
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            await ledger.log("evt.ok", {"n": 1})
+
+            entry = await asyncio.wait_for(ledger._queue.get(), timeout=1.0)
+            wal_id = entry.get("_wal_id")
+
+            # Confirm WAL entry exists
+            unsent_before = _wal_get_unsent(wal_db)
+            assert any(r[0] == wal_id for r in unsent_before)
+
+            await ledger._send_batch([entry])
+
+            await ledger.stop(flush=False)
+
+        # WAL entry should be gone after successful send
+        unsent_after = _wal_get_unsent(wal_db)
+        assert not any(r[0] == wal_id for r in unsent_after)
+
+    @pytest.mark.asyncio
+    async def test_send_batch_noop_when_no_client(self, wal_db: str) -> None:
+        """_send_batch() should be a no-op (no crash) when _client is None."""
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+        ledger._client = None  # force None
+
+        # Should not raise
+        await ledger._send_batch([{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}])
+
+
+# ── AsyncLedger properties ────────────────────────────────────────────────────
+
+
+class TestAsyncLedgerProperties:
+    """Tests for queue_size and is_running properties."""
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "props_test.db")
+        _wal_init(db)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_queue_size_reflects_pending_entries(self, wal_db: str) -> None:
+        """queue_size should match the number of unprocessed entries."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            assert ledger.queue_size == 0
+
+            await ledger.log("evt1", {"x": 1})
+            await ledger.log("evt2", {"x": 2})
+            assert ledger.queue_size == 2
+            await ledger.stop(flush=False)
+
+    @pytest.mark.asyncio
+    async def test_is_running_toggles(self, wal_db: str) -> None:
+        """is_running should be False before start, True during, False after stop."""
+        mock_client = AsyncMock()
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        assert ledger.is_running is False
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            assert ledger.is_running is True
+            await ledger.stop(flush=False)
+
+        assert ledger.is_running is False

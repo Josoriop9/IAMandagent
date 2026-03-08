@@ -347,8 +347,13 @@ class HashedCore:
                         }
                     )
 
-                    # 4. Execute the function
-                    result = await func(*args, **kwargs)
+                    # 4. Execute the function (supports both async and sync callables)
+                    # asyncio.iscoroutinefunction() returns False for regular def, so
+                    # we call first then only await if we got a coroutine back.
+                    # This lets @core.guard() decorate both async def and def tools.
+                    result = func(*args, **kwargs)
+                    if asyncio.iscoroutine(result):
+                        result = await result
 
                     # 5. Log successful operation (backend OR local ledger, not both)
                     logged = False
