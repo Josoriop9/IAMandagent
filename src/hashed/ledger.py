@@ -11,6 +11,8 @@ Producer-Consumer pattern with crash-safe durability.
 """
 
 import asyncio
+import base64
+import hashlib
 import json
 import logging
 import sqlite3
@@ -20,6 +22,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+from cryptography.fernet import Fernet, InvalidToken
 
 from hashed.config import HashedConfig
 from hashed.exceptions import HashedAPIError
@@ -28,6 +31,38 @@ logger = logging.getLogger(__name__)
 
 # Default WAL database location (relative to CWD, hidden file)
 _DEFAULT_WAL_PATH = ".hashed_wal.db"
+
+# ── WAL encryption (C-08 remediation — OWASP ASVS 4.0 L2) ───────────────────
+_WAL_KDF_SALT = b"hashed-wal-v1"   # static salt — acceptable because the
+                                    # API key is already 128-bit random entropy
+
+
+def _derive_fernet_key(api_key: str) -> Optional[Fernet]:
+    """Derive a Fernet key from the API key using PBKDF2-HMAC-SHA256.
+
+    The derived key is deterministic given the same ``api_key``, which is
+    required so the WAL can be decrypted after a process restart.
+
+    Uses the ``cryptography`` library (already a dependency).
+    Returns ``None`` if ``api_key`` is empty/None so that encryption is
+    silently skipped when no key is configured.
+
+    Security properties:
+    - 128-bit base key (API key = ``hashed_`` + 32 hex chars)
+    - 100 000 PBKDF2 iterations (NIST SP 800-132 recommendation)
+    - AES-128-CBC + HMAC-SHA256 via Fernet
+    - Threat model: attacker has the .db file but NOT the API key
+    """
+    if not api_key:
+        return None
+    raw = hashlib.pbkdf2_hmac(
+        "sha256",
+        api_key.encode("utf-8"),
+        _WAL_KDF_SALT,
+        iterations=100_000,
+        dklen=32,
+    )
+    return Fernet(base64.urlsafe_b64encode(raw))
 
 
 # ── WAL helpers (sync, run in executor) ──────────────────────────────────────
@@ -49,16 +84,29 @@ def _wal_init(db_path: str) -> None:
         conn.commit()
 
 
-def _wal_insert(db_path: str, entry: Dict[str, Any]) -> int:
-    """Insert a log entry into the WAL. Returns the new row id."""
+def _wal_insert(db_path: str, entry: Dict[str, Any], fernet: Optional[Fernet] = None) -> int:
+    """Insert a log entry into the WAL. Returns the new row id.
+
+    If a ``Fernet`` cipher is supplied, the ``data`` and ``metadata`` fields
+    are AES-encrypted before writing to disk.  The ``event_type`` and
+    ``timestamp`` columns are left in plaintext (needed for replay sorting and
+    operational visibility without the key).
+    """
+    data_str = json.dumps(entry["data"])
+    metadata_str = json.dumps(entry.get("metadata", {}))
+
+    if fernet:
+        data_str = fernet.encrypt(data_str.encode("utf-8")).decode("ascii")
+        metadata_str = fernet.encrypt(metadata_str.encode("utf-8")).decode("ascii")
+
     with sqlite3.connect(db_path) as conn:
         cur = conn.execute(
             "INSERT INTO wal_entries (event_type, data, metadata, timestamp) "
             "VALUES (?, ?, ?, ?)",
             (
                 entry["event_type"],
-                json.dumps(entry["data"]),
-                json.dumps(entry.get("metadata", {})),
+                data_str,
+                metadata_str,
                 entry["timestamp"],
             ),
         )
@@ -82,10 +130,31 @@ def _wal_mark_sent(db_path: str, ids: List[int]) -> None:
         conn.commit()
 
 
-def _wal_rows_to_entries(rows: List[Tuple]) -> List[Dict[str, Any]]:
-    """Convert SQLite rows to log-entry dicts."""
+def _wal_rows_to_entries(
+    rows: List[Tuple],
+    fernet: Optional[Fernet] = None,
+) -> List[Dict[str, Any]]:
+    """Convert SQLite rows to log-entry dicts.
+
+    If a ``Fernet`` cipher is supplied, attempts to decrypt ``data`` and
+    ``metadata`` fields.  Falls back to treating them as plaintext if
+    decryption fails — this enables zero-downtime migration of existing WAL
+    databases that were written without encryption.
+    """
     entries = []
     for row_id, event_type, data_json, metadata_json, timestamp in rows:
+        if fernet:
+            # Attempt decryption; fall through to plaintext on InvalidToken
+            # so pre-encryption WAL rows are replayed correctly on first upgrade.
+            try:
+                data_json = fernet.decrypt(data_json.encode("ascii")).decode("utf-8")
+            except (InvalidToken, Exception):
+                pass  # already plaintext (migration path)
+            try:
+                metadata_json = fernet.decrypt(metadata_json.encode("ascii")).decode("utf-8")
+            except (InvalidToken, Exception):
+                pass
+
         entries.append({
             "_wal_id": row_id,
             "event_type": event_type,
@@ -157,6 +226,22 @@ class AsyncLedger:
             str(Path(wal_path or _DEFAULT_WAL_PATH)) if wal_path is not False else None
         )
 
+        # ── WAL encryption (C-08) ─────────────────────────────────────────────
+        # Derive a Fernet cipher from the API key.  When the API key is not
+        # configured, WAL entries are stored in plaintext and a warning is
+        # emitted.  Callers should always pass api_key for production use.
+        self._fernet: Optional[Fernet] = _derive_fernet_key(self._api_key)
+        if self._wal_path and not self._fernet:
+            logger.warning(
+                "⚠️  WAL encryption DISABLED — no api_key configured. "
+                "Audit log entries at %s will be stored in plaintext. "
+                "Pass api_key= to AsyncLedger for AES-128 at-rest encryption "
+                "(OWASP ASVS 4.0 L2 — C-08).",
+                self._wal_path,
+            )
+        elif self._wal_path and self._fernet:
+            logger.debug("WAL encryption enabled (Fernet/AES-128 — PBKDF2-SHA256 key derivation)")
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -177,10 +262,10 @@ class AsyncLedger:
             loop = asyncio.get_event_loop()
             await loop.run_in_executor(None, _wal_init, self._wal_path)
 
-            # Replay crash-surviving entries
+            # Replay crash-surviving entries (decrypt with stored Fernet key)
             unsent = await loop.run_in_executor(None, _wal_get_unsent, self._wal_path)
             if unsent:
-                recovered = _wal_rows_to_entries(unsent)
+                recovered = _wal_rows_to_entries(unsent, fernet=self._fernet)
                 logger.info(f"WAL recovery: re-queuing {len(recovered)} unsent log entries")
                 for entry in recovered:
                     try:
@@ -256,10 +341,12 @@ class AsyncLedger:
             "timestamp": datetime.utcnow().isoformat(),
         }
 
-        # Write to WAL before touching the in-memory queue
+        # Write to WAL before touching the in-memory queue (encrypted if Fernet set)
         if self._wal_path:
             loop = asyncio.get_event_loop()
-            wal_id = await loop.run_in_executor(None, _wal_insert, self._wal_path, entry)
+            wal_id = await loop.run_in_executor(
+                None, _wal_insert, self._wal_path, entry, self._fernet
+            )
             entry["_wal_id"] = wal_id
 
         try:

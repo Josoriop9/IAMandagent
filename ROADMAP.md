@@ -257,7 +257,7 @@ These do not require scanning tools — they are confirmed from reading the sour
 | C-05 | **No CSP headers on dashboard** — No `Content-Security-Policy` header on Vercel. XSS has no mitigation layer | 🟠 HIGH | `dashboard/next.config.ts` | ✅ Fixed 2026-03-08 |
 | C-06 | **Credentials file world-readable** — `~/.hashed/credentials.json` permissions not enforced (should be `0600`) | 🟠 HIGH | `src/hashed/cli.py` | ✅ N/A — `chmod 0o600` already at cli.py:1167 |
 | C-07 | **No timing-safe API key comparison** — `verify_api_key` uses `==` string comparison, vulnerable to timing oracle | 🟡 MEDIUM | `server/server.py:152` | ✅ Fixed 2026-03-08 — `hmac.compare_digest()` |
-| C-08 | **WAL SQLite stores unencrypted audit logs** — `~/.hashed/wal.db` on agent host; PII/financial data persists in plaintext | 🟡 MEDIUM | `src/hashed/ledger.py` | ❌ Open — next sprint |
+| C-08 | **WAL SQLite stores unencrypted audit logs** — `~/.hashed/wal.db` on agent host; PII/financial data persists in plaintext | 🟡 MEDIUM | `src/hashed/ledger.py` | ✅ Fixed 2026-03-08 — Fernet/AES-128-CBC + PBKDF2-SHA256(api_key, 100k) on `data`+`metadata` fields; plaintext fallback for migration |
 | C-09 | **No Dependabot / automated dep updates** — CVEs in dependencies go undetected | 🟡 MEDIUM | `.github/` | ✅ Fixed 2026-03-08 — `.github/dependabot.yml` (5 ecosystems) |
 | C-10 | **Ed25519 identity private keys — encryption at rest unclear** — key files may be stored unencrypted on agent hosts | 🟡 MEDIUM | `src/hashed/identity.py` | ✅ Fixed 2026-03-08 — warning logged when no password; `BestAvailableEncryption` + `chmod 0600` already in `identity_store.py` |
 
