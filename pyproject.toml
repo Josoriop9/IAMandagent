@@ -87,10 +87,11 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/hashed-sdk"
-Documentation = "https://hashed-sdk.readthedocs.io"
-Repository = "https://github.com/yourusername/hashed-sdk"
-Issues = "https://github.com/yourusername/hashed-sdk/issues"
+Homepage = "https://github.com/Josoriop9/IAMandagent"
+Documentation = "https://github.com/Josoriop9/IAMandagent/blob/main/README.md"
+Repository = "https://github.com/Josoriop9/IAMandagent"
+Issues = "https://github.com/Josoriop9/IAMandagent/issues"
+Changelog = "https://github.com/Josoriop9/IAMandagent/blob/main/CHANGELOG.md"
 
 [tool.setuptools.packages.find]
 where = ["src"]

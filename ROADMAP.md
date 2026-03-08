@@ -1,7 +1,7 @@
 # Hashed SDK — Production Roadmap
 
-> Last updated: 2026-03-05  
-> Status: **Sprint 3 complete** — GA blockers resolved, PyPI publish next
+> Last updated: 2026-03-08  
+> Status: **Sprint 4 complete** — 93% feature-complete; PyPI publish deferred by design
 
 ---
 
@@ -43,6 +43,10 @@ The core product is live end-to-end and actively hardened:
 - ✅ **API key rotation** — `POST /v1/auth/rotate-key` (rate limited 3x/hour)
 - ✅ **`hashed rotate-key` CLI command** — confirmation prompt, auto-updates credentials.json
 - ✅ **Settings page in dashboard** — `/dashboard/settings` with Rotate Key UI, 2-step confirmation
+- ✅ **Dashboard login fixed** — `createBrowserClient` (cookies) + `router.refresh()` — infinite redirect loop resolved (2026-03-08)
+- ✅ **SQL migration convention** — `database/migrations/` with 000–005 numbered idempotent files; `database/archive/` for historical ad-hoc scripts (2026-03-08)
+- ✅ **Railway metrics + alerting** — `MetricsMiddleware` (p95 latency, error rate, consecutive errors), `SlackAlerter` (webhook, 5-min cooldown), `GET /health/detailed`, `GET /metrics` (2026-03-08)
+- ✅ **pyproject.toml optional extras** — `[secure]`, `[langchain]`, `[crewai]`, `[strands]`, `[autogen]`, `[all]`, `[dev]`; repo URLs corrected
 
 ---
 
@@ -108,7 +112,7 @@ The core product is live end-to-end and actively hardened:
 | **Publish to PyPI** as `hashed-sdk` | 2h | ❌ Pending — next sprint |
 | **Semantic versioning + CHANGELOG.md** | 1h | ✅ Done — v0.1.0 |
 | **GitHub Releases** with release notes | 30min | ❌ Pending — next sprint |
-| **Optional extras in `pyproject.toml`** | 1h | ❌ Pending |
+| **Optional extras in `pyproject.toml`** | 1h | ✅ Done — `[secure]`, `[langchain]`, `[crewai]`, `[strands]`, `[autogen]`, `[all]`, `[dev]` |
 
 ---
 
@@ -168,14 +172,24 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 - ✅ **API key rotation** — `POST /v1/auth/rotate-key` + `hashed rotate-key` CLI + Settings page UI
 - ✅ **Dashboard Settings page** — `/dashboard/settings` with org info + rotation UI
 
-### 🔄 Sprint 4 — GA Launch (next)
+### ✅ Sprint 4 — GA Launch (complete as of 2026-03-08)
 - ✅ **Coverage 37% → 55%** — 161 tests; new suites: test_cli_network (15), test_ledger (26), test_templates (37)
-- ❌ PyPI publish → `pip install hashed-sdk`
-- ❌ GitHub Release v0.1.0
-- ✅ Dashboard: pagination on logs + agents (done 2026-03-05)
-- ✅ Dashboard: real-time log/agent feed via Supabase Realtime (done 2026-03-05)
-- ✅ Dashboard: activity charts — agent leaderboard (done 2026-03-05)
-- ✅ Dashboard: policy editor UI — inline toggle/amount/delete (done 2026-03-05)
+- ✅ Dashboard: pagination on logs + agents
+- ✅ Dashboard: real-time log/agent feed via Supabase Realtime
+- ✅ Dashboard: activity charts — agent leaderboard
+- ✅ Dashboard: policy editor UI — inline toggle/amount/delete
+- ✅ **Dashboard login bug fixed** — `createBrowserClient` + `router.refresh()` (2026-03-08)
+- ✅ **SQL migration convention** — `database/migrations/` (000–005) + archive (2026-03-08)
+- ✅ **Railway metrics/alerting** — MetricsMiddleware + SlackAlerter + /health/detailed + /metrics (2026-03-08)
+- ✅ **pyproject.toml extras complete** — `[secure]`, `[langchain]`, `[crewai]`, `[strands]`, `[autogen]`, `[all]`
+- ⏸️ PyPI publish → `pip install hashed-sdk` (deferred intentionally — publish when ready)
+- ⏸️ GitHub Release v0.1.0 (deferred until PyPI)
+
+### 🔄 Sprint 5 — Distribution (when ready)
+- ⏸️ PyPI publish `pip install hashed-sdk`
+- ⏸️ GitHub Release v0.1.0 with full release notes
+- ⏸️ Video walkthrough
+- ⏸️ Framework-specific guides (LangChain, CrewAI, Strands, AutoGen) — see `FRAMEWORK_GUIDES.md`
 
 ---
 
@@ -221,7 +235,8 @@ Safe to onboard **5-10 trusted teams** under the following conditions:
 | Week | Deliverable | Priority |
 |------|-------------|----------|
 | **Week 1** | ✅ Coverage 37% → 55% — 161 tests, 0 failures (completed 2026-03-07) | ✅ Done |
-| **Week 2** | PyPI publish `pip install hashed-sdk`; GitHub Release v0.1.0; dashboard pagination | 🟡 High |
+| **Week 2** | ✅ Dashboard fixes + SQL migrations + Railway alerting (completed 2026-03-08) | ✅ Done |
+| **Sprint 5** | PyPI publish; GitHub Release v0.1.0; framework guides | ⏸️ Deferred |
 
 ---
 
