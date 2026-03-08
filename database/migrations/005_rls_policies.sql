@@ -1,0 +1,27 @@
+-- ============================================================================
+-- Migration 005: Row Level Security (RLS) policies — C-01 security fix
+-- Applied: 2026-03-08
+-- Supabase projects: hashed-dev ✅  |  production ✅
+-- ============================================================================
+-- Description:
+--   Enables Row Level Security on 6 tables and creates 13 policies so that:
+--     - Dashboard users (anon key + JWT) can only see their own org's data.
+--     - The Railway backend (service_role key) bypasses RLS automatically.
+--   This closes OWASP ASVS 4.0 L2 finding C-01 (RLS disabled = full DB
+--   read/write for anyone who obtains the anon key).
+--
+-- Tables protected: organizations, user_organizations, agents, policies,
+--                   ledger_logs, approval_queue
+--
+-- Rollback:
+--   ALTER TABLE organizations    DISABLE ROW LEVEL SECURITY;
+--   ALTER TABLE user_organizations DISABLE ROW LEVEL SECURITY;
+--   ALTER TABLE agents           DISABLE ROW LEVEL SECURITY;
+--   ALTER TABLE policies         DISABLE ROW LEVEL SECURITY;
+--   ALTER TABLE ledger_logs      DISABLE ROW LEVEL SECURITY;
+--   ALTER TABLE approval_queue   DISABLE ROW LEVEL SECURITY;
+--   -- Then drop all policies with DROP POLICY IF EXISTS ... ON ...
+-- ============================================================================
+-- NOTE: The canonical source of truth is database/rls_policies.sql.
+--       Run that file in the Supabase SQL Editor (it is fully idempotent).
+-- ============================================================================

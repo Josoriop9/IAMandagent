@@ -7,7 +7,11 @@ import hmac
 import json
 import logging
 import os
+import threading
+import time
+from collections import deque
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import List, Optional
 
@@ -53,6 +57,126 @@ if _sentry_dsn:
 limiter = Limiter(key_func=get_remote_address, default_limits=["300/minute"])
 
 
+# ── In-process metrics collector ─────────────────────────────────────────────
+# Thread-safe counters for requests, errors, and latency.
+# Exposed via GET /metrics and GET /health/detailed.
+# Set SLACK_WEBHOOK_URL in Railway to enable Slack alerts.
+
+@dataclass
+class MetricsCollector:
+    """Thread-safe request metrics with sliding-window latency tracking."""
+    _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    total_requests: int = 0
+    error_count: int = 0          # HTTP 5xx responses
+    _latencies: deque = field(default_factory=lambda: deque(maxlen=500), repr=False)
+    _consecutive_errors: int = 0  # used for alert throttling
+
+    def record(self, status_code: int, latency_ms: float) -> None:
+        with self._lock:
+            self.total_requests += 1
+            self._latencies.append(latency_ms)
+            if status_code >= 500:
+                self.error_count += 1
+                self._consecutive_errors += 1
+            else:
+                self._consecutive_errors = 0
+
+    @property
+    def avg_latency_ms(self) -> float:
+        with self._lock:
+            if not self._latencies:
+                return 0.0
+            return sum(self._latencies) / len(self._latencies)
+
+    @property
+    def p95_latency_ms(self) -> float:
+        with self._lock:
+            if not self._latencies:
+                return 0.0
+            sorted_l = sorted(self._latencies)
+            idx = int(len(sorted_l) * 0.95)
+            return sorted_l[min(idx, len(sorted_l) - 1)]
+
+    @property
+    def error_rate(self) -> float:
+        with self._lock:
+            if self.total_requests == 0:
+                return 0.0
+            return self.error_count / self.total_requests
+
+    @property
+    def consecutive_errors(self) -> int:
+        with self._lock:
+            return self._consecutive_errors
+
+
+metrics = MetricsCollector()
+
+# ── Slack alerter ────────────────────────────────────────────────────────────
+_SLACK_WEBHOOK_URL = os.getenv("SLACK_WEBHOOK_URL")
+_ALERT_COOLDOWN_S = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))  # 5 min default
+_last_alert_time: float = 0.0
+
+
+async def _send_slack_alert(message: str) -> None:
+    """Post a message to Slack via incoming webhook (fire-and-forget)."""
+    global _last_alert_time
+    if not _SLACK_WEBHOOK_URL:
+        return
+    now = time.monotonic()
+    if now - _last_alert_time < _ALERT_COOLDOWN_S:
+        return                  # rate-limit alerts to avoid noise storms
+    _last_alert_time = now
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                _SLACK_WEBHOOK_URL,
+                json={"text": f"🚨 *Hashed API Alert*\n{message}"},
+            )
+    except Exception as exc:
+        logger.warning("Slack alert failed: %s", exc)
+
+
+# ── Metrics ASGI middleware ───────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
+
+
+class MetricsMiddleware(BaseHTTPMiddleware):
+    """Records request count, error count, and latency for every response."""
+
+    async def dispatch(self, request: StarletteRequest, call_next):
+        start = time.perf_counter()
+        response = await call_next(request)
+        latency_ms = (time.perf_counter() - start) * 1000
+        metrics.record(response.status_code, latency_ms)
+
+        # ── Threshold alerts (async, fire-and-forget) ──────────────────────
+        if metrics.error_rate > 0.01 and metrics.total_requests >= 50:
+            import asyncio
+            asyncio.create_task(_send_slack_alert(
+                f"Error rate {metrics.error_rate:.1%} over "
+                f"{metrics.total_requests} requests "
+                f"(avg latency {metrics.avg_latency_ms:.0f}ms)"
+            ))
+        elif metrics.consecutive_errors >= 5:
+            import asyncio
+            asyncio.create_task(_send_slack_alert(
+                f"{metrics.consecutive_errors} consecutive 5xx errors. "
+                f"Last endpoint: {request.method} {request.url.path}"
+            ))
+        elif metrics.p95_latency_ms > 2000:
+            import asyncio
+            asyncio.create_task(_send_slack_alert(
+                f"p95 latency {metrics.p95_latency_ms:.0f}ms > 2000ms threshold "
+                f"(avg {metrics.avg_latency_ms:.0f}ms, "
+                f"{metrics.total_requests} requests)"
+            ))
+
+        return response
+
+
 # ── Connection Pool / Lifespan ────────────────────────────────────────────────
 # FastAPI lifespan ensures resources are initialised once at startup and
 # cleanly released at shutdown. This is the recommended pattern over the
@@ -80,6 +204,12 @@ app = FastAPI(
 # Wire rate limiter into the app
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── Metrics middleware (must be registered BEFORE CORS) ───────────────────────
+# Wraps every request to record status code + latency, then fires Slack alerts
+# when error_rate > 1%, 5 consecutive 5xx errors, or p95 latency > 2s.
+# Configure SLACK_WEBHOOK_URL + ALERT_COOLDOWN_SECONDS in Railway env vars.
+app.add_middleware(MetricsMiddleware)
 
 # CORS Configuration
 allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
@@ -229,6 +359,62 @@ async def health_check():
         "status": "healthy",
         "timestamp": datetime.utcnow().isoformat(),
         "service": "hashed-control-plane"
+    }
+
+
+@app.get("/health/detailed")
+async def health_detailed(org: dict = Depends(verify_api_key)):
+    """
+    Detailed health check with in-process metrics.
+
+    Returns request counts, error rate, and latency percentiles since
+    the last server restart.  Protected by API key (same as all /v1/ endpoints).
+
+    Thresholds that trigger Slack alerts (if SLACK_WEBHOOK_URL is set):
+        - error_rate > 1% (after ≥ 50 requests)
+        - 5 consecutive 5xx responses
+        - p95 latency > 2000ms
+    """
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "service": "hashed-control-plane",
+        "metrics": {
+            "total_requests": metrics.total_requests,
+            "error_count": metrics.error_count,
+            "error_rate_pct": round(metrics.error_rate * 100, 2),
+            "avg_latency_ms": round(metrics.avg_latency_ms, 1),
+            "p95_latency_ms": round(metrics.p95_latency_ms, 1),
+            "consecutive_errors": metrics.consecutive_errors,
+        },
+        "alerts": {
+            "slack_configured": bool(_SLACK_WEBHOOK_URL),
+            "cooldown_seconds": _ALERT_COOLDOWN_S,
+            "thresholds": {
+                "error_rate_pct": 1.0,
+                "consecutive_errors": 5,
+                "p95_latency_ms": 2000,
+            },
+        },
+    }
+
+
+@app.get("/metrics")
+async def get_metrics(org: dict = Depends(verify_api_key)):
+    """
+    Raw metrics for external monitoring tools (Prometheus-friendly JSON).
+
+    Protected by API key.  Useful for Railway's metrics integrations or
+    custom Grafana dashboards.
+    """
+    return {
+        "hashed_requests_total": metrics.total_requests,
+        "hashed_errors_total": metrics.error_count,
+        "hashed_error_rate": round(metrics.error_rate, 4),
+        "hashed_avg_latency_ms": round(metrics.avg_latency_ms, 1),
+        "hashed_p95_latency_ms": round(metrics.p95_latency_ms, 1),
+        "hashed_consecutive_errors": metrics.consecutive_errors,
+        "timestamp": datetime.utcnow().isoformat(),
     }
 
 

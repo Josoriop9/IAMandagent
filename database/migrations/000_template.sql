@@ -1,0 +1,15 @@
+-- ============================================================================
+-- Migration NNN: Short description
+-- Applied: YYYY-MM-DD
+-- Author:  Your Name
+-- Supabase projects: hashed-dev ❌  |  production ❌
+-- ============================================================================
+-- Description:
+--   What this migration does and why.
+--
+-- Rollback:
+--   How to undo this migration if needed.
+-- ============================================================================
+
+-- Write idempotent SQL here.
+-- Use IF NOT EXISTS / IF EXISTS / OR REPLACE so re-running is safe.

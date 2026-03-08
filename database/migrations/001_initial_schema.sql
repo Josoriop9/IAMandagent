@@ -1,0 +1,26 @@
+-- ============================================================================
+-- Migration 001: Initial schema — all base tables
+-- Applied: 2026-02-01 (project start)
+-- Supabase projects: hashed-dev ✅  |  production ✅
+-- ============================================================================
+-- Description:
+--   Creates the foundational tables for the Hashed platform:
+--     - organizations       (tenants)
+--     - agents              (registered AI agents)
+--     - policies            (allow/deny rules per agent/tool)
+--     - ledger_logs         (immutable audit trail)
+--     - approval_queue      (pending human-approval items)
+--     - rate_limit_tracker  (per-key request counters)
+--
+-- Rollback:
+--   DROP TABLE IF EXISTS rate_limit_tracker, approval_queue,
+--     ledger_logs, policies, agents, organizations CASCADE;
+-- ============================================================================
+-- NOTE: The canonical source of truth for this migration is database/schema.sql.
+--       That file is idempotent (CREATE TABLE IF NOT EXISTS throughout) and can
+--       be re-run safely.  This file exists to mark the migration in sequence.
+--
+-- To apply:
+--   1. Open database/schema.sql
+--   2. Run the full file in Supabase SQL Editor (dev, then prod)
+-- ============================================================================
