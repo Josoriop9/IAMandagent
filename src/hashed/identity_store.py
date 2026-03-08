@@ -104,6 +104,19 @@ def save_identity(
         # Create parent directory if it doesn't exist
         path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Security: warn when the key is stored without password encryption.
+        # The file has 0600 permissions (owner-only), but an unencrypted PEM
+        # can be read by any process running as the same OS user or by root.
+        # Pass a strong, unique password to protect against local privilege
+        # escalation and disk forensics.
+        if not password:
+            logger.warning(
+                "⚠️  Saving Ed25519 private key WITHOUT password encryption "
+                "to %s. Pass a password to save_identity() for defence against "
+                "local privilege escalation (OWASP ASVS 4.0 L2 — C-10).",
+                filepath,
+            )
+
         # Export private key (encrypted if password provided)
         password_bytes = password.encode("utf-8") if password else None
         private_key_pem = identity.export_private_key(password=password_bytes)

@@ -40,6 +40,21 @@ console = Console()
 CREDENTIALS_DIR = Path.home() / ".hashed"
 CREDENTIALS_FILE = CREDENTIALS_DIR / "credentials.json"
 
+# ── Keyring: secure OS-level credential storage (C-02 remediation) ────────────
+# macOS → Keychain  |  Windows → Credential Locker  |  Linux → Secret Service
+# Requires: pip install hashed-sdk[secure]   (keyring>=24.0.0)
+# Falls back to plaintext JSON if the library is not installed.
+try:
+    import keyring as _keyring                          # type: ignore[import]
+    import keyring.errors as _keyring_errors            # type: ignore[import]
+    _KEYRING_AVAILABLE = True
+except ImportError:
+    _KEYRING_AVAILABLE = False
+    _keyring_errors = None  # type: ignore[assignment]
+
+_KEYRING_SERVICE = "hashed-sdk"
+_KEYRING_ACCOUNT = "api_key"          # account key used inside the service
+
 # Sub-commands
 identity_app = typer.Typer(help="🔑 Manage agent identities")
 policy_app = typer.Typer(help="🛡️  Manage policies")
@@ -1160,25 +1175,95 @@ def logs_list(
 # ============================================================================
 
 def save_credentials(data: dict) -> None:
-    """Save credentials to ~/.hashed/credentials.json"""
+    """Save credentials — API key to OS keychain, metadata to JSON file.
+
+    When ``keyring`` is available (``pip install hashed-sdk[secure]``), the
+    ``api_key`` value is stored exclusively in the OS keychain and NOT written
+    to the JSON file on disk.  Non-sensitive fields (org_name, org_id,
+    backend_url) are still written to ``~/.hashed/credentials.json`` so the
+    CLI can identify the organisation without touching the keychain for every
+    read.
+
+    Falls back to plaintext JSON (original behaviour) if ``keyring`` is not
+    installed, and emits a warning so users know to upgrade.
+    """
     CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
+
+    api_key = data.get("api_key")
+    org_id = data.get("org_id", "default")
+
+    if api_key and _KEYRING_AVAILABLE:
+        try:
+            # Store API key in OS keychain — invisible to ls / cat / git
+            account = f"{_KEYRING_ACCOUNT}:{org_id}"
+            _keyring.set_password(_KEYRING_SERVICE, account, api_key)
+            # Write only non-sensitive metadata to disk
+            safe = {k: v for k, v in data.items() if k != "api_key"}
+            safe["_keyring"] = True          # flag: key is in keychain
+            CREDENTIALS_FILE.write_text(json.dumps(safe, indent=2))
+            CREDENTIALS_FILE.chmod(0o600)
+            return
+        except Exception as exc:            # noqa: BLE001
+            # Keychain unavailable (e.g. locked, headless CI) → fall through
+            import logging
+            logging.getLogger(__name__).warning(
+                "Keychain write failed (%s). Falling back to file storage.", exc
+            )
+
+    # ── Fallback: plaintext file ─────────────────────────────────────────────
+    if not _KEYRING_AVAILABLE:
+        import logging
+        logging.getLogger(__name__).warning(
+            "⚠️  'keyring' not installed — API key stored in plaintext at %s. "
+            "Install hashed-sdk[secure] for OS-keychain storage (C-02).",
+            CREDENTIALS_FILE,
+        )
     CREDENTIALS_FILE.write_text(json.dumps(data, indent=2))
-    # Restrict file permissions (owner only)
     CREDENTIALS_FILE.chmod(0o600)
 
 
 def load_credentials() -> Optional[dict]:
-    """Load credentials from ~/.hashed/credentials.json"""
+    """Load credentials — API key from OS keychain, metadata from JSON file.
+
+    If the credentials file contains ``_keyring: true``, the API key is
+    retrieved from the OS keychain.  Otherwise (plain file or keyring not
+    available), the JSON value is returned as-is (backward-compatible).
+    """
     if not CREDENTIALS_FILE.exists():
         return None
     try:
-        return json.loads(CREDENTIALS_FILE.read_text())
+        creds = json.loads(CREDENTIALS_FILE.read_text())
+
+        if creds.get("_keyring") and _KEYRING_AVAILABLE:
+            org_id = creds.get("org_id", "default")
+            account = f"{_KEYRING_ACCOUNT}:{org_id}"
+            try:
+                api_key = _keyring.get_password(_KEYRING_SERVICE, account)
+                if api_key:
+                    creds = dict(creds)          # shallow copy
+                    creds["api_key"] = api_key
+                    return creds
+            except Exception:                    # noqa: BLE001
+                pass                             # fall through to file value
+
+        return creds
     except Exception:
         return None
 
 
 def clear_credentials() -> None:
-    """Remove credentials file."""
+    """Remove credentials — deletes keychain entry AND the metadata file."""
+    # Remove API key from OS keychain first (if stored there)
+    if CREDENTIALS_FILE.exists() and _KEYRING_AVAILABLE:
+        try:
+            creds = json.loads(CREDENTIALS_FILE.read_text())
+            if creds.get("_keyring"):
+                org_id = creds.get("org_id", "default")
+                account = f"{_KEYRING_ACCOUNT}:{org_id}"
+                _keyring.delete_password(_KEYRING_SERVICE, account)
+        except Exception:                        # noqa: BLE001
+            pass                                 # keychain entry may not exist
+
     if CREDENTIALS_FILE.exists():
         CREDENTIALS_FILE.unlink()
 

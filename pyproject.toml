@@ -32,6 +32,8 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "typer>=0.9.0",
     "rich>=13.0.0",
+    # keyring is optional: install with `pip install hashed-sdk[secure]`
+    # Falls back to file-based storage if not available.
 ]
 
 [project.scripts]
@@ -46,6 +48,12 @@ dev = [
     "mypy>=1.5.0",
     "ruff>=0.0.285",
     "types-httpx",
+]
+# Secure credential storage — uses OS keychain (macOS Keychain, Windows
+# Credential Locker, Linux Secret Service).  Strongly recommended for
+# production agents (C-02 remediation — OWASP ASVS 4.0 L2).
+secure = [
+    "keyring>=24.0.0",
 ]
 # Framework integrations
 langchain = [
