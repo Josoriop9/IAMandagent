@@ -1,0 +1,99 @@
+# Dependabot configuration — C-09 remediation (OWASP ASVS 4.0 L2)
+#
+# Automatically opens PRs when new versions or security patches are available
+# for Python, npm, and Docker dependencies.
+#
+# Schedule: weekly (Monday 09:00 UTC) to batch updates and reduce noise.
+# Limit: 5 open PRs per ecosystem to avoid PR flood.
+
+version: 2
+
+updates:
+  # ── Python (SDK + server) ─────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/"           # pyproject.toml at repo root (SDK)
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+    commit-message:
+      prefix: "deps(python)"
+    ignore:
+      # Only auto-update patch versions for major deps; minor/major = manual review
+      - dependency-name: "pydantic"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "cryptography"
+        update-types: ["version-update:semver-major"]
+
+  # ── Python (server) ───────────────────────────────────────────────────────
+  - package-ecosystem: "pip"
+    directory: "/server"     # server/requirements.txt
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "python"
+      - "server"
+    commit-message:
+      prefix: "deps(server)"
+
+  # ── npm (dashboard) ───────────────────────────────────────────────────────
+  - package-ecosystem: "npm"
+    directory: "/dashboard"  # dashboard/package.json
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "javascript"
+      - "dashboard"
+    commit-message:
+      prefix: "deps(dashboard)"
+    ignore:
+      # Next.js major versions require manual migration
+      - dependency-name: "next"
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@supabase/*"
+        update-types: ["version-update:semver-major"]
+
+  # ── Docker (server Dockerfile) ────────────────────────────────────────────
+  - package-ecosystem: "docker"
+    directory: "/server"     # server/Dockerfile
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "docker"
+    commit-message:
+      prefix: "deps(docker)"
+
+  # ── GitHub Actions ────────────────────────────────────────────────────────
+  - package-ecosystem: "github-actions"
+    directory: "/"           # .github/workflows/
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "UTC"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "deps(actions)"

@@ -3,6 +3,7 @@ Hashed SDK - Control Plane API Server
 FastAPI backend for AI Agent Governance
 """
 
+import hmac
 import json
 import logging
 import os
@@ -166,9 +167,21 @@ async def verify_api_key(x_api_key: str = Header(..., alias="X-API-KEY")) -> dic
             )
         
         organization = response.data[0]
-        
-        # Set organization context for RLS
-        # Note: This is simplified - in production, use proper session management
+
+        # Constant-time comparison — defence against timing oracle attacks.
+        # The DB query already matched the key via SQL =, but an attacker who
+        # can measure server response time could still extract key length/prefix
+        # information if we relied on plain == at the application layer.
+        stored_key = organization.get("api_key", "")
+        if not hmac.compare_digest(
+            stored_key.encode("utf-8"),
+            x_api_key.encode("utf-8"),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid API key",
+            )
+
         return organization
     
     except Exception as e:

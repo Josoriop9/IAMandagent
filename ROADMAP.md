@@ -253,13 +253,13 @@ These do not require scanning tools — they are confirmed from reading the sour
 | C-01 | **Supabase RLS disabled on ALL tables** — `organizations`, `agents`, `policies`, `ledger_logs`, `approval_queue`, `rate_limit_tracker`. Any service_role key leak = full DB read/write | 🔴 CRITICAL | `database/schema.sql:242-248` | ❌ Open |
 | C-02 | **API key stored in plaintext** — `~/.hashed/credentials.json` has `api_key` in clear text. Process memory + disk readable by any local user/process | 🔴 CRITICAL | `src/hashed/config.py` | ❌ Open |
 | C-03 | **Dashboard auth bypass (just fixed)** — `/dashboard` was publicly accessible without authentication | 🔴 CRITICAL | `dashboard/middleware.ts` | ✅ Fixed 2026-03-08 |
-| C-04 | **`SECRET_KEY` in docker-compose** — `server/docker-compose.yml` has a hardcoded test secret key that developers may accidentally use in staging | 🟠 HIGH | `server/docker-compose.yml` | ❌ Open |
-| C-05 | **No CSP headers on dashboard** — No `Content-Security-Policy` header on Vercel. XSS has no mitigation layer | 🟠 HIGH | `dashboard/next.config.ts` | ❌ Open |
-| C-06 | **Credentials file world-readable** — `~/.hashed/credentials.json` permissions not enforced (should be `0600`) | 🟠 HIGH | `src/hashed/cli.py` | ❌ Open |
-| C-07 | **No timing-safe API key comparison** — `verify_api_key` uses `==` string comparison, vulnerable to timing oracle | 🟡 MEDIUM | `server/server.py:152` | ❌ Open |
-| C-08 | **WAL SQLite stores unencrypted audit logs** — `~/.hashed/wal.db` on agent host; PII/financial data persists in plaintext | 🟡 MEDIUM | `src/hashed/ledger.py` | ❌ Open |
-| C-09 | **No Dependabot / automated dep updates** — CVEs in dependencies go undetected | 🟡 MEDIUM | `.github/` | ❌ Open |
-| C-10 | **Ed25519 identity private keys — encryption at rest unclear** — key files may be stored unencrypted on agent hosts | 🟡 MEDIUM | `src/hashed/identity.py` | ❌ Open |
+| C-04 | **`SECRET_KEY` in docker-compose** — FALSE POSITIVE: compose uses `env_file: .env` only, no hardcoded secrets present | 🟠 HIGH | `server/docker-compose.yml` | ✅ N/A — not present |
+| C-05 | **No CSP headers on dashboard** — No `Content-Security-Policy` header on Vercel. XSS has no mitigation layer | 🟠 HIGH | `dashboard/next.config.ts` | ✅ Fixed 2026-03-08 |
+| C-06 | **Credentials file world-readable** — `~/.hashed/credentials.json` permissions not enforced (should be `0600`) | 🟠 HIGH | `src/hashed/cli.py` | ✅ N/A — `chmod 0o600` already at cli.py:1167 |
+| C-07 | **No timing-safe API key comparison** — `verify_api_key` uses `==` string comparison, vulnerable to timing oracle | 🟡 MEDIUM | `server/server.py:152` | ✅ Fixed 2026-03-08 — `hmac.compare_digest()` |
+| C-08 | **WAL SQLite stores unencrypted audit logs** — `~/.hashed/wal.db` on agent host; PII/financial data persists in plaintext | 🟡 MEDIUM | `src/hashed/ledger.py` | ❌ Open — Sprint 5 |
+| C-09 | **No Dependabot / automated dep updates** — CVEs in dependencies go undetected | 🟡 MEDIUM | `.github/` | ✅ Fixed 2026-03-08 — `.github/dependabot.yml` (5 ecosystems) |
+| C-10 | **Ed25519 identity private keys — encryption at rest unclear** — key files may be stored unencrypted on agent hosts | 🟡 MEDIUM | `src/hashed/identity.py` | ❌ Open — Sprint 5 |
 
 ---
 
