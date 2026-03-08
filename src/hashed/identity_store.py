@@ -281,8 +281,9 @@ def load_identity_from_env() -> Optional["IdentityManager"]:
         return None
 
     try:
-        # Decode base64 → PEM bytes
-        pem_bytes = base64.b64decode(raw_b64)
+        # validate=True rejects any characters not in the base64 alphabet,
+        # giving a clear error instead of silently decoding garbage bytes.
+        pem_bytes = base64.b64decode(raw_b64, validate=True)
     except Exception as exc:
         raise ValueError(
             "HASHED_AGENT_PRIVATE_KEY is not valid base64. "

@@ -362,6 +362,119 @@ def identity_show(
         raise typer.Exit(1)
 
 
+@identity_app.command("export")
+def identity_export(
+    identity_file: str = typer.Option(
+        "./secrets/agent_key.pem", "--file", "-f",
+        help="Path to the .pem identity file to export"
+    ),
+    password: Optional[str] = typer.Option(
+        None, "--password", "-p",
+        help="Decryption password (if the key was saved encrypted)"
+    ),
+    agent: Optional[str] = typer.Option(
+        None, "--agent", "-a",
+        help="Agent name shortcut — looks in ~/.hashed/agents/<name>.pem"
+    ),
+    quiet: bool = typer.Option(
+        False, "--quiet", "-q",
+        help="Print only the base64 string (for piping into scripts)"
+    ),
+):
+    """
+    ☁️  Export identity as base64 for cloud/serverless deployments.
+
+    Converts a .pem private key to a single-line base64 string ready to
+    set as HASHED_AGENT_PRIVATE_KEY in Railway, AWS, GCP, or any cloud
+    provider's environment variable configuration.
+
+    Examples:
+
+    \b
+        # Export a named agent (looks in ~/.hashed/agents/)
+        hashed identity export --agent my-prod-agent
+
+    \b
+        # Export from a custom path
+        hashed identity export --file ./secrets/agent.pem
+
+    \b
+        # Pipe directly into clipboard (macOS)
+        hashed identity export --agent my-agent --quiet | pbcopy
+
+    \b
+        # Use in a script
+        export HASHED_AGENT_PRIVATE_KEY=$(hashed identity export -a my-agent -q)
+    """
+    import base64
+    from pathlib import Path
+
+    try:
+        # Resolve file path
+        if agent:
+            home = Path.home()
+            pem_path = home / ".hashed" / "agents" / f"{agent}.pem"
+            if not pem_path.exists():
+                error(f"Agent identity not found: {pem_path}")
+                info(f"Register the agent first: hashed agent register --name {agent}")
+                raise typer.Exit(1)
+            identity_file = str(pem_path)
+
+        path = Path(identity_file).expanduser()
+        if not path.exists():
+            error(f"Identity file not found: {identity_file}")
+            raise typer.Exit(1)
+
+        # Read and base64-encode (no password needed — we just encode the PEM bytes)
+        pem_bytes = path.read_bytes()
+        b64 = base64.b64encode(pem_bytes).decode("ascii")
+
+        if quiet:
+            # Just the value — suitable for piping and scripts
+            print(b64)
+            return
+
+        # Pretty output for humans
+        console.print()
+        console.print(Panel(
+            f"[bold green]{b64}[/bold green]",
+            title="[cyan]HASHED_AGENT_PRIVATE_KEY[/cyan]",
+            subtitle="[dim]Set this in your cloud provider's env vars[/dim]",
+            border_style="cyan",
+        ))
+        console.print()
+
+        table = Table(box=box.ROUNDED, show_header=False)
+        table.add_column("Step", style="cyan", width=4)
+        table.add_column("Action", style="white")
+
+        table.add_row("1️⃣", f"Copy the base64 string above")
+        table.add_row("2️⃣", "In Railway → Variables → Add variable:")
+        table.add_row("  ", "  Name:  [cyan]HASHED_AGENT_PRIVATE_KEY[/cyan]")
+        table.add_row("  ", "  Value: [dim]<paste the base64 string>[/dim]")
+        table.add_row("3️⃣", "Also set [cyan]HASHED_API_KEY[/cyan] = your org API key")
+        table.add_row("4️⃣", "Your agent is ready — no .pem file needed in the cloud")
+
+        console.print(table)
+
+        if password:
+            console.print()
+            warning(
+                "This key was saved with encryption. Also set "
+                "[cyan]HASHED_AGENT_PRIVATE_KEY_PASSWORD[/cyan] in your cloud env vars."
+            )
+
+        console.print()
+        info(f"Source: {path.resolve()}")
+        info(f"Length: {len(b64)} base64 characters ({len(pem_bytes)} raw bytes)")
+
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error(f"Failed to export identity: {e}")
+        raise typer.Exit(1)
+
+
 @identity_app.command("sign")
 def identity_sign(
     message: str = typer.Argument(..., help="Message to sign"),

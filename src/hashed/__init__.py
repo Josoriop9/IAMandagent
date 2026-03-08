@@ -18,6 +18,8 @@ from hashed.exceptions import (
 from hashed.guard import PermissionError, Policy, PolicyEngine
 from hashed.identity import IdentityManager
 from hashed.identity_store import (
+    export_identity_for_env,
+    load_identity_from_env,
     generate_secure_password,
     load_identity,
     load_or_create_identity,
@@ -56,6 +58,8 @@ __all__ = [
     "save_identity",
     "verify_identity_file",
     "generate_secure_password",
+    "load_identity_from_env",
+    "export_identity_for_env",
     # Ledger
     "AsyncLedger",
 ]
