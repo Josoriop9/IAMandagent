@@ -234,3 +234,109 @@ def generate_secure_password(length: int = 32) -> str:
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
     password = "".join(secrets.choice(alphabet) for _ in range(length))
     return password
+
+
+def load_identity_from_env() -> Optional["IdentityManager"]:
+    """
+    Load an agent identity from environment variables.
+
+    Designed for cloud/serverless deployments (Lambda, Cloud Run, Railway,
+    Kubernetes) where writing a .pem file to disk is not practical.
+
+    Environment variables
+    ---------------------
+    HASHED_AGENT_PRIVATE_KEY
+        Base64-encoded PEM private key.  Generate it from an existing key:
+
+            # Encode (run once on your dev machine)
+            base64 -i ~/.hashed/agents/my-agent.pem | tr -d '\\n'
+
+        Then set that output as the env var in your cloud provider
+        (Railway Variables, AWS Secrets Manager, GitHub Secrets, etc.).
+
+    HASHED_AGENT_PRIVATE_KEY_PASSWORD   (optional)
+        Password used to decrypt the key if it was saved with encryption.
+        Leave unset if the key was saved without a password.
+
+    Returns
+    -------
+    IdentityManager if HASHED_AGENT_PRIVATE_KEY is set, otherwise None.
+
+    Example
+    -------
+        # In your agent code (cloud-friendly):
+        from hashed.identity_store import load_identity_from_env
+        from hashed import HashedCore
+
+        identity = load_identity_from_env()   # None if env var not set
+        core = HashedCore(agent_name="prod-agent", identity=identity)
+        # HashedCore also checks the env var automatically, so this is
+        # equivalent to just: core = HashedCore(agent_name="prod-agent")
+    """
+    import base64
+    import os
+
+    raw_b64 = os.getenv("HASHED_AGENT_PRIVATE_KEY")
+    if not raw_b64:
+        return None
+
+    try:
+        # Decode base64 → PEM bytes
+        pem_bytes = base64.b64decode(raw_b64)
+    except Exception as exc:
+        raise ValueError(
+            "HASHED_AGENT_PRIVATE_KEY is not valid base64. "
+            "Encode your .pem file with:  base64 -i agent.pem | tr -d '\\n'"
+        ) from exc
+
+    password_str = os.getenv("HASHED_AGENT_PRIVATE_KEY_PASSWORD")
+    password_bytes: Optional[bytes] = (
+        password_str.encode("utf-8") if password_str else None
+    )
+
+    try:
+        from hashed.identity import IdentityManager  # local import to avoid circular
+        identity = IdentityManager.from_private_key_bytes(pem_bytes, password=password_bytes)
+        logger.info(
+            "Agent identity loaded from HASHED_AGENT_PRIVATE_KEY env var "
+            "(public_key=%s)", identity.public_key_hex[:16] + "..."
+        )
+        return identity
+    except Exception as exc:
+        raise ValueError(
+            f"Failed to load identity from HASHED_AGENT_PRIVATE_KEY: {exc}. "
+            "Check that the key is a valid Ed25519 PEM and the password is correct."
+        ) from exc
+
+
+def export_identity_for_env(filepath: str, password: Optional[str] = None) -> str:
+    """
+    Read a .pem file and return the base64-encoded string ready to set as
+    HASHED_AGENT_PRIVATE_KEY in your cloud provider.
+
+    Args:
+        filepath: Path to the .pem file (e.g., ~/.hashed/agents/my-agent.pem)
+        password: Password used when the key was saved (if any)
+
+    Returns:
+        Base64-encoded string (no newlines) ready to paste into env var config.
+
+    Example
+    -------
+        from hashed.identity_store import export_identity_for_env
+        b64 = export_identity_for_env("~/.hashed/agents/my-agent.pem")
+        print(f"Set this in Railway Variables:")
+        print(f"HASHED_AGENT_PRIVATE_KEY={b64}")
+    """
+    import base64
+    from pathlib import Path
+
+    path = Path(filepath).expanduser()
+    pem_bytes = path.read_bytes()
+    b64 = base64.b64encode(pem_bytes).decode("ascii")
+    logger.info(
+        "Exported identity from %s as base64 (%d chars). "
+        "Set as HASHED_AGENT_PRIVATE_KEY in your cloud provider.",
+        filepath, len(b64)
+    )
+    return b64

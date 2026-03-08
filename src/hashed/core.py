@@ -61,7 +61,17 @@ class HashedCore:
             agent_type: Type of agent (e.g., 'customer_service', 'data_analysis')
         """
         self._config = config or HashedConfig()
-        self._identity = identity or IdentityManager()
+
+        # Identity resolution priority:
+        #   1. Explicit identity passed by caller (highest priority)
+        #   2. HASHED_AGENT_PRIVATE_KEY env var (cloud/serverless deployments)
+        #   3. Generate a new ephemeral identity (local dev / fallback)
+        if identity is not None:
+            self._identity = identity
+        else:
+            from hashed.identity_store import load_identity_from_env  # avoid circular at module level
+            _env_identity = load_identity_from_env()
+            self._identity = _env_identity if _env_identity is not None else IdentityManager()
         self._policy_engine = PolicyEngine()
         self._ledger: Optional[AsyncLedger] = None
         self._ledger_endpoint = ledger_endpoint or (
