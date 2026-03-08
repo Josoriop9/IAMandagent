@@ -191,3 +191,117 @@ class TestPolicyPushNoCredentials:
         """Skipped: requires deep transport-layer mocking of the httpx client."""
         result = runner.invoke(app, ["policy", "push"])
         assert result.exit_code != 0
+
+
+# ── Identity Export ───────────────────────────────────────────────────────────
+
+
+class TestIdentityExportCommand:
+    """Tests for 'hashed identity export' — cloud deployment helper."""
+
+    @pytest.fixture()
+    def pem_file(self, tmp_workdir: Path) -> Path:
+        """Create a real (unencrypted) .pem file for export tests."""
+        from hashed.identity import IdentityManager
+
+        identity = IdentityManager()
+        pem_path = tmp_workdir / "agent.pem"
+        pem_path.write_bytes(identity.export_private_key(password=None))
+        return pem_path
+
+    def test_export_quiet_outputs_valid_base64(self, pem_file: Path) -> None:
+        """--quiet flag should print ONLY the base64 string (no extra text)."""
+        import base64
+
+        result = runner.invoke(
+            app, ["identity", "export", "--file", str(pem_file), "--quiet"]
+        )
+        assert result.exit_code == 0, result.output
+
+        output = result.output.strip()
+        # Must be non-empty
+        assert len(output) > 0
+        # Must be valid base64 (no exception)
+        decoded = base64.b64decode(output)
+        assert len(decoded) > 0
+
+    def test_export_quiet_output_has_no_newlines_in_b64(self, pem_file: Path) -> None:
+        """Quiet output must be a single line — safe for env var assignment."""
+        result = runner.invoke(
+            app, ["identity", "export", "--file", str(pem_file), "--quiet"]
+        )
+        assert result.exit_code == 0
+
+        b64_output = result.output.strip()
+        # The base64 string itself must not contain embedded newlines
+        assert "\n" not in b64_output
+
+    def test_export_human_output_contains_key_header(self, pem_file: Path) -> None:
+        """Default (non-quiet) output should show HASHED_AGENT_PRIVATE_KEY panel."""
+        result = runner.invoke(
+            app, ["identity", "export", "--file", str(pem_file)]
+        )
+        assert result.exit_code == 0
+        assert "HASHED_AGENT_PRIVATE_KEY" in result.output
+
+    def test_export_human_output_contains_setup_guide(self, pem_file: Path) -> None:
+        """Default output should include cloud setup instructions."""
+        result = runner.invoke(
+            app, ["identity", "export", "--file", str(pem_file)]
+        )
+        assert result.exit_code == 0
+        # Should mention Railway or API key steps
+        assert "Railway" in result.output or "HASHED_API_KEY" in result.output
+
+    def test_export_missing_file_exits_with_error(self, tmp_workdir: Path) -> None:
+        """Should exit non-zero when file does not exist."""
+        result = runner.invoke(
+            app,
+            ["identity", "export", "--file", str(tmp_workdir / "nonexistent.pem")],
+        )
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower() or "error" in result.output.lower()
+
+    def test_export_round_trip_matches_public_key(self, pem_file: Path, monkeypatch) -> None:
+        """base64 exported by CLI can be loaded back and yields the same public key."""
+        import base64
+        from hashed.identity import IdentityManager
+        from hashed.identity_store import load_identity_from_env
+
+        # Run export in quiet mode
+        result = runner.invoke(
+            app, ["identity", "export", "--file", str(pem_file), "--quiet"]
+        )
+        assert result.exit_code == 0
+
+        b64 = result.output.strip()
+
+        # Load original key's public key directly from file
+        original_pem = pem_file.read_bytes()
+        original = IdentityManager.from_private_key_bytes(original_pem)
+
+        # Load via env var
+        monkeypatch.setenv("HASHED_AGENT_PRIVATE_KEY", b64)
+        monkeypatch.delenv("HASHED_AGENT_PRIVATE_KEY_PASSWORD", raising=False)
+        loaded = load_identity_from_env()
+
+        assert loaded is not None
+        assert loaded.public_key_hex == original.public_key_hex
+
+    def test_export_encrypted_pem_shows_password_warning(
+        self, tmp_workdir: Path
+    ) -> None:
+        """When --password is passed, output should warn about setting the password env var."""
+        from hashed.identity import IdentityManager
+
+        identity = IdentityManager()
+        pem_path = tmp_workdir / "encrypted.pem"
+        pem_path.write_bytes(identity.export_private_key(password=b"secret"))
+
+        result = runner.invoke(
+            app,
+            ["identity", "export", "--file", str(pem_path), "--password", "secret"],
+        )
+        assert result.exit_code == 0
+        # Should mention the password env var in the output
+        assert "HASHED_AGENT_PRIVATE_KEY_PASSWORD" in result.output

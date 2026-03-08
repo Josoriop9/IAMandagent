@@ -391,6 +391,83 @@ hashed identity sign "hello world" -f ./secrets/research_agent_key.pem
 
 ---
 
+### `hashed identity export`
+
+Export a `.pem` identity as a single-line base64 string for **cloud and serverless deployments** — Railway, AWS Lambda, Google Cloud Run, Kubernetes Secrets, GitHub Actions, etc.
+
+Instead of copying a `.pem` file to your server (insecure), encode it once locally and set it as an environment variable in your cloud provider.
+
+#### Options
+
+| Option | Short | Description |
+|--------|-------|-------------|
+| `--agent NAME` | `-a` | Agent name — looks up `~/.hashed/agents/<name>.pem` |
+| `--file PATH` | `-f` | Custom path to the `.pem` file |
+| `--password PASS` | `-p` | Decryption password (if key was saved encrypted) |
+| `--quiet` | `-q` | Print only the base64 string (no decoration) |
+
+#### Examples
+
+```bash
+# Export a named agent (human-readable output + setup guide)
+hashed identity export --agent my-prod-agent
+
+# Export to clipboard (macOS)
+hashed identity export --agent my-prod-agent --quiet | pbcopy
+
+# Export for use in a shell script or CI pipeline
+export HASHED_AGENT_PRIVATE_KEY=$(hashed identity export -a my-prod-agent -q)
+
+# Export from a custom path
+hashed identity export --file ./secrets/agent.pem --quiet
+```
+
+#### Cloud provider setup
+
+After running the command, set the output as an environment variable:
+
+**Railway:**
+```
+Dashboard → Your Service → Variables → Add Variable
+  Name:  HASHED_AGENT_PRIVATE_KEY
+  Value: <paste base64 output>
+```
+
+**AWS (Systems Manager Parameter Store — recommended):**
+```bash
+aws ssm put-parameter \
+  --name "/myapp/HASHED_AGENT_PRIVATE_KEY" \
+  --value "$(hashed identity export -a my-agent -q)" \
+  --type SecureString
+```
+
+**GitHub Actions (Repository Secret):**
+```
+Settings → Secrets and variables → Actions → New repository secret
+  Name:  HASHED_AGENT_PRIVATE_KEY
+  Value: <paste base64 output>
+```
+
+**Kubernetes:**
+```bash
+kubectl create secret generic hashed-identity \
+  --from-literal=HASHED_AGENT_PRIVATE_KEY="$(hashed identity export -a my-agent -q)"
+```
+
+#### Agent code (zero changes required)
+
+```python
+# Your agent code — no changes needed for cloud deployment
+from hashed import HashedCore
+
+# HashedCore auto-detects HASHED_AGENT_PRIVATE_KEY env var
+core = HashedCore(agent_name="my-prod-agent")
+```
+
+> **If your key was saved with a password**, also set `HASHED_AGENT_PRIVATE_KEY_PASSWORD` in your cloud provider.
+
+---
+
 ## Complete Workflow
 
 ### First-time setup
