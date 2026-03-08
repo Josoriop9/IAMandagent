@@ -231,3 +231,341 @@ Safe to onboard **5-10 trusted teams** under the following conditions:
 - Self-hosted Supabase
 - Enterprise SSO (SAML)
 - Webhook notifications
+
+---
+
+## Priority 8 — Security Vulnerability Assessment Program
+
+> **Role**: Principal Security Engineer  
+> **Standard**: OWASP ASVS 4.0 L2 + NIST SP 800-53  
+> **Scope**: Full-stack — SDK (Python) · Backend API (FastAPI) · Dashboard (Next.js) · Database (Supabase/PostgreSQL) · Infrastructure (Railway · Vercel · Docker)  
+> **Last scan**: Not yet performed  
+> **Next scheduled scan**: Sprint 5
+
+---
+
+### 🔴 Critical Findings (already identified via code review)
+
+These do not require scanning tools — they are confirmed from reading the source:
+
+| # | Finding | Severity | File | Status |
+|---|---------|----------|------|--------|
+| C-01 | **Supabase RLS disabled on ALL tables** — `organizations`, `agents`, `policies`, `ledger_logs`, `approval_queue`, `rate_limit_tracker`. Any service_role key leak = full DB read/write | 🔴 CRITICAL | `database/schema.sql:242-248` | ❌ Open |
+| C-02 | **API key stored in plaintext** — `~/.hashed/credentials.json` has `api_key` in clear text. Process memory + disk readable by any local user/process | 🔴 CRITICAL | `src/hashed/config.py` | ❌ Open |
+| C-03 | **Dashboard auth bypass (just fixed)** — `/dashboard` was publicly accessible without authentication | 🔴 CRITICAL | `dashboard/middleware.ts` | ✅ Fixed 2026-03-08 |
+| C-04 | **`SECRET_KEY` in docker-compose** — `server/docker-compose.yml` has a hardcoded test secret key that developers may accidentally use in staging | 🟠 HIGH | `server/docker-compose.yml` | ❌ Open |
+| C-05 | **No CSP headers on dashboard** — No `Content-Security-Policy` header on Vercel. XSS has no mitigation layer | 🟠 HIGH | `dashboard/next.config.ts` | ❌ Open |
+| C-06 | **Credentials file world-readable** — `~/.hashed/credentials.json` permissions not enforced (should be `0600`) | 🟠 HIGH | `src/hashed/cli.py` | ❌ Open |
+| C-07 | **No timing-safe API key comparison** — `verify_api_key` uses `==` string comparison, vulnerable to timing oracle | 🟡 MEDIUM | `server/server.py:152` | ❌ Open |
+| C-08 | **WAL SQLite stores unencrypted audit logs** — `~/.hashed/wal.db` on agent host; PII/financial data persists in plaintext | 🟡 MEDIUM | `src/hashed/ledger.py` | ❌ Open |
+| C-09 | **No Dependabot / automated dep updates** — CVEs in dependencies go undetected | 🟡 MEDIUM | `.github/` | ❌ Open |
+| C-10 | **Ed25519 identity private keys — encryption at rest unclear** — key files may be stored unencrypted on agent hosts | 🟡 MEDIUM | `src/hashed/identity.py` | ❌ Open |
+
+---
+
+### Phase 1 — SAST (Static Application Security Testing)
+
+**Goal**: Catch insecure code patterns before runtime  
+**When**: Sprint 5 Week 1 · Integrate into CI permanently
+
+#### Python Backend + SDK
+
+```bash
+# Bandit — Python SAST (injection, secrets, crypto issues)
+pip install bandit
+bandit -r src/ server/ -f json -o reports/bandit.json
+bandit -r src/ server/ -ll  # Only HIGH/CRITICAL
+
+# Semgrep — OWASP-aligned rules
+pip install semgrep
+semgrep scan --config=p/python --config=p/owasp-top-ten \
+             --config=p/secrets src/ server/ \
+             --json > reports/semgrep-python.json
+
+# Ruff security rules (already in CI, extend rules)
+ruff check src/ server/ --select S  # flake8-bandit rules via ruff
+```
+
+**Key checks**: SQL injection, command injection, insecure deserialization, hardcoded secrets, weak cryptography, path traversal, SSRF
+
+#### JavaScript/TypeScript Dashboard
+
+```bash
+# ESLint Security Plugin
+cd dashboard
+npm install --save-dev eslint-plugin-security eslint-plugin-no-secrets
+npx eslint --ext .ts,.tsx --plugin security app/ lib/ middleware.ts
+
+# Semgrep for Next.js/React
+semgrep scan --config=p/typescript --config=p/react \
+             --config=p/nextjs dashboard/app/ \
+             --json > reports/semgrep-ts.json
+```
+
+**Key checks**: XSS, prototype pollution, `dangerouslySetInnerHTML`, `eval()`, insecure regex, exposed env vars
+
+#### Secrets Detection in Git History
+
+```bash
+# Gitleaks — scans ENTIRE git history for leaked secrets
+brew install gitleaks
+gitleaks detect --source . --log-level warn --report-path reports/gitleaks.json
+
+# TruffleHog — entropy-based secret detection
+pip install trufflehog
+trufflehog git file://. --json > reports/trufflehog.json
+```
+
+> ⚠️ **Expected findings**: `.env` files, example credentials, Railway/Vercel tokens accidentally committed
+
+---
+
+### Phase 2 — SCA (Software Composition Analysis)
+
+**Goal**: Find CVEs in dependencies (supply chain risk)  
+**When**: Sprint 5 Week 1 · Weekly automated via Dependabot
+
+#### Python Dependencies
+
+```bash
+# pip-audit — PyPI advisory database
+pip install pip-audit
+pip-audit --desc --format json -o reports/pip-audit.json
+pip-audit --desc  # Human readable
+
+# Safety (Snyk backend)
+pip install safety
+safety check --json > reports/safety.json
+
+# Check transitive deps too
+pip-audit --requirement requirements.txt --requirement server/requirements.txt
+```
+
+#### JavaScript/npm Dependencies
+
+```bash
+cd dashboard
+npm audit --json > reports/npm-audit.json
+npm audit fix --dry-run  # Preview auto-fixes
+
+# Snyk (deeper analysis + license checks)
+npx snyk test --json > reports/snyk-dashboard.json
+```
+
+#### Enable Dependabot (`.github/dependabot.yml`)
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    open-pull-requests-limit: 5
+  - package-ecosystem: "npm"
+    directory: "/dashboard"
+    schedule: { interval: "weekly" }
+    open-pull-requests-limit: 5
+  - package-ecosystem: "docker"
+    directory: "/server"
+    schedule: { interval: "weekly" }
+```
+
+---
+
+### Phase 3 — Container & Infrastructure Scanning
+
+**Goal**: Find vulnerabilities in Docker images and IaC  
+**When**: Sprint 5 Week 2
+
+```bash
+# Trivy — Docker image CVE scanner (covers OS + app deps)
+brew install trivy
+
+# Scan the backend image
+docker build -f Dockerfile -t hashed-api:scan .
+trivy image hashed-api:scan --format json --output reports/trivy-image.json
+trivy image hashed-api:scan --severity HIGH,CRITICAL
+
+# Scan Dockerfile for misconfigurations
+trivy config server/Dockerfile
+trivy config server/docker-compose.yml
+
+# Hadolint — Dockerfile best practices
+brew install hadolint
+hadolint server/Dockerfile
+
+# Checkov — IaC misconfig (docker-compose, GitHub Actions)
+pip install checkov
+checkov -f server/docker-compose.yml --output json > reports/checkov-compose.json
+checkov -d .github/workflows/ --output json > reports/checkov-gha.json
+```
+
+**Key checks**: running as root, exposed ports, outdated base images, hardcoded secrets in ENV, missing USER directive, no health checks, writable filesystem
+
+---
+
+### Phase 4 — DAST (Dynamic Application Security Testing)
+
+**Goal**: Attack the running API like a real attacker  
+**When**: Sprint 5 Week 2 · Against staging environment only
+
+```bash
+# OWASP ZAP — Full API scan
+docker run -t owasp/zap2docker-stable zap-api-scan.py \
+  -t https://iamandagent-staging.up.railway.app/openapi.json \
+  -f openapi \
+  -r reports/zap-report.html
+
+# Nuclei — Template-based vulnerability scanner
+brew install nuclei
+nuclei -u https://iamandagent-staging.up.railway.app \
+       -t http/cves/ -t http/misconfiguration/ -t http/exposures/ \
+       -j -o reports/nuclei.json
+
+# ffuf — API endpoint fuzzing (discover hidden routes)
+brew install ffuf
+ffuf -u https://iamandagent-staging.up.railway.app/FUZZ \
+     -w /usr/share/wordlists/api-routes.txt \
+     -mc 200,201,204,301,302,307,401,403 -o reports/ffuf-routes.json
+```
+
+**Specific API tests to run manually**:
+
+| Test | Endpoint | Attack | Expected |
+|------|----------|--------|----------|
+| IDOR on agents | `GET /v1/agents/{id}` | Change agent UUID to another org's | 403 |
+| IDOR on policies | `GET /v1/policies/{id}` | Cross-org access | 403 |
+| API key brute force | `POST /v1/guard` | 10K requests with wrong keys | Rate limited |
+| Mass assignment | `POST /v1/agents` | Add `role: admin` to body | Ignored |
+| SQL injection | All POST bodies | `'; DROP TABLE agents; --` | 422 or 400 |
+| SSRF via endpoint | Any URL field | `http://169.254.169.254/` | Blocked |
+| JWT none algorithm | Auth header | `alg: none` JWT | 401 |
+| Negative amounts | Policy `max_amount` | `-99999.99` | Rejected |
+
+---
+
+### Phase 5 — Manual Penetration Test (Targeted)
+
+**Goal**: Business-logic attacks that automated tools miss  
+**When**: Sprint 5 Week 3-4
+
+#### 5A — Authentication & Authorization
+- [ ] **Policy privilege escalation**: Agent key → attempt to create/modify policies via undocumented params
+- [ ] **Cross-organization data leak**: org_A agent key → read org_B policies/logs
+- [ ] **API key format oracle**: does error message differ for valid-format vs invalid-format keys?
+- [ ] **Race condition on key rotation**: submit 2 concurrent rotate-key requests
+- [ ] **Supabase service_role exposure**: verify service_role key is NEVER in client-side code or public APIs
+
+#### 5B — AI Agent-Specific Attacks
+- [ ] **Policy bypass via parameter pollution**: `POST /v1/guard` with duplicate `tool_name` params
+- [ ] **Signature replay attack**: capture valid Ed25519 signature → replay on different operation
+- [ ] **Guard bypass via null/empty fields**: `{"tool_name": null}`, `{"tool_name": ""}`
+- [ ] **Policy cache poisoning**: if policy is cached, invalidate after change
+- [ ] **Flood the WAL**: send 100k log entries → check disk exhaustion / OOM
+
+#### 5C — Infrastructure & Supply Chain
+- [ ] **Railway metadata service**: SSRF to `http://169.254.169.254/latest/meta-data/` from backend
+- [ ] **Vercel env var exposure**: ensure `SUPABASE_SERVICE_ROLE_KEY` is not `NEXT_PUBLIC_`
+- [ ] **Supabase anon key scope**: verify anon key cannot bypass backend to write directly to DB
+- [ ] **Git history scan**: look for past commits with leaked secrets or tokens
+- [ ] **npm package integrity**: verify `package-lock.json` matches expected hashes
+
+#### 5D — Client-Side (Dashboard)
+- [ ] **XSS via stored agent names**: agent name with `<script>` → renders in dashboard?
+- [ ] **XSS via log data**: log entry with HTML → renders unescaped?
+- [ ] **CSRF on rotate-key**: can a malicious page trigger key rotation without user action?
+- [ ] **Open redirect on login**: `/login?next=https://evil.com` → redirect after auth?
+- [ ] **localStorage sensitive data**: check if API keys / tokens stored in localStorage
+
+---
+
+### Phase 6 — Specific Remediations (Priority Order)
+
+| Priority | Finding | Remediation | Effort |
+|----------|---------|-------------|--------|
+| 🔴 1 | **C-01: RLS disabled** | Enable RLS on `policies`, `agents`, `ledger_logs` with `org_id` check; keep disabled only for `rate_limit_tracker` | 4h |
+| 🔴 2 | **C-02: Plaintext API key** | Encrypt `credentials.json` with OS keychain (`keyring` lib on macOS/Linux/Win) | 1 day |
+| 🟠 3 | **C-05: No CSP headers** | Add `Content-Security-Policy` in `next.config.ts` `headers()` | 2h |
+| 🟠 4 | **C-06: File permissions** | `os.chmod(credentials_file, 0o600)` on write in CLI | 30min |
+| 🟠 5 | **C-07: Timing attack on API key** | Use `hmac.compare_digest()` instead of `==` | 15min |
+| 🟡 6 | **C-04: Hardcoded secret in compose** | Remove test SECRET_KEY from `docker-compose.yml`, add `.env.example` placeholder | 30min |
+| 🟡 7 | **C-08: WAL encryption** | AES-256-GCM encrypt WAL entries using derived key from API key | 2 days |
+| 🟡 8 | **C-09: Dependabot** | Add `.github/dependabot.yml` (see Phase 2) | 30min |
+| 🟡 9 | **C-10: Key file encryption** | Ed25519 private keys → encrypt with password (already supported in spec; verify implementation) | 4h |
+
+---
+
+### Phase 7 — CI/CD Security Integration (Permanent)
+
+Add to `.github/workflows/ci.yml` after existing test step:
+
+```yaml
+- name: SAST — Bandit
+  run: |
+    pip install bandit
+    bandit -r src/ server/ -ll -f json -o reports/bandit.json
+  continue-on-error: false  # BLOCKING — no HIGH/CRITICAL allowed
+
+- name: SAST — Semgrep
+  run: |
+    pip install semgrep
+    semgrep scan --config=p/python --config=p/secrets src/ server/ --error
+  continue-on-error: true  # Non-blocking until baseline clean
+
+- name: SCA — pip-audit
+  run: |
+    pip install pip-audit
+    pip-audit --desc --fail-on-cvss 7.0  # Fail on HIGH+
+  continue-on-error: false
+
+- name: Secrets — Gitleaks
+  uses: gitleaks/gitleaks-action@v2
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # BLOCKING — any secret in git history = fail
+
+- name: Container — Trivy
+  uses: aquasecurity/trivy-action@master
+  with:
+    image-ref: hashed-api:ci
+    format: sarif
+    exit-code: 1
+    severity: HIGH,CRITICAL
+```
+
+---
+
+### Security KPIs & Metrics
+
+| Metric | Current | Target (Sprint 5) | Target (GA) |
+|--------|---------|-------------------|-------------|
+| SAST findings (HIGH+) | Unknown | 0 | 0 |
+| SCA CVEs (HIGH+) | Unknown | < 3 | 0 |
+| DAST findings (HIGH+) | Unknown | 0 | 0 |
+| Secrets in git history | Unknown | 0 | 0 |
+| Container CVEs (CRITICAL) | Unknown | 0 | 0 |
+| RLS coverage | 0% (all disabled) | 80% | 100% |
+| Files with correct permissions | Unknown | 100% | 100% |
+| Pen test issues (CRITICAL) | Unknown | 0 | 0 |
+
+---
+
+### Sprint 5 — Security Sprint (2-week plan)
+
+| Day | Task | Owner | Blocker? |
+|-----|------|-------|----------|
+| D1-2 | Run Bandit + Semgrep → fix all HIGH findings | Dev | No |
+| D1-2 | Run Gitleaks → remediate any secret history leaks | Dev | Yes |
+| D3 | pip-audit + npm audit → update vulnerable deps | Dev | No |
+| D3 | Add `.github/dependabot.yml` | Dev | No |
+| D4 | Fix C-07: timing-safe API key comparison | Dev | Yes |
+| D4 | Fix C-06: `chmod 0600` on credentials.json | Dev | No |
+| D4 | Fix C-05: CSP headers in next.config.ts | Dev | No |
+| D5 | Fix C-04: Remove hardcoded secret from docker-compose | Dev | No |
+| D6-7 | Design RLS policies (C-01) — enable on critical tables | DB | Yes |
+| D8 | Run Trivy on Docker image → fix OS-level CVEs | DevOps | No |
+| D8 | Run OWASP ZAP against staging | SecEng | No |
+| D9-10 | Manual pen test — auth, IDOR, AI-specific attacks | SecEng | No |
+| D10 | Integrate all scans into ci.yml | DevOps | No |
+
+> **Definition of Done**: All 🔴 CRITICAL and 🟠 HIGH findings resolved, verified by re-scan. CI blocks on new HIGH+ findings.
