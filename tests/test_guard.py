@@ -325,3 +325,181 @@ class TestGuardOfflineMode:
 
         result = await my_tool()
         assert result == "ran"
+
+
+# ── Policy dataclass unit tests ───────────────────────────────────────────────
+
+
+class TestPolicy:
+    """Direct unit tests for the Policy dataclass and its validate() method."""
+
+    def test_allowed_false_returns_false(self) -> None:
+        """Policy.validate() returns False when allowed=False (line 52)."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=False)
+        assert p.validate() is False
+
+    def test_allowed_true_no_amount_returns_true(self) -> None:
+        """Policy.validate() returns True when allowed and no amount checked."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=True)
+        assert p.validate() is True
+
+    def test_amount_within_limit_returns_true(self) -> None:
+        """Policy.validate() returns True when amount ≤ max_amount."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=True, max_amount=100.0)
+        assert p.validate(amount=50.0) is True
+
+    def test_amount_exactly_at_limit_returns_true(self) -> None:
+        """Policy.validate() returns True when amount == max_amount."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=True, max_amount=100.0)
+        assert p.validate(amount=100.0) is True
+
+    def test_amount_exceeds_limit_returns_false(self) -> None:
+        """Policy.validate() returns False when amount > max_amount (line 57)."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=True, max_amount=100.0)
+        assert p.validate(amount=101.0) is False
+
+    def test_amount_none_with_max_amount_returns_true(self) -> None:
+        """validate(amount=None) with a max_amount skips the limit check."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op", allowed=True, max_amount=100.0)
+        assert p.validate(amount=None) is True
+
+    def test_metadata_defaults_to_empty_dict(self) -> None:
+        """Policy.__post_init__ sets metadata={} when None is passed."""
+        from hashed.guard import Policy
+        p = Policy(tool_name="op")
+        assert p.metadata == {}
+
+
+# ── PolicyEngine unit tests ───────────────────────────────────────────────────
+
+
+class TestPolicyEngine:
+    """Direct unit tests for PolicyEngine methods not covered by @guard tests."""
+
+    def _engine(self):
+        from hashed.guard import PolicyEngine
+        return PolicyEngine()
+
+    # remove_policy (line 120)
+    def test_remove_policy_removes_existing(self) -> None:
+        engine = self._engine()
+        engine.add_policy("op")
+        engine.remove_policy("op")
+        assert not engine.has_policy("op")
+
+    def test_remove_policy_raises_on_missing(self) -> None:
+        engine = self._engine()
+        with pytest.raises(KeyError):
+            engine.remove_policy("nonexistent")
+
+    # has_policy (line 144)
+    def test_has_policy_returns_true_when_present(self) -> None:
+        engine = self._engine()
+        engine.add_policy("pay")
+        assert engine.has_policy("pay") is True
+
+    def test_has_policy_returns_false_when_absent(self) -> None:
+        engine = self._engine()
+        assert engine.has_policy("ghost") is False
+
+    # set_default_policy (line 156)
+    def test_set_default_policy_deny_all(self) -> None:
+        """set_default_policy(allowed=False) blocks unknown tools."""
+        from hashed.guard import PermissionError as PE
+        engine = self._engine()
+        engine.set_default_policy(allowed=False)
+        with pytest.raises(PE):
+            engine.validate("unknown_tool")
+
+    def test_set_default_policy_max_amount(self) -> None:
+        """set_default_policy with max_amount enforces limit on unknown tools."""
+        from hashed.guard import PermissionError as PE
+        engine = self._engine()
+        engine.set_default_policy(max_amount=50.0)
+        assert engine.validate("tool_x", amount=10.0) is True
+        with pytest.raises(PE):
+            engine.validate("tool_x", amount=100.0)
+
+    # check_permission (lines 230-233)
+    def test_check_permission_returns_false_when_denied(self) -> None:
+        """check_permission() returns False instead of raising (line 230-233)."""
+        engine = self._engine()
+        engine.add_policy("restricted", allowed=False)
+        assert engine.check_permission("restricted") is False
+
+    def test_check_permission_returns_false_on_amount_exceeded(self) -> None:
+        engine = self._engine()
+        engine.add_policy("transfer", max_amount=100.0)
+        assert engine.check_permission("transfer", amount=999.0) is False
+
+    def test_check_permission_returns_true_when_allowed(self) -> None:
+        engine = self._engine()
+        engine.add_policy("read", allowed=True)
+        assert engine.check_permission("read") is True
+
+    # list_policies (line 242)
+    def test_list_policies_returns_copy(self) -> None:
+        engine = self._engine()
+        engine.add_policy("a")
+        engine.add_policy("b")
+        policies = engine.list_policies()
+        assert set(policies.keys()) == {"a", "b"}
+        # Mutating the returned dict must not affect the engine
+        policies["a"] = None  # type: ignore
+        assert engine.has_policy("a")
+
+    # bulk_add_policies (lines 258-259)
+    def test_bulk_add_policies_adds_all(self) -> None:
+        engine = self._engine()
+        engine.bulk_add_policies({
+            "wire": {"max_amount": 1000.0, "allowed": True},
+            "delete": {"allowed": False},
+        })
+        assert engine.has_policy("wire")
+        assert engine.has_policy("delete")
+        assert engine.get_policy("wire").max_amount == 1000.0
+        assert engine.get_policy("delete").allowed is False
+
+    # export_policies (line 273)
+    def test_export_policies_returns_dict(self) -> None:
+        engine = self._engine()
+        engine.add_policy("pay", max_amount=500.0, allowed=True)
+        exported = engine.export_policies()
+        assert "pay" in exported
+        assert exported["pay"]["max_amount"] == 500.0
+        assert exported["pay"]["allowed"] is True
+
+    def test_export_policies_empty_engine(self) -> None:
+        engine = self._engine()
+        assert engine.export_policies() == {}
+
+    # import_policies (line 289)
+    def test_import_policies_loads_correctly(self) -> None:
+        engine = self._engine()
+        engine.import_policies({
+            "send_sms": {"max_amount": None, "allowed": True},
+            "nuke":     {"max_amount": None, "allowed": False},
+        })
+        assert engine.has_policy("send_sms")
+        assert engine.has_policy("nuke")
+        assert engine.get_policy("nuke").allowed is False
+
+    def test_export_then_import_roundtrip(self) -> None:
+        """export_policies → import_policies preserves all policy data."""
+        engine_a = self._engine()
+        engine_a.add_policy("transfer", max_amount=200.0)
+        engine_a.add_policy("read_only", allowed=True)
+
+        exported = engine_a.export_policies()
+
+        engine_b = self._engine()
+        engine_b.import_policies(exported)
+
+        assert engine_b.get_policy("transfer").max_amount == 200.0
+        assert engine_b.has_policy("read_only")
