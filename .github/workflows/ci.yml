@@ -52,10 +52,15 @@ jobs:
           HASHED_API_KEY: "test_key"
           HASHED_IDENTITY_PASSWORD: "test_password"
         run: |
+          # Coverage threshold — bump this every sprint as coverage improves.
+          # Current measured: 59.59% (local, excluding integration tests).
+          # CI runs the full suite which may push it slightly higher.
+          # Floor: 59 — prevents regressions while allowing minor variance.
           pytest tests/ \
             --cov=src/hashed \
             --cov-report=term-missing \
             --cov-report=xml \
+            --cov-fail-under=59 \
             -v
 
       - name: Upload coverage report
