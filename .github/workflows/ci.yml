@@ -60,7 +60,7 @@ jobs:
             --cov=src/hashed \
             --cov-report=term-missing \
             --cov-report=xml \
-            --cov-fail-under=59 \
+            --cov-fail-under=65 \
             -v
 
       - name: Upload coverage report
