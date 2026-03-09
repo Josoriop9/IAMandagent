@@ -12,10 +12,90 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Planned
 - Rate limiting on all API endpoints
 - API key expiration + rotation endpoint
-- Unit tests for `@core.guard()` (allow/deny/log paths)
 - Integration tests for CLI commands
 - Ledger durability (persist buffer to disk)
-- Graceful degradation (local policy fallback when backend is down)
+
+---
+
+## [0.2.0] — 2026-03-08
+
+### 🧪 Quality Sprint — Test Coverage 17% → 62%
+
+Full coverage sprint across 4 sessions, growing the suite from ~30 tests to **312 tests** and raising total coverage from 17% to 62%.
+
+### Added
+
+#### Tests (`tests/`)
+
+**`tests/test_core_backend.py`** *(expanded — 33 new tests)*
+- `HashedCore.initialize()` with real HTTP mock: registers agent (201 new / 409 existing), syncs policies, starts background task
+- `_register_agent()` — all status paths: 201 (new agent), 409 (existing), 500 (error)
+- `sync_policies_from_backend()` — success with policies, no-http-client fallback, 500 error
+- `_push_local_json_policies()` — flat format, structured global/agents format, no file found, malformed JSON
+- `@guard()` with backend: fail-open (unreachable backend allows), fail-closed (unreachable denies), success logged to `/log`, denial logged to `/log`
+- `shutdown()` — stops sync task and HTTP client cleanly
+
+**`tests/test_core_coverage.py`** *(new — 14 tests)*
+- `push_policies_to_backend()` — success (2 POST per policy), agent-not-found skip, no HTTP client noop, no local policies noop, 500 raises, 409 counts as success
+- `_push_local_json_policies()` agent section — snake_case matching pushes with `agent_id`, agent not found skips scoped policies
+- `_background_sync()` — runs ≥1 iteration with mocked sleep, error in iteration caught + task continues
+- `shutdown()` with `_ledger` set → `ledger.stop()` awaited
+- `@guard()` on sync `def` — runs via `sync_wrapper`, denial returns string
+
+**`tests/test_http_client.py`** *(expanded — ~40 new tests)*
+- `HashedHTTPClient` retry logic: 429 rate-limit back-off, 503 retry, max retries exceeded
+- Auth header injection, SSL config, timeout propagation
+- `aclose()` cleanup
+
+**`tests/test_ledger.py`** *(expanded)*
+- WAL crash recovery: buffer flushed after restart from partial WAL
+- `ledger.log()` with and without backend, flush on buffer full
+- `ledger.stop()` flushes pending events
+
+**`tests/test_identity.py`** *(new — 26 tests)*
+- `IdentityManager.__init__` with provided private key (else branch)
+- `sign_message()` determinism, exception path → `HashedCryptoError` (mock C-ext)
+- `verify_signature()` with explicit `public_key` argument, wrong key returns False
+- `sign_data()` canonical JSON, exception path → `HashedCryptoError`
+- `verify_signed_data()` — valid, tampered signature, tampered data, missing field
+- `export_private_key()` with password → encrypted PEM, roundtrip with/without password
+- `from_private_key_bytes()` — wrong password, garbage bytes, wrong key type (ECDSA)
+- Public key properties: 32-byte raw, 64-char hex, roundtrip
+
+**`tests/test_guard.py`** *(expanded — 22 new tests)*
+- `Policy.validate()` — all branches: `allowed=False`, within limit, at boundary, exceeds limit, `amount=None` with max
+- `PolicyEngine.remove_policy()` — removes, raises `KeyError` on missing
+- `PolicyEngine.has_policy()` — True/False
+- `PolicyEngine.set_default_policy()` — deny-all blocks unknowns, max_amount enforced on unknowns
+- `PolicyEngine.check_permission()` — returns False on denied, False on exceeded, True on allowed
+- `PolicyEngine.list_policies()` — returns defensive copy
+- `PolicyEngine.bulk_add_policies()` — adds all at once
+- `PolicyEngine.export_policies()` + `import_policies()` — roundtrip preserves all data
+
+#### CI
+- `--cov-fail-under=59` added to `pytest` step in `.github/workflows/ci.yml`
+  — Any PR that drops coverage below 59% now fails the test job, preventing silent regressions
+
+### Changed
+- Coverage thresholds are now enforced at the pipeline level (floor: 59%)
+
+### Fixed
+- `@guard()` decorator: policy denial was not being logged to the backend audit trail
+- `@guard()` decorator: by default (`raise_on_deny=False`) now returns a human-readable string instead of raising `PermissionError` — prevents LangChain/CrewAI agents from crashing on governance blocks
+
+### Coverage Summary
+
+| Module | v0.1.0 | v0.2.0 | Δ |
+|--------|--------|--------|---|
+| `client.py` | ~30% | **100%** | +70 pp |
+| `guard.py` | ~10% | **100%** | +90 pp |
+| `identity_store.py` | 43% | **98%** | +55 pp |
+| `templates.py` | 0% | **97%** | +97 pp |
+| `identity.py` | 0% | **97%** | +97 pp |
+| `http_client.py` | 24% | **95%** | +71 pp |
+| `core.py` | 15% | **87%** | +72 pp |
+| `ledger.py` | 60% | **84%** | +24 pp |
+| **Total** | **17%** | **62%** | **+45 pp** |
 
 ---
 
@@ -106,6 +186,7 @@ First production-ready release of Hashed SDK — AI Agent Governance Platform.
 
 ---
 
-[Unreleased]: https://github.com/Josoriop9/IAMandagent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/Josoriop9/IAMandagent/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/Josoriop9/IAMandagent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Josoriop9/IAMandagent/releases/tag/v0.1.0
 [0.0.1]: https://github.com/Josoriop9/IAMandagent/releases/tag/v0.0.1
