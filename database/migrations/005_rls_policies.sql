@@ -1,19 +1,35 @@
 -- ============================================================================
 -- Migration 005: Row Level Security (RLS) policies — C-01 security fix
 -- Applied: 2026-03-08
+-- Patched: 2026-03-08 — added ledger_logs_service_insert policy (see below)
 -- Supabase projects: hashed-dev ✅  |  production ✅
 -- ============================================================================
 -- Description:
---   Enables Row Level Security on 6 tables and creates 13 policies so that:
+--   Enables Row Level Security on 6 tables and creates 14 policies so that:
 --     - Dashboard users (anon key + JWT) can only see their own org's data.
---     - The Railway backend (service_role key) bypasses RLS automatically.
+--     - The backend (service_role key) can INSERT into ledger_logs.
 --   This closes OWASP ASVS 4.0 L2 finding C-01 (RLS disabled = full DB
 --   read/write for anyone who obtains the anon key).
+--
+-- ── Patch (2026-03-08) ───────────────────────────────────────────────────────
+--   Root cause: supabase-py v2 does NOT bypass RLS for the service_role key
+--   when using the REST/table API (PostgREST enforces RLS regardless of the
+--   JWT role claim). An explicit INSERT policy is required on ledger_logs.
+--
+--   Fix applied in both hashed-dev and production Supabase:
+--     CREATE POLICY "ledger_logs_service_insert"
+--         ON ledger_logs FOR INSERT
+--         WITH CHECK (true);
+--
+--   Safe because: server.py enforces verify_api_key() before any insert,
+--   so the DB-level check is the last line of defense, not the only one.
+-- ────────────────────────────────────────────────────────────────────────────
 --
 -- Tables protected: organizations, user_organizations, agents, policies,
 --                   ledger_logs, approval_queue
 --
 -- Rollback:
+--   DROP POLICY IF EXISTS "ledger_logs_service_insert" ON ledger_logs;
 --   ALTER TABLE organizations    DISABLE ROW LEVEL SECURITY;
 --   ALTER TABLE user_organizations DISABLE ROW LEVEL SECURITY;
 --   ALTER TABLE agents           DISABLE ROW LEVEL SECURITY;

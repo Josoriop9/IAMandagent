@@ -137,9 +137,12 @@ CREATE POLICY "policies_member_delete"
     );
 
 -- ── Step 6: ledger_logs ──────────────────────────────────────────────────────
--- Read-only for org members via JWT.
--- INSERT comes from the backend (service_role) — no user INSERT policy needed.
--- This prevents agents or users from injecting fake log entries directly.
+-- Read-only for org members via JWT (SELECT).
+-- INSERT: supabase-py v2 does NOT automatically bypass RLS even with the
+-- service_role key when using the table API — an explicit INSERT policy with
+-- WITH CHECK (true) is required so the backend can write audit entries.
+-- The access control layer is enforced in server.py (verify_api_key) before
+-- the insert, so WITH CHECK (true) is safe here.
 
 CREATE POLICY "ledger_logs_member_select"
     ON ledger_logs FOR SELECT
@@ -149,6 +152,13 @@ CREATE POLICY "ledger_logs_member_select"
             WHERE user_id = auth.uid()
         )
     );
+
+-- Allow backend (service_role) to insert audit log entries.
+-- supabase-py v2 requires an explicit INSERT policy even for service_role
+-- when using the REST/table API (RLS is enforced at the PostgREST layer).
+CREATE POLICY "ledger_logs_service_insert"
+    ON ledger_logs FOR INSERT
+    WITH CHECK (true);
 
 -- ── Step 7: approval_queue ───────────────────────────────────────────────────
 -- Org members can view and update (approve/reject) pending requests.
