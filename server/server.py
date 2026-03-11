@@ -1395,8 +1395,11 @@ async def query_logs(
         Filtered log entries
     """
     try:
+        # Join with agents to resolve agent_name for CLI/dashboard display.
+        # agents(name) uses PostgREST foreign key expansion — returns null
+        # when agent_id is NULL (org-level log) or agent was deleted.
         query = supabase.table("ledger_logs")\
-            .select("*")\
+            .select("*, agents(name)")\
             .eq("organization_id", org["id"])\
             .order("timestamp", desc=True)\
             .limit(limit)\
@@ -1411,9 +1414,16 @@ async def query_logs(
         
         response = query.execute()
         
+        # Flatten agents join → agent_name field expected by CLI/dashboard
+        logs = []
+        for log in response.data:
+            agent_info = log.pop("agents", None)
+            log["agent_name"] = agent_info["name"] if agent_info else "Unknown"
+            logs.append(log)
+        
         return {
-            "logs": response.data,
-            "count": len(response.data),
+            "logs": logs,
+            "count": len(logs),
             "limit": limit,
             "offset": offset
         }
