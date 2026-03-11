@@ -10,10 +10,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Planned
-- Rate limiting on all API endpoints
-- API key expiration + rotation endpoint
-- Integration tests for CLI commands
-- Ledger durability (persist buffer to disk)
+- Ledger durability (persist buffer to disk on crash)
+- API key expiration (TTL-based auto-rotation)
+- WebSocket support for `hashed logs tail --follow` (real-time streaming)
+- OpenTelemetry spans export from `@core.guard()`
+
+---
+
+## [0.2.1] — 2026-03-10
+
+### 🐛 Bug Fixes
+
+#### Server (`server/server.py`)
+- **Agent "Unknown" in `hashed logs list`** — `GET /v1/logs` was returning raw
+  `ledger_logs` rows with only `agent_id` (UUID). CLI was calling
+  `log.get("agent_name", "Unknown")` but the field never existed in the API
+  response. Fix: changed `.select("*")` to `.select("*, agents(name)")` using
+  PostgREST FK expansion (inline JOIN), then flattens `agents.name →
+  agent_name` in the response loop. Zero-downtime deploy — no schema migration
+  required.
+
+- **CORS empty string edge case** — `os.getenv("ALLOWED_ORIGINS",
+  "").split(",")` returned `[""]` when the env var was unset. `CORSMiddleware`
+  received an invalid empty-string origin, silently blocking all cross-origin
+  requests. Fix: filter empty strings with
+  `[o.strip() for o in ... if o.strip()]`. If `ALLOWED_ORIGINS` is unset,
+  middleware is not added at all.
+
+#### Tests (`tests/`)
+- **`test_whoami_with_credentials`** — `CREDENTIALS_FILE` is a module-level
+  constant computed at import time. Patching `Path.home` via `monkeypatch`
+  after import had no effect. Fix: directly patch
+  `hashed.cli.CREDENTIALS_FILE` and `hashed.cli.CREDENTIALS_DIR` in the
+  `fake_credentials` fixture.
+
+#### Templates (`src/hashed/templates.py`)
+- **TODO removed from generated scripts** — the plain-Python interactive loop
+  template emitted `# TODO: route user_input to the appropriate guarded
+  function`, visible to end users via GitHub. Replaced with a clear
+  implementation comment + `agent.execute(user_input)` call.
+
+### Added
+
+#### Tests (`tests/test_cli_commands.py`) *(new — 24 tests)*
+Previously the CLI had 0% test coverage for most commands. This file covers:
+
+- **`hashed logs list`** (7 tests): agent_name display (Bug A regression),
+  tool_name column, status icons (✓/✗), `--limit` flag forwarded, empty
+  result, Unknown-fallback for logs without `agent_name`.
+- **`hashed agent list`** (3 tests): name display, empty list, graceful
+  exit without credentials.
+- **`hashed agent` subcommands** (3 tests): `--help` output, `delete` no-args,
+  credential loading verified via mock GET call count.
+- **`hashed init`** (2 tests): no-credentials graceful exit, mocked HTTP.
+- **`hashed policy push`** (2 tests): success with mocked agents+policies+delete,
+  missing policy file graceful exit.
+- **`hashed whoami` + `version`** (2 tests): credentials loaded, semver output.
+- **CLI structure smoke tests** (5 tests): root `--help`, logs/policy `--help`,
+  login without network, logout idempotent.
+
+Python 3.9 compatible (no `X | Y` union syntax, no parenthesized `with`).
+All 24 pass in 0.20s with zero real network calls.
+
+**Coverage delta:** `cli.py` 0% → 29%, total 73% → 75%
+
+#### Examples (`examples/quickstart.py`) *(new)*
+Self-contained 30-second quickstart demonstrating the full SDK flow:
+`HashedConfig` → `load_or_create_identity` → `HashedCore.initialize()` →
+`@core.guard()` on 3 operations → audit trail via `hashed logs list`.
+Includes inline comments explaining every step. Requires only
+`hashed login` + `hashed init` to run.
 
 ---
 
