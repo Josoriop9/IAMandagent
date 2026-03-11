@@ -285,7 +285,8 @@ def _write_agent_script(
 @app.command()
 def version():
     """📦 Show Hashed version."""
-    console.print("[cyan]Hashed SDK[/cyan] version [green]0.2.0[/green]")
+    from hashed import __version__
+    console.print(f"[cyan]Hashed SDK[/cyan] version [green]{__version__}[/green]")
 
 
 # ============================================================================

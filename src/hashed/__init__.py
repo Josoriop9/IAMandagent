@@ -29,7 +29,7 @@ from hashed.identity_store import (
 from hashed.ledger import AsyncLedger
 from hashed.models import HashRequest, HashResponse, HashAlgorithm
 
-__version__ = "0.1.0"
+__version__ = "0.2.1"
 __all__ = [
     # Core
     "HashedClient",
