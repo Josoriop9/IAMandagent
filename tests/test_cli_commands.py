@@ -42,9 +42,12 @@ def tmp_workdir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator:
 @pytest.fixture()
 def fake_credentials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     """
-    Write fake credentials.json to a temp ~/.hashed dir and patch Path.home().
+    Write fake credentials.json and patch the module-level CREDENTIALS_FILE /
+    CREDENTIALS_DIR constants in hashed.cli directly.
 
-    Returns the credentials dict for assertions.
+    Why: CREDENTIALS_FILE is computed once at import time
+    (``Path.home() / ".hashed" / "credentials.json"``), so patching
+    ``Path.home`` after import has no effect. We must patch the constant itself.
     """
     creds = {
         "email": "test@example.com",
@@ -56,8 +59,10 @@ def fake_credentials(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict:
     }
     hashed_dir = tmp_path / ".hashed"
     hashed_dir.mkdir()
-    (hashed_dir / "credentials.json").write_text(json.dumps(creds))
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    cred_file = hashed_dir / "credentials.json"
+    cred_file.write_text(json.dumps(creds))
+    monkeypatch.setattr("hashed.cli.CREDENTIALS_DIR", hashed_dir)
+    monkeypatch.setattr("hashed.cli.CREDENTIALS_FILE", cred_file)
     return creds
 
 

@@ -114,7 +114,10 @@ def render_plain(
                 print("Goodbye!")
                 break
             print(f"Agent: Processing '{{user_input}}'...")
-            # TODO: route user_input to the appropriate guarded function
+            # Route user_input to the guarded tool registered for this agent.
+            # By default the template uses the first tool in the list; extend
+            # this block with your own dispatch logic (e.g., intent detection).
+            agent.execute(user_input)
         except KeyboardInterrupt:
             print("\\nGoodbye!")
             break

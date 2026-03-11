@@ -212,7 +212,9 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(MetricsMiddleware)
 
 # CORS Configuration
-allowed_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+# Filter out empty strings that result from splitting an empty env var.
+# e.g. os.getenv("ALLOWED_ORIGINS", "") → "" → "".split(",") → [""] ← wrong
+allowed_origins = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "").split(",") if o.strip()]
 if allowed_origins:
     app.add_middleware(
         CORSMiddleware,
