@@ -14,10 +14,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - API key expiration (TTL-based auto-rotation)
 - WebSocket support for `hashed logs tail --follow` (real-time streaming)
 - OpenTelemetry spans export from `@core.guard()`
+- `cli.py` tests → coverage target 80%
+- Framework-specific guides: LangChain, CrewAI, Strands, AutoGen (complete)
 
 ---
 
-## [0.2.1] — 2026-03-10
+## [0.2.1] — 2026-03-14
+
+### 🚀 Sprint 6 — Distribution Prep
+
+#### CLI Banner (`src/hashed/banner.py`) *(new module)*
+- New `show_banner()` function — renders `#` logo + `HASHED` block art side by side
+- `#` symbol is the brand mark: hash (product) + code comment + hashtag
+- Only appears on `hashed` with no subcommand (`invoke_without_command=True`)
+- All other commands (`hashed login`, `hashed policy list`, etc.) are silent
+- Zero new dependencies — uses Rich only (already in core deps)
+
+#### CLI Version (`src/hashed/cli.py`)
+- `hashed version` now reads `__version__` dynamically from `src/hashed/__init__.py`
+- Previously hardcoded to `"0.2.0"` — would drift silently on every release
+
+#### Documentation (`README.md`)
+- ASCII art banner centered at top (like professional open-source repos)
+- PyPI badge added (will show live version once published)
+- Coverage badge updated: 37% → 73% (brightgreen)
+- Tests badge updated: 76 → 344 passed
+- Quick Start now shows `pip install hashed-sdk` + all optional extras
+- Recent Updates section: v0.2.1, v0.2.0, v0.1.0
+- Core Concepts: 5 sections with working code examples
+- Full LLM integration example (OpenAI + Hashed)
+- Architecture diagram (ASCII boxes: SDK → Backend → DB → Dashboard)
+- All repo links corrected to `github.com/Josoriop9/IAMandagent`
+
+#### Project Cleanup
+- `dev_test_agent.py` (auto-generated, was in root) → `examples/dev_test_agent.py`
+- 5 historical one-time SQL scripts → `database/archive/`
+  (`add_agent_appearance`, `add_user_org_link`, `add_user_organizations`,
+   `fix_status_constraint`, `link_existing_users`)
+- `.gitignore`: added `secrets/` (local key files / PEMs)
+- `build/` + `src/hashed_sdk.egg-info/`: confirmed never tracked by git ✅
 
 ### 🐛 Bug Fixes
 

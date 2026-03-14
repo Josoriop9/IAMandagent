@@ -200,12 +200,18 @@ All core features live: SDK, CLI, backend, dashboard, CI/CD.
 - ✅ **TestSendBatchWithPublicKey** — agent_public_key payload coverage (line 414)
 - ✅ Commit `f052eaf` merged to main
 
-### 🔄 Sprint 6 — Distribution (when ready)
-- ⏸️ PyPI publish `pip install hashed-sdk`
-- ⏸️ GitHub Release v0.2.0 with full release notes
+### 🔄 Sprint 6 — Distribution (in progress — 2026-03-14)
+- ✅ **CLI Banner** — `banner.py` with `#` + HASHED block art; shown only on `hashed` (no subcommand)
+- ✅ **`hashed version` dynamic** — reads `__version__` from `__init__.py`; no more drift
+- ✅ **README overhaul** — ASCII art banner, PyPI badge, coverage 73%, tests 344, pip install, architecture diagram
+- ✅ **Project cleanup** — `dev_test_agent.py` → `examples/`, 5 SQL files → `database/archive/`, `secrets/` in `.gitignore`
+- ✅ **CHANGELOG v0.2.1** — Sprint 6 fully documented
+- ✅ **wheel rebuilt** — `twine check: PASSED`, `banner.py` confirmed in wheel
+- ⏸️ **CLI tests** — `cli.py` 29% → target 80%; `test_banner.py` (new)
+- ⏸️ **FRAMEWORK_GUIDES.md** — complete LangChain + CrewAI sections
+- ⏸️ **PyPI publish** `pip install hashed-sdk` (account + twine upload)
+- ⏸️ **GitHub Release v0.2.1** with release notes
 - ⏸️ Video walkthrough
-- ⏸️ Framework-specific guides (LangChain, CrewAI, Strands, AutoGen) — see `FRAMEWORK_GUIDES.md`
-- ⏸️ CLI tests — `cli.py` currently 0% coverage; adding tests → +8-10 pp total
 
 ---
 
