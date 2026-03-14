@@ -144,7 +144,7 @@ The core product is live end-to-end and actively hardened:
 | SDK Integration Guide | 2h | ✅ `INTEGRATION.md` |
 | Quickstart / README | 2h | ✅ `README.md` |
 | Repository structure guide | 1h | ✅ `REPOS.md` |
-| Framework-specific guides | 4h | 🔄 Partial |
+| Framework-specific guides | 4h | ✅ Done — `FRAMEWORK_GUIDES.md` (659 lines, all 4 frameworks) |
 | Video walkthrough | 1 day | ❌ Not started |
 
 ---
