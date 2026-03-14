@@ -4,10 +4,11 @@
 
 A professional Python SDK that provides cryptographic identity, policy enforcement, and immutable audit logging for AI agents. Built for production-grade AI systems that require accountability, compliance, and security.
 
+[![PyPI](https://img.shields.io/pypi/v/hashed-sdk.svg)](https://pypi.org/project/hashed-sdk/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://img.shields.io/badge/coverage-37%25-yellow.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
-[![Tests](https://img.shields.io/badge/tests-76%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
+[![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
+[![Tests](https://img.shields.io/badge/tests-344%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
 
 ---
 
@@ -59,12 +60,17 @@ Hashed is a complete governance framework for AI agents that ensures:
 ### Installation
 
 ```bash
-# Install the SDK
-pip install -e git+https://github.com/yourrepo/hashed.git#egg=hashed-sdk
+pip install hashed-sdk
 
-# Or for local development
-cd hashed-sdk
-pip install -e .
+# Optional: secure OS keychain storage for API keys
+pip install hashed-sdk[secure]
+
+# Optional: framework integrations
+pip install hashed-sdk[langchain]   # LangChain
+pip install hashed-sdk[crewai]      # CrewAI
+pip install hashed-sdk[strands]     # AWS Strands
+pip install hashed-sdk[autogen]     # AutoGen
+pip install hashed-sdk[all]         # All frameworks
 ```
 
 ### Basic Usage
@@ -510,18 +516,28 @@ See [SECURITY.md](SECURITY.md) for complete security guide.
 
 ## 🔄 Recent Updates
 
-### v0.2.0 (Latest)
+### v0.2.1 (Latest)
+
+**New Features:**
+- ✨ CLI banner with `#` brand logo (appears on `hashed` with no args)
+- ✨ `hashed version` now reads `__version__` dynamically — never drifts
+- 🛡️ `banner.py` — new module, zero extra dependencies (Rich only)
+
+**Fixes:**
+- 🐛 `hashed version` was hardcoded to `0.2.0` → now uses `__version__`
+
+### v0.2.0
 
 **New Features:**
 - ✨ Persistent identity system (`load_or_create_identity`)
 - ✨ Push policies to dashboard (`push_policies_to_backend`)
 - ✨ Auto-refresh dashboard (5 second polling)
+- ✨ 344 tests, 73% coverage, CI gate at 65%
+- ✨ API key rotation (`hashed rotate-key` + `/v1/auth/rotate-key`)
+- ✨ Railway metrics middleware + Slack alerting
+- ✨ Supabase RLS enabled on all critical tables
 - 🐛 Fixed double logging issue (backend OR local, not both)
 - 📝 Complete documentation overhaul
-
-**Breaking Changes:**
-- `HashedClient` deprecated → Use `HashedCore`
-- Hashing-focused API removed (use `cryptography` directly)
 
 ### v0.1.0
 
