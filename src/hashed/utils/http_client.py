@@ -39,7 +39,7 @@ def _backoff_delay(attempt: int, jitter: bool = True) -> float:
         Seconds to wait before next attempt
     """
     base = 2 ** attempt          # 1, 2, 4, 8, 16 …
-    noise = random.uniform(0, 1) if jitter else 0
+    noise = random.uniform(0, 1) if jitter else 0  # nosec B311 — non-crypto jitter
     return min(base + noise, _MAX_RETRY_WAIT_SECONDS)
 
 
