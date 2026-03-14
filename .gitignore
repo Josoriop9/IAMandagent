@@ -162,6 +162,9 @@ dashboard/.next/
 # Dashboard — lives in separate private repo (hashed-dashboard)
 dashboard/
 
+# Local secrets (keys, certs — never commit)
+secrets/
+
 # Coverage report (generated locally by pytest-cov)
 coverage.xml
 .coverage
