@@ -31,7 +31,19 @@ app = typer.Typer(
     name="hashed",
     help="🔐 Hashed - AI Agent Governance & Security CLI",
     add_completion=False,
+    no_args_is_help=False,   # we handle no-args ourselves to show banner
 )
+
+
+@app.callback(invoke_without_command=True)
+def _app_root(ctx: typer.Context) -> None:
+    """Show banner when 'hashed' is called with no subcommand."""
+    if ctx.invoked_subcommand is None:
+        from hashed.banner import show_banner
+        from hashed import __version__
+        show_banner(version=__version__)
+        console.print(ctx.get_help())
+        raise typer.Exit()
 
 # Rich console for beautiful output
 console = Console()
