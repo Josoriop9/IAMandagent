@@ -17,15 +17,24 @@ from rich.text import Text
 
 # ── # symbol in block art (6 lines, same height as HASHED text) ──────────────
 #
-#  Classic hash/pound rendered with ██ characters.
-#  Width ~18 chars — matches original mascot column width.
+#  Two vertical bars + two horizontal bars — proportional #.
+#  Horizontal width = vertical width so the symbol stays square.
+#
+#  Anatomy:
+#    ██  ██       ← vertical bars
+#    ██  ██       ← vertical bars
+#    ████████     ← horizontal bar (same width as 2 verticals + gap)
+#    ██  ██       ← vertical bars
+#    ████████     ← horizontal bar
+#    ██  ██       ← vertical bars
 #
 _HASH_LINES = [
-    "   ██    ██    ",
-    " ████████████    ",
-    "   ██    ██    ",
-    " ████████████    ",
-    "   ██    ██    ",
+    "  ██  ██  ",
+    "  ██  ██  ",
+    " ████████ ",
+    "  ██  ██  ",
+    " ████████ ",
+    "  ██  ██  ",
 ]
 
 # ── HASHED in Unicode box-drawing block art (6 lines) ────────────────────────
@@ -48,7 +57,7 @@ _HASH_STYLE    = "bold cyan"          # same brand cyan — # is part of the log
 _HASHED_STYLE  = "bold cyan"          # Hashed brand cyan
 _VERSION_STYLE = "bold green"
 _TAGLINE_STYLE = "dim white"
-_GAP           = "  "                 # horizontal spacing between # and HASHED
+_GAP           = "   "                # horizontal gap between # and HASHED
 
 
 def show_banner(version: str = "", tagline: bool = True) -> None:
@@ -58,18 +67,13 @@ def show_banner(version: str = "", tagline: bool = True) -> None:
     Combines the # logo (left) and HASHED block art (right) side by side,
     followed by an optional tagline + version string.
 
+    The banner is shown ONLY when 'hashed' is called with no subcommand.
+    Running 'hashed login', 'hashed policy list', etc. does NOT show it.
+
     Args:
         version:  Version string to append (e.g. ``"0.2.1"``).
                   If empty the version indicator is omitted.
         tagline:  Whether to print the tagline row below the logo.
-
-    Example output::
-
-       ██    ██   ██╗  ██╗  █████╗  ███████╗ ...
-       ██    ██   ██║  ██║ ██╔══██╗ ██╔════╝ ...
-     ██████████   ███████║ ███████║ ███████╗ ...
-     ...
-                  🔐  AI Agent Governance & Security   v0.2.1
     """
     console = Console()
     console.print()
@@ -89,7 +93,7 @@ def show_banner(version: str = "", tagline: bool = True) -> None:
         )
         console.print(
             f"\n[{_TAGLINE_STYLE}]"
-            f"              🔐  AI Agent Governance & Security"
+            f"           🔐  AI Agent Governance & Security"
             f"{ver_str}"
             f"[/{_TAGLINE_STYLE}]"
         )
