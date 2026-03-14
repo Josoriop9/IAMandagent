@@ -211,6 +211,79 @@ def verify_identity_file(filepath: str, password: Optional[str] = None) -> bool:
         return False
 
 
+# ── Default hashed directory ──────────────────────────────────────────────────
+_HASHED_DIR = Path.home() / ".hashed"
+_IDENTITY_PASSWORD_FILE = _HASHED_DIR / "identity_password"
+
+
+def get_or_create_identity_password() -> str:
+    """
+    Return the identity password using this precedence:
+
+    1. ``HASHED_IDENTITY_PASSWORD`` environment variable  (set by the user)
+    2. ``~/.hashed/identity_password`` file              (auto-generated on first run)
+    3. Auto-generate → save to ``~/.hashed/identity_password`` (chmod 0600)
+
+    This means developers never need to manage this credential manually —
+    Hashed handles it transparently while still keeping the Ed25519 private
+    key encrypted on disk.
+
+    Power users can override by setting ``HASHED_IDENTITY_PASSWORD`` in their
+    ``.env`` file.
+
+    Returns:
+        The password string to use for identity encryption/decryption.
+
+    Example::
+
+        from hashed.identity_store import get_or_create_identity_password, load_or_create_identity
+
+        pwd = get_or_create_identity_password()
+        identity = load_or_create_identity("./secrets/agent.pem", password=pwd)
+    """
+    import secrets as _secrets
+
+    # 1. Explicit env var takes highest priority
+    env_password = os.getenv("HASHED_IDENTITY_PASSWORD")
+    if env_password:
+        logger.debug("Using HASHED_IDENTITY_PASSWORD from environment variable.")
+        return env_password
+
+    # 2. Previously auto-generated password saved to disk
+    if _IDENTITY_PASSWORD_FILE.exists():
+        try:
+            password = _IDENTITY_PASSWORD_FILE.read_text(encoding="utf-8").strip()
+            if password:
+                logger.debug(
+                    "Loaded identity password from %s", _IDENTITY_PASSWORD_FILE
+                )
+                return password
+        except OSError as exc:
+            logger.warning("Could not read %s: %s", _IDENTITY_PASSWORD_FILE, exc)
+
+    # 3. Generate a new secure password and persist it
+    password = _secrets.token_hex(32)  # 256-bit → 64 hex chars
+
+    try:
+        _HASHED_DIR.mkdir(parents=True, exist_ok=True)
+        _IDENTITY_PASSWORD_FILE.write_text(password, encoding="utf-8")
+        os.chmod(_IDENTITY_PASSWORD_FILE, 0o600)
+        logger.info(
+            "Auto-generated identity password saved to %s (permissions: 0600). "
+            "To override, set HASHED_IDENTITY_PASSWORD in your .env file.",
+            _IDENTITY_PASSWORD_FILE,
+        )
+    except OSError as exc:
+        logger.warning(
+            "Could not persist identity password to %s: %s. "
+            "Set HASHED_IDENTITY_PASSWORD in your .env to avoid this.",
+            _IDENTITY_PASSWORD_FILE,
+            exc,
+        )
+
+    return password
+
+
 def generate_secure_password(length: int = 32) -> str:
     """
     Generate a cryptographically secure random password.

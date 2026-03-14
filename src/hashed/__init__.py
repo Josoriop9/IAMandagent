@@ -19,6 +19,7 @@ from hashed.guard import PermissionError, Policy, PolicyEngine
 from hashed.identity import IdentityManager
 from hashed.identity_store import (
     export_identity_for_env,
+    get_or_create_identity_password,
     load_identity_from_env,
     generate_secure_password,
     load_identity,
@@ -53,6 +54,7 @@ __all__ = [
     "PolicyEngine",
     "Policy",
     # Identity Persistence
+    "get_or_create_identity_password",
     "load_or_create_identity",
     "load_identity",
     "save_identity",

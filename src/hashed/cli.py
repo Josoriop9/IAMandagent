@@ -180,9 +180,10 @@ def init(
             success(f"Created .gitignore: {gitignore_path}")
 
         # Generate or load identity
-        password = os.getenv("HASHED_IDENTITY_PASSWORD")
-        if not password:
-            password = typer.prompt("Enter password for identity encryption", hide_input=True)
+        # Auto-generates a secure password if HASHED_IDENTITY_PASSWORD is not set.
+        # Saves to ~/.hashed/identity_password (chmod 0600) for reuse across runs.
+        from hashed.identity_store import get_or_create_identity_password
+        password = get_or_create_identity_password()
 
         identity = load_or_create_identity(identity_file, password)
         success(f"Identity ready: {identity_file}")
@@ -1400,7 +1401,11 @@ def clear_credentials() -> None:
 
 @app.command()
 def signup(
-    backend_url: str = typer.Option("http://localhost:8000", "--backend", "-b", help="Backend URL"),
+    backend_url: str = typer.Option(
+        "https://iamandagent-production.up.railway.app",
+        "--backend", "-b",
+        help="Backend URL",
+    ),
 ):
     """
     📝 Create a new Hashed account and organization.
@@ -1546,7 +1551,11 @@ def signup(
 def login(
     email: Optional[str] = typer.Option(None, "--email", "-e", help="Email address"),
     password: Optional[str] = typer.Option(None, "--password", "-p", help="Password"),
-    backend_url: str = typer.Option("http://localhost:8000", "--backend", "-b", help="Backend URL"),
+    backend_url: str = typer.Option(
+        "https://iamandagent-production.up.railway.app",
+        "--backend", "-b",
+        help="Backend URL",
+    ),
 ):
     """
     🔐 Login to your Hashed account.
