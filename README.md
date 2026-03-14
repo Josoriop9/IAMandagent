@@ -1,14 +1,25 @@
-# Hashed SDK
+<div align="center">
+
+```
+  ██  ██     ██╗  ██╗  █████╗  ███████╗██╗  ██╗███████╗██████╗
+  ██  ██     ██║  ██║ ██╔══██╗ ██╔════╝██║  ██║██╔════╝██╔══██╗
+ ████████    ███████║ ███████║ ███████╗███████║█████╗  ██║  ██║
+  ██  ██     ██╔══██║ ██╔══██║ ╚════██║██╔══██║██╔══╝  ██║  ██║
+ ████████    ██║  ██║ ██║  ██║ ███████║██║  ██║███████╗██████╔╝
+  ██  ██     ╚═╝  ╚═╝ ╚═╝  ╚═╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═════╝
+```
 
 **Governance & Audit Framework for AI Agents**
-
-A professional Python SDK that provides cryptographic identity, policy enforcement, and immutable audit logging for AI agents. Built for production-grade AI systems that require accountability, compliance, and security.
 
 [![PyPI](https://img.shields.io/pypi/v/hashed-sdk.svg)](https://pypi.org/project/hashed-sdk/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
 [![Tests](https://img.shields.io/badge/tests-344%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
+
+</div>
+
+A professional Python SDK that provides cryptographic identity, policy enforcement, and immutable audit logging for AI agents. Built for production-grade AI systems that require accountability, compliance, and security.
 
 ---
 
@@ -428,8 +439,8 @@ hashed-sdk/
 
 ```bash
 # Clone repo
-git clone https://github.com/yourrepo/hashed-sdk.git
-cd hashed-sdk
+git clone https://github.com/Josoriop9/IAMandagent.git
+cd IAMandagent
 
 # Install SDK
 pip install -e .
@@ -581,9 +592,9 @@ Built with:
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourrepo/hashed-sdk/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourrepo/hashed-sdk/discussions)
-- **Email**: support@hashed.example.com
+- **Issues**: [GitHub Issues](https://github.com/Josoriop9/IAMandagent/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/Josoriop9/IAMandagent/discussions)
+- **PyPI**: [hashed-sdk on PyPI](https://pypi.org/project/hashed-sdk/)
 
 ---
 
