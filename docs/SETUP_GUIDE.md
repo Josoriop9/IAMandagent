@@ -104,7 +104,7 @@ Create `server/.env` file with these values (see next step for command).
 
 ```bash
 # Go to server directory
-cd /Users/juancarlososorio/Desktop/Devs/hashed/server
+cd server
 
 # Create .env file from template
 cp .env.example .env
@@ -143,8 +143,7 @@ curl http://localhost:8000/health
 ## 🎯 STEP 9: Test SDK Integration
 
 ```bash
-cd /Users/juancarlososorio/Desktop/Devs/hashed
-python3 examples/backend_integration.py
+python3 examples/quickstart.py
 ```
 
 Should see:

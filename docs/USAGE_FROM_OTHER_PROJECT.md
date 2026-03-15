@@ -8,20 +8,20 @@ This guide explains how to use the Hashed SDK from a separate Python project.
 
 ### Step 1: Install the SDK
 
-**Option A: From Local Path** (Development)
-```bash
-cd /path/to/your/project
-pip install -e /Users/juancarlososorio/Desktop/Devs/hashed
-```
-
-**Option B: From GitHub** (After pushing)
-```bash
-pip install git+https://github.com/YOUR-USER/hashed-sdk.git
-```
-
-**Option C: From PyPI** (When published)
+**Option A: From PyPI** *(recommended)*
 ```bash
 pip install hashed-sdk
+```
+
+**Option B: From GitHub**
+```bash
+pip install git+https://github.com/Josoriop9/IAMandagent.git
+```
+
+**Option C: From Local Path** (Development)
+```bash
+cd /path/to/your/project
+pip install -e /path/to/cloned/IAMandagent
 ```
 
 ### Step 2: Start the Backend
@@ -30,7 +30,7 @@ The SDK requires the Hashed backend to be running:
 
 ```bash
 # In a separate terminal
-cd /Users/juancarlososorio/Desktop/Devs/hashed/server
+cd /path/to/IAMandagent/server
 python3 server.py
 ```
 
@@ -43,7 +43,7 @@ Create a `.env` file in your project root:
 ```bash
 # .env
 BACKEND_URL=http://localhost:8000
-API_KEY=hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82
+API_KEY=hashed_your_api_key_here
 ```
 
 ### Step 4: Use in Your Code
@@ -94,10 +94,10 @@ your-project/
 └── README.md
 ```
 
-### Hashed SDK (Separate)
+### Hashed SDK (Separate — if running backend locally)
 
 ```
-/Users/juancarlososorio/Desktop/Devs/hashed/
+IAMandagent/
 ├── server/
 │   └── server.py         # ← Must be running
 ├── dashboard/            # ← Optional
@@ -113,11 +113,11 @@ your-project/
 
 **requirements.txt** in your project:
 ```txt
-# If using local SDK
--e /Users/juancarlososorio/Desktop/Devs/hashed
+# From PyPI (recommended)
+hashed-sdk
 
 # Or from GitHub
-# hashed-sdk @ git+https://github.com/YOUR-USER/hashed-sdk.git
+# hashed-sdk @ git+https://github.com/Josoriop9/IAMandagent.git
 
 # Optional: If using with LLM
 openai>=1.0.0
@@ -135,7 +135,7 @@ pip install -r requirements.txt
 ```bash
 # Backend connection
 BACKEND_URL=http://localhost:8000
-API_KEY=hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82
+API_KEY=hashed_your_api_key_here
 
 # Optional: Enable auto-sync
 ENABLE_AUTO_SYNC=true
@@ -149,7 +149,7 @@ OPENAI_API_KEY=sk-your-key-here
 
 **Terminal 1: Start Backend**
 ```bash
-cd /Users/juancarlososorio/Desktop/Devs/hashed/server
+cd /path/to/IAMandagent/server
 python3 server.py
 
 # Output:
@@ -158,7 +158,7 @@ python3 server.py
 
 **Terminal 2: Start Dashboard** (Optional)
 ```bash
-cd /Users/juancarlososorio/Desktop/Devs/hashed/dashboard
+cd /path/to/IAMandagent/dashboard
 npm run dev
 
 # Output:
@@ -192,7 +192,7 @@ async def main():
     # 1. Configuration
     config = HashedConfig(
         backend_url="http://localhost:8000",
-        api_key="hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82",
+        api_key=os.getenv("HASHED_API_KEY"),
         enable_auto_sync=True
     )
     
@@ -310,18 +310,16 @@ If you're using Cline in your other project, give it this context:
 You are working on a Python project that uses the Hashed SDK for AI agent governance.
 
 **Hashed SDK Documentation:**
-Read these files from: /Users/juancarlososorio/Desktop/Devs/hashed/
-- API_REFERENCE.md - Complete API reference
-- USAGE_FROM_OTHER_PROJECT.md - This file (usage guide)
-- SECURITY.md - Security best practices
-- examples/ - Reference examples
+- GitHub: https://github.com/Josoriop9/IAMandagent
+- PyPI: https://pypi.org/project/hashed-sdk/
+- API_REFERENCE.md, CLI_GUIDE.md, FRAMEWORK_GUIDES.md, INTEGRATION.md
 
 **Installation:**
-pip install -e /Users/juancarlososorio/Desktop/Devs/hashed
+pip install hashed-sdk
 
 **Required Backend:**
-The Hashed backend must be running at http://localhost:8000
-Start it with: cd /Users/juancarlososorio/Desktop/Devs/hashed/server && python3 server.py
+The Hashed backend runs at https://iamandagent-production.up.railway.app
+(or locally: cd IAMandagent/server && python3 server.py)
 
 **Basic Usage:**
 from hashed import HashedCore
@@ -341,8 +339,8 @@ await core.shutdown()
 
 **Environment:**
 Create .env with:
-BACKEND_URL=http://localhost:8000
-API_KEY=hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82
+HASHED_API_KEY=hashed_your_api_key_here  # Get via: hashed login
+HASHED_BACKEND_URL=https://iamandagent-production.up.railway.app
 ```
 
 ---
@@ -357,7 +355,7 @@ API_KEY=hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82
 curl http://localhost:8000/health
 
 # If not, start it
-cd /Users/juancarlososorio/Desktop/Devs/hashed/server
+cd /path/to/IAMandagent/server
 python3 server.py
 ```
 
@@ -365,8 +363,8 @@ python3 server.py
 
 **Solution:**
 ```bash
-# Reinstall SDK
-pip install -e /Users/juancarlososorio/Desktop/Devs/hashed
+# Install from PyPI
+pip install hashed-sdk
 
 # Or verify installation
 pip list | grep hashed
@@ -375,9 +373,9 @@ pip list | grep hashed
 ### Error: "Authentication failed"
 
 **Solution:**
-Check your `.env` file has the correct `API_KEY`:
+Check your `.env` file has the correct `API_KEY` (get it via `hashed login`):
 ```bash
-API_KEY=hashed_4a492e530c7c814a24b6e86cfbdc6c7923cb5a30b957dc8af4ebf9d27b1bda82
+API_KEY=hashed_your_api_key_here
 ```
 
 ### Error: "Permission denied for operation"
@@ -436,10 +434,10 @@ Before running your agent:
 
 ## 📚 Additional Resources
 
-- **API Reference**: `/Users/juancarlososorio/Desktop/Devs/hashed/API_REFERENCE.md`
-- **Security Guide**: `/Users/juancarlososorio/Desktop/Devs/hashed/SECURITY.md`
-- **Examples**: `/Users/juancarlososorio/Desktop/Devs/hashed/examples/`
-- **Integration Guide**: `/Users/juancarlososorio/Desktop/Devs/hashed/INTEGRATION.md`
+- **API Reference**: [docs/API_REFERENCE.md](API_REFERENCE.md)
+- **Security Guide**: [SECURITY.md](../SECURITY.md)
+- **Examples**: [examples/](../examples/)
+- **Integration Guide**: [docs/INTEGRATION.md](INTEGRATION.md)
 
 ---
 
