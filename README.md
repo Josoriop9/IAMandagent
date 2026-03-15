@@ -58,11 +58,12 @@ Hashed is a complete governance framework for AI agents that ensures:
 - **Rich Metadata**: Capture context, amounts, timestamps, errors
 - **Dashboard Visibility**: All logs visible in real-time web UI
 
-### 🎛️ Control Dashboard
+### 🎛️ Control Dashboard *(Early Access)*
 - **Agent Monitoring**: Track all registered agents
 - **Policy Management**: View and create governance rules
 - **Audit Logs**: Search and filter operation history
 - **Real-time Updates**: Auto-refresh every 5 seconds
+- 🔗 [hashed-dashboard.vercel.app](https://hashed-dashboard.vercel.app) *(invite-only — public launch coming soon)*
 
 ---
 
@@ -329,9 +330,9 @@ asyncio.run(main())
 ```
 
 See [examples/](examples/) for more:
+- [quickstart.py](examples/quickstart.py) - Simple getting started
 - [persistent_agent.py](examples/persistent_agent.py) - Full persistent identity example
-- [basic_usage.py](examples/basic_usage.py) - Simple getting started
-- [async_usage.py](examples/async_usage.py) - Async patterns
+- [dev_test_agent.py](examples/dev_test_agent.py) - Development & testing patterns
 
 ---
 
@@ -474,8 +475,11 @@ cd dashboard && npm run dev
 # Terminal 3: Your agent
 python your_agent.py
 
-# Access dashboard
+# Access dashboard (local)
 open http://localhost:3000
+
+# Production dashboard (early access)
+# https://hashed-dashboard.vercel.app
 ```
 
 ---

@@ -264,7 +264,7 @@ core = create_core(policies={
 ```python
 # Backend with test API keys
 config = HashedConfig(
-    backend_url="https://staging.api.hashed.io",
+    backend_url="https://iamandagent-production.up.railway.app",
     api_key=os.getenv("HASHED_STAGING_AGENT_KEY")
 )
 
@@ -276,7 +276,7 @@ config = HashedConfig(
 ```python
 # Backend with production API keys
 config = HashedConfig(
-    backend_url="https://api.hashed.io",
+    backend_url="https://iamandagent-production.up.railway.app",
     api_key=os.getenv("HASHED_PROD_AGENT_KEY"),
     enable_auto_sync=True,
     sync_interval=300  # 5 minutes
@@ -334,9 +334,12 @@ Before going to production:
 If you find a security vulnerability:
 
 1. **DO NOT** open a public issue
-2. Email: security@hashed.dev
+2. Use **GitHub Private Security Advisory** (no email needed):
+   👉 [Report a vulnerability privately](https://github.com/Josoriop9/IAMandagent/security/advisories/new)
 3. Include: Description, impact, reproduction steps
-4. We'll respond within 24 hours
+4. We'll respond within 48 hours
+
+Your report will only be visible to the maintainers — not the public.
 
 ---
 
