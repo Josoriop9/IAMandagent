@@ -14,10 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hashed.core import HashedCore, _CircuitBreaker
 from hashed.config import HashedConfig
+from hashed.core import HashedCore, _CircuitBreaker
 from hashed.guard import PermissionError as HashedPermissionError
-
 
 # ──────────────────────────────────────────────────────────────────────────────
 # _CircuitBreaker unit tests
