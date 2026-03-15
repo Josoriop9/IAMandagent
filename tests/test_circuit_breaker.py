@@ -9,6 +9,7 @@ Tests for the new features introduced in the Sprint 7 HashedCore refactor:
 """
 
 import asyncio
+import logging
 import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -314,7 +315,6 @@ class TestSyncWrapper:
 class TestPerformanceTracking:
     @pytest.mark.asyncio
     async def test_overhead_logged_at_debug(self, caplog):
-        import logging
         config = HashedConfig()
         config._backend_url = None
         core = HashedCore(config=config)
