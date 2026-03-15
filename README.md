@@ -425,8 +425,11 @@ hashed-sdk/
 │   └── schema.sql
 ├── docs/                        # Documentation
 │   ├── API_REFERENCE.md
+│   ├── CLI_GUIDE.md
+│   ├── FRAMEWORK_GUIDES.md
 │   ├── INTEGRATION.md
-│   ├── SECURITY.md
+│   ├── ROADMAP.md
+│   ├── SETUP_GUIDE.md
 │   └── USAGE_FROM_OTHER_PROJECT.md
 └── pyproject.toml              # Project config
 ```
@@ -517,11 +520,11 @@ See [SECURITY.md](SECURITY.md) for complete security guide.
 
 ## 📖 Documentation
 
-- **[API Reference](API_REFERENCE.md)** - Complete API docs
-- **[Integration Guide](INTEGRATION.md)** - Integrate with your project
-- **[Setup Guide](SETUP_GUIDE.md)** - Production setup
+- **[API Reference](docs/API_REFERENCE.md)** - Complete API docs
+- **[Integration Guide](docs/INTEGRATION.md)** - Integrate with your project
+- **[Setup Guide](docs/SETUP_GUIDE.md)** - Production setup
 - **[Security Guide](SECURITY.md)** - Security best practices
-- **[Usage from Other Projects](USAGE_FROM_OTHER_PROJECT.md)** - External usage
+- **[Usage from Other Projects](docs/USAGE_FROM_OTHER_PROJECT.md)** - External usage
 
 ---
 
