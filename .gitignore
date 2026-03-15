@@ -172,3 +172,5 @@ htmlcov/
 
 # AI session memory — local only, never commit
 AI_CONTEXT.md
+QA_GUIDE.md
+REPOS.md
