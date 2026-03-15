@@ -1,7 +1,7 @@
 # Hashed CLI — Complete Reference
 
-> Version: 0.2.0  
-> Install: `pip install "git+https://github.com/Josoriop9/IAMandagent.git"`
+> Version: 0.2.1  
+> Install: `pip install hashed-sdk`
 
 The `hashed` CLI lets you manage AI agent identities, governance policies, and audit logs without touching the web dashboard.
 
@@ -10,15 +10,27 @@ The `hashed` CLI lets you manage AI agent identities, governance policies, and a
 ## Installation & Setup
 
 ```bash
-pip install "git+https://github.com/Josoriop9/IAMandagent.git"
+pip install hashed-sdk
 
-# Verify
+# Verify installation and version
 hashed --help
+hashed version
 ```
 
 ---
 
 ## Authentication
+
+### `hashed version`
+
+Print the installed SDK version.
+
+```bash
+hashed version
+# hashed-sdk v0.2.1
+```
+
+---
 
 ### `hashed signup`
 
@@ -26,7 +38,8 @@ Create a new account and organization.
 
 ```bash
 hashed signup
-hashed signup --backend http://localhost:8000
+# Defaults to production backend: https://iamandagent-production.up.railway.app
+hashed signup --backend http://localhost:8000  # Use local backend
 ```
 
 **Interactive prompts:**
@@ -45,7 +58,8 @@ Authenticate and save credentials locally.
 ```bash
 hashed login
 hashed login --email user@company.com
-hashed login --email user@company.com --backend https://api.hashed.dev
+# Defaults to production backend; override with --backend
+hashed login --email user@company.com --backend http://localhost:8000
 ```
 
 | Flag | Default | Description |
@@ -345,6 +359,28 @@ hashed logs list --status error    # Only errors
 
 ---
 
+## Key Rotation
+
+### `hashed rotate-key`
+
+Rotate your organization's API key. The old key is **immediately invalidated** and a new one is saved to `~/.hashed/credentials.json`. Rate limited to 3 rotations per hour.
+
+```bash
+hashed rotate-key
+```
+
+**Output:**
+```
+🔄 Rotating API key...
+✅ API key rotated successfully
+   New key: hashed_xyz789... (saved to ~/.hashed/credentials.json)
+   ⚠️  Update HASHED_API_KEY in all running agents and cloud environments.
+```
+
+> **After rotation:** update `HASHED_API_KEY` in Railway, Vercel, or any environment that uses the old key.
+
+---
+
 ## Identity Management
 
 ### `hashed identity create`
@@ -518,9 +554,11 @@ hashed agent delete "Research Agent 5" --yes
 
 | Variable | Description |
 |----------|-------------|
-| `HASHED_BACKEND_URL` | Backend URL (e.g. `http://localhost:8000`) |
+| `HASHED_BACKEND_URL` | Backend URL (default: `https://iamandagent-production.up.railway.app`) |
 | `HASHED_API_KEY` | API key for authentication |
 | `HASHED_IDENTITY_PASSWORD` | Password for identity file decryption |
+| `HASHED_AGENT_PRIVATE_KEY` | Base64-encoded Ed25519 key (cloud/serverless deployments) |
+| `HASHED_AGENT_PRIVATE_KEY_PASSWORD` | Password for encrypted cloud key |
 | `OPENAI_API_KEY` | Required for LangChain / CrewAI / AutoGen |
 | `OPENAI_MODEL` | Default: `gpt-4o-mini` |
 | `AWS_REGION` | Required for Strands (Bedrock) |

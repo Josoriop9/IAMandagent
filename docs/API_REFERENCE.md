@@ -1,7 +1,7 @@
 # Hashed Control Plane API — Reference
 
-> Version: 0.1.0  
-> Base URL: `http://localhost:8000` (dev) / `https://api.hashed.dev` (prod)  
+> Version: 0.2.1  
+> Base URL: `http://localhost:8000` (dev) / `https://iamandagent-production.up.railway.app` (prod)  
 > Authentication: `X-API-KEY: hashed_<your_key>` header on all `/v1/*` endpoints
 
 ---
@@ -135,6 +135,36 @@ curl -H "X-API-KEY: hashed_abc123..." http://localhost:8000/v1/auth/me
   "is_active": true,
   "created_at": "2026-02-26T22:00:00"
 }
+```
+
+---
+
+### `POST /v1/auth/rotate-key`
+
+Rotate the API key for the current organization. The old key is invalidated immediately. Rate limited to **3 rotations per hour**.
+
+```bash
+curl -X POST http://localhost:8000/v1/auth/rotate-key \
+  -H "X-API-KEY: hashed_abc123..."
+```
+
+> **Note:** After rotation, update `HASHED_API_KEY` in your environment and run `hashed login` to refresh local credentials.
+
+**Response `200`:**
+```json
+{
+  "message": "API key rotated successfully",
+  "new_api_key": "hashed_xyz789...",
+  "rotated_at": "2026-03-14T22:00:00"
+}
+```
+
+**Errors:**
+- `429` — Rate limit exceeded (max 3 rotations/hour)
+
+**CLI shortcut:**
+```bash
+hashed rotate-key
 ```
 
 ---
@@ -706,6 +736,7 @@ All errors follow this format:
 | POST | `/v1/auth/login` | ❌ | Login + get API key |
 | GET | `/v1/auth/check-confirmation` | ❌ | Check email confirmation |
 | GET | `/v1/auth/me` | ✅ | Current org info |
+| POST | `/v1/auth/rotate-key` | ✅ | Rotate API key |
 | POST | `/v1/agents/register` | ✅ | Register agent |
 | GET | `/v1/agents` | ✅ | List agents |
 | DELETE | `/v1/agents/{id}` | ✅ | Delete agent |

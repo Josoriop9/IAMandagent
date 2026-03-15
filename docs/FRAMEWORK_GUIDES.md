@@ -619,21 +619,24 @@ All frameworks use the same Hashed CLI for policy management:
 # View current policies
 hashed policy list
 
-# Add a policy for a specific tool
-hashed policy push --tool transfer_funds --max-amount 1000 --allowed true
+# Allow a tool (optionally with a max amount for financial ops)
+hashed policy add transfer_funds --allow --max-amount 1000
 
 # Require human approval for high-risk tools
-hashed policy push --tool execute_trade --requires-approval
+# (set requires_approval=true via the dashboard or API directly)
+hashed policy add execute_trade --allow
 
 # Block a tool entirely
-hashed policy push --tool delete_database --allowed false
+hashed policy add delete_database --deny
+
+# Sync all local policies to the backend (diff-sync: adds new, removes deleted)
+hashed policy push
 
 # View the audit trail
 hashed logs list --limit 50
 
-# View pending approvals
-hashed approvals list
-hashed approvals approve <approval-id>
+# Approve pending operations via the dashboard
+# https://hashed-dashboard.vercel.app → Approvals
 ```
 
 ---
@@ -653,7 +656,8 @@ hashed approvals approve <approval-id>
 
 ## Next steps
 
-- **Dashboard**: View real-time activity at https://hashed-dashboard.vercel.app
-- **API Reference**: See `API_REFERENCE.md` for direct backend API usage
-- **CLI Guide**: See `CLI_GUIDE.md` for all available commands
+- **Dashboard**: View real-time activity at [https://hashed-dashboard.vercel.app](https://hashed-dashboard.vercel.app)
+- **API Reference**: See [`docs/API_REFERENCE.md`](API_REFERENCE.md) for direct backend API usage
+- **CLI Guide**: See [`docs/CLI_GUIDE.md`](CLI_GUIDE.md) for all available commands
+- **Integration Guide**: See [`docs/INTEGRATION.md`](INTEGRATION.md) for backend setup
 - **Security extras**: `pip install "hashed-sdk[secure]"` for OS keychain storage

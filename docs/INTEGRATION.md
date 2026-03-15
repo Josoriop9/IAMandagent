@@ -208,11 +208,11 @@ Background Task (every 5 minutes)
 
 ## 📖 Complete Example
 
-See `examples/backend_integration.py` for a full working example.
+See `examples/quickstart.py` for a full working example.
 
 ```bash
 # Run the example
-python examples/backend_integration.py
+python examples/quickstart.py
 ```
 
 ## 🎛️ Configuration Options
@@ -276,12 +276,12 @@ curl -X POST http://localhost:8000/v1/policies \
 # Policy will be synced to agents automatically
 ```
 
-### Via Dashboard (Future)
+### Via Dashboard
 
-A web dashboard will provide:
+The web dashboard is live at **https://hashed-dashboard.vercel.app**:
 - Visual policy editor
-- Real-time agent monitoring
-- Audit log viewer
+- Real-time agent monitoring (auto-refresh every 5 seconds)
+- Audit log viewer with filters
 - Analytics and insights
 
 ## 📊 Querying Audit Logs
@@ -524,6 +524,6 @@ core = HashedCore(config=config, agent_name="My Agent")
 ## 💬 Support
 
 For issues and questions:
-- GitHub Issues: https://github.com/yourusername/hashed-sdk
-- Documentation: https://docs.hashed.dev
-- Email: support@hashed.dev
+- GitHub Issues: https://github.com/Josoriop9/IAMandagent/issues
+- Dashboard: https://hashed-dashboard.vercel.app
+- PyPI: https://pypi.org/project/hashed-sdk/
