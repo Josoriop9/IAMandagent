@@ -47,7 +47,6 @@ dev = [
     "black>=23.7.0",
     "mypy>=1.5.0",
     "ruff>=0.0.285",
-    "types-httpx",
 ]
 # Secure credential storage — uses OS keychain (macOS Keychain, Windows
 # Credential Locker, Linux Secret Service).  Strongly recommended for
