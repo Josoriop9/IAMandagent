@@ -8,9 +8,8 @@ Covers the two key behaviours introduced in fix(guard):
    don't crash.
 """
 
-import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -18,7 +17,6 @@ from hashed.config import HashedConfig
 from hashed.core import HashedCore
 from hashed.guard import PermissionError as HashedPermissionError
 from hashed.identity import IdentityManager
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

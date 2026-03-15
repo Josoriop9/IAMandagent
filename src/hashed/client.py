@@ -43,7 +43,7 @@ class HashedClient:
         self._config = config or HashedConfig()
         self._http_client = HTTPClient(self._config)
         self._hasher = Hasher()
-        
+
         if self._config.debug:
             logging.basicConfig(level=logging.DEBUG)
             logger.debug("HashedClient initialized in debug mode")

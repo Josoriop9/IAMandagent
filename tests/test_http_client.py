@@ -6,9 +6,8 @@ All HTTP calls are intercepted via unittest.mock — no real network needed.
 """
 
 import asyncio
-import time
 from typing import Optional
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
@@ -16,7 +15,6 @@ import pytest
 from hashed.config import HashedConfig
 from hashed.exceptions import HashedAPIError
 from hashed.utils.http_client import HTTPClient, _backoff_delay
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

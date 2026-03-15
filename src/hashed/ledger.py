@@ -16,16 +16,14 @@ import hashlib
 import json
 import logging
 import sqlite3
-from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Optional
 
 import httpx
 from cryptography.fernet import Fernet, InvalidToken
 
 from hashed.config import HashedConfig
-from hashed.exceptions import HashedAPIError
 
 logger = logging.getLogger(__name__)
 
@@ -84,7 +82,7 @@ def _wal_init(db_path: str) -> None:
         conn.commit()
 
 
-def _wal_insert(db_path: str, entry: Dict[str, Any], fernet: Optional[Fernet] = None) -> int:
+def _wal_insert(db_path: str, entry: dict[str, Any], fernet: Optional[Fernet] = None) -> int:
     """Insert a log entry into the WAL. Returns the new row id.
 
     If a ``Fernet`` cipher is supplied, the ``data`` and ``metadata`` fields
@@ -114,7 +112,7 @@ def _wal_insert(db_path: str, entry: Dict[str, Any], fernet: Optional[Fernet] = 
         return cur.lastrowid
 
 
-def _wal_get_unsent(db_path: str) -> List[Tuple]:
+def _wal_get_unsent(db_path: str) -> list[tuple]:
     """Return all unsent rows ordered by id."""
     with sqlite3.connect(db_path) as conn:
         return conn.execute(
@@ -123,7 +121,7 @@ def _wal_get_unsent(db_path: str) -> List[Tuple]:
         ).fetchall()
 
 
-def _wal_mark_sent(db_path: str, ids: List[int]) -> None:
+def _wal_mark_sent(db_path: str, ids: list[int]) -> None:
     """Delete sent entries from the WAL to keep the file small."""
     with sqlite3.connect(db_path) as conn:
         conn.executemany("DELETE FROM wal_entries WHERE id = ?", [(i,) for i in ids])
@@ -131,9 +129,9 @@ def _wal_mark_sent(db_path: str, ids: List[int]) -> None:
 
 
 def _wal_rows_to_entries(
-    rows: List[Tuple],
+    rows: list[tuple],
     fernet: Optional[Fernet] = None,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Convert SQLite rows to log-entry dicts.
 
     If a ``Fernet`` cipher is supplied, attempts to decrypt ``data`` and
@@ -321,8 +319,8 @@ class AsyncLedger:
     async def log(
         self,
         event_type: str,
-        data: Dict[str, Any],
-        metadata: Optional[Dict[str, Any]] = None,
+        data: dict[str, Any],
+        metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         """
         Durably enqueue a log entry.
@@ -405,7 +403,7 @@ class AsyncLedger:
         wal_ids = [e.get("_wal_id") for e in logs if e.get("_wal_id")]
         clean_logs = [{k: v for k, v in e.items() if k != "_wal_id"} for e in logs]
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "logs": clean_logs,
             "batch_size": len(clean_logs),
             "timestamp": datetime.utcnow().isoformat(),

@@ -8,9 +8,8 @@ fully mocked.
 """
 
 import json
-import os
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -264,7 +263,6 @@ class TestIdentityExportCommand:
 
     def test_export_round_trip_matches_public_key(self, pem_file: Path, monkeypatch) -> None:
         """base64 exported by CLI can be loaded back and yields the same public key."""
-        import base64
         from hashed.identity import IdentityManager
         from hashed.identity_store import load_identity_from_env
 

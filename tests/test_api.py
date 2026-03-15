@@ -9,15 +9,11 @@ SUPABASE_URL + SUPABASE_SERVICE_KEY at import time, so we patch both
 before importing the module.
 """
 
-import importlib
-import json
 import os
 import sys
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock, patch
 
 # ── Supabase / env / server-only deps bootstrap ───────────────────────────────
 # server.py raises ValueError if these are absent, so inject them before import.

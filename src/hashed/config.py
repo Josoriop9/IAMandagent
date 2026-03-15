@@ -39,7 +39,7 @@ class HashedConfig(BaseModel):
 
     This class follows the Dependency Inversion Principle by providing
     a clear configuration interface that the SDK depends on.
-    
+
     Reads from environment variables:
         API_KEY or HASHED_API_KEY: API key for authentication
         BACKEND_URL or HASHED_BACKEND_URL: Backend URL
@@ -65,13 +65,13 @@ class HashedConfig(BaseModel):
         ),
         description="Backend Control Plane URL",
     )
-    
+
     # Legacy API Configuration (deprecated, use backend_url)
     api_url: str = Field(
         default="https://api.hashed.example.com",
         description="Base URL for the API (legacy)",
     )
-    
+
     # Policy Sync Configuration
     sync_interval: int = Field(
         default=300,
@@ -82,13 +82,13 @@ class HashedConfig(BaseModel):
         default=True,
         description="Enable automatic policy synchronization",
     )
-    
+
     # Ledger Configuration
     ledger_endpoint: str = Field(
         default="/v1/logs/batch",
         description="Endpoint path for log ingestion",
     )
-    
+
     # HTTP Configuration
     timeout: float = Field(
         default=30.0,

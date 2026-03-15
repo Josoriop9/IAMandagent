@@ -17,8 +17,9 @@ network connection is required.
 
 import contextlib
 import json
+from collections.abc import Generator
 from pathlib import Path
-from typing import Generator, List, Optional, Union
+from typing import Optional, Union
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -330,7 +331,7 @@ class TestPolicyPushCommand:
             "agents": [{"id": "agent-001", "name": "MyAgent", "public_key": "abc123"}],
             "count": 1,
         })
-        policies_resp = _make_response(200, {"policies": [], "count": 0})
+        _make_response(200, {"policies": [], "count": 0})
         post_resp = _make_response(201, {"policy": {"id": "pol-001"}, "message": "Policy created"})
 
         with contextlib.ExitStack() as stack:

@@ -34,7 +34,7 @@ class TestHashedClient:
         """Test hashing with a HashRequest object."""
         request = HashRequest(data="test", algorithm="sha256")
         response = client.hash(request)
-        
+
         assert response.hash_value
         assert response.algorithm == "sha256"
         assert response.metadata["data_length"] == 4
@@ -44,7 +44,7 @@ class TestHashedClient:
         hash1 = client.hash_string("test", salt="salt1")
         hash2 = client.hash_string("test", salt="salt2")
         hash3 = client.hash_string("test", salt="salt1")
-        
+
         # Different salts should produce different hashes
         assert hash1 != hash2
         # Same salt should produce same hash
@@ -56,7 +56,7 @@ class TestHashedClient:
         sha256_hash = client.hash_string(data, algorithm="sha256")
         sha512_hash = client.hash_string(data, algorithm="sha512")
         blake2b_hash = client.hash_string(data, algorithm="blake2b")
-        
+
         # All should produce different length hashes
         assert len(sha256_hash) == 64  # 256 bits = 64 hex chars
         assert len(sha512_hash) == 128  # 512 bits = 128 hex chars
@@ -122,7 +122,7 @@ class TestHashedClientHTTPAndLifecycle:
         self, test_config: HashedConfig
     ) -> None:
         """request_sync() delegates to the internal HTTPClient."""
-        from unittest.mock import MagicMock, patch
+        from unittest.mock import patch
 
         client = HashedClient(config=test_config)
         with patch.object(

@@ -28,7 +28,6 @@ from hashed.ledger import (
     _wal_rows_to_entries,
 )
 
-
 # ── WAL Helper Functions ──────────────────────────────────────────────────────
 
 
@@ -836,7 +835,6 @@ class TestSendBatchErrorPaths:
     @pytest.mark.asyncio
     async def test_send_batch_non_success_logs_error(self, wal_db: str) -> None:
         """_send_batch() with a non-success HTTP response logs error but does not raise."""
-        import httpx
 
         mock_client = AsyncMock()
         error_resp = MagicMock(is_success=False, status_code=500, text="Internal Server Error")

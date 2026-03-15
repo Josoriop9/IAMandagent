@@ -6,7 +6,7 @@ access and enforcing limits on operations.
 """
 
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
 from hashed.exceptions import HashedError
 
@@ -32,7 +32,7 @@ class Policy:
     tool_name: str
     max_amount: Optional[float] = None
     allowed: bool = True
-    metadata: Dict[str, Any] = None
+    metadata: dict[str, Any] = None
 
     def __post_init__(self) -> None:
         """Initialize metadata if not provided."""
@@ -75,7 +75,7 @@ class PolicyEngine:
 
     def __init__(self) -> None:
         """Initialize the policy engine with an empty policy dictionary."""
-        self._policies: Dict[str, Policy] = {}
+        self._policies: dict[str, Policy] = {}
         self._default_policy = Policy(
             tool_name="default", max_amount=None, allowed=True
         )
@@ -232,7 +232,7 @@ class PolicyEngine:
         except PermissionError:
             return False
 
-    def list_policies(self) -> Dict[str, Policy]:
+    def list_policies(self) -> dict[str, Policy]:
         """
         Get all registered policies.
 
@@ -241,7 +241,7 @@ class PolicyEngine:
         """
         return self._policies.copy()
 
-    def bulk_add_policies(self, policies: Dict[str, Dict[str, Any]]) -> None:
+    def bulk_add_policies(self, policies: dict[str, dict[str, Any]]) -> None:
         """
         Add multiple policies at once.
 
@@ -258,7 +258,7 @@ class PolicyEngine:
         for tool_name, params in policies.items():
             self.add_policy(tool_name, **params)
 
-    def export_policies(self) -> Dict[str, Dict[str, Any]]:
+    def export_policies(self) -> dict[str, dict[str, Any]]:
         """
         Export all policies as a dictionary.
 
@@ -279,7 +279,7 @@ class PolicyEngine:
             for name, policy in self._policies.items()
         }
 
-    def import_policies(self, policies_dict: Dict[str, Dict[str, Any]]) -> None:
+    def import_policies(self, policies_dict: dict[str, dict[str, Any]]) -> None:
         """
         Import policies from a dictionary.
 

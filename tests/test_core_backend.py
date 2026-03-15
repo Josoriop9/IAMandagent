@@ -10,7 +10,6 @@ Covers the lines in core.py that require a backend_url to be configured:
   - @guard() decorator with backend validation — allow / deny / fail_closed
 """
 
-import asyncio
 import json
 import os
 from pathlib import Path
@@ -20,10 +19,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from hashed.config import HashedConfig
-from hashed.core import HashedCore, create_core
+from hashed.core import HashedCore
 from hashed.guard import PermissionError
-from hashed.identity import IdentityManager
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -6,8 +6,7 @@ hashing algorithms while maintaining a consistent interface.
 """
 
 import hashlib
-from abc import ABC, abstractmethod
-from typing import Optional, Protocol
+from typing import Protocol
 
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC

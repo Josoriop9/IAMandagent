@@ -129,8 +129,10 @@ warn_no_return = true
 strict_equality = true
 
 [tool.ruff]
-line-length = 88
+line-length = 120
 target-version = "py39"
+
+[tool.ruff.lint]
 select = [
     "E",  # pycodestyle errors
     "W",  # pycodestyle warnings
@@ -140,7 +142,11 @@ select = [
     "C4", # flake8-comprehensions
     "UP", # pyupgrade
 ]
-ignore = []
+ignore = [
+    "B904",  # raise-without-from-cause (requires logic refactor, deferred)
+    "B017",  # blind-exception-assert (deferred)
+    "E501",  # line-too-long (handled by formatter, not linter)
+]
 
-[tool.ruff.per-file-ignores]
+[tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]

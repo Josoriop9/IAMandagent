@@ -35,7 +35,7 @@ class HashedCore:
         >>> core = HashedCore(ledger_endpoint="https://api.example.com/logs")
         >>> await core.initialize()
         >>> core.policy_engine.add_policy("transfer", max_amount=1000.0)
-        >>> 
+        >>>
         >>> @core.guard("transfer")
         >>> async def transfer(amount: float, to: str):
         ...     # Transfer logic here
@@ -75,7 +75,7 @@ class HashedCore:
         self._policy_engine = PolicyEngine()
         self._ledger: Optional[AsyncLedger] = None
         self._ledger_endpoint = ledger_endpoint or (
-            f"{self._config.backend_url}{self._config.ledger_endpoint}" 
+            f"{self._config.backend_url}{self._config.ledger_endpoint}"
             if self._config.backend_url else None
         )
         self._agent_name = agent_name or "Unnamed Agent"
@@ -129,7 +129,7 @@ class HashedCore:
                     "Content-Type": "application/json",
                 }
             )
-            
+
             # Auto-register agent
             is_new_agent = False
             try:
@@ -159,7 +159,7 @@ class HashedCore:
                 logger.info("Initial policy sync completed")
             except Exception as e:
                 logger.warning(f"Initial policy sync failed: {e}")
-            
+
             # Start background sync
             if self._config.enable_auto_sync:
                 self._sync_task = asyncio.create_task(self._background_sync())
@@ -268,7 +268,7 @@ class HashedCore:
                         tool_name=tool_name, amount=amount, **context
                     )
                     logger.debug(f"Local policy validation passed for '{tool_name}'")
-                    
+
                     # 2. Validate against BACKEND policy (if connected)
                     if self._http_client:
                         try:
@@ -292,7 +292,7 @@ class HashedCore:
                                     }
                                 }
                             )
-                            
+
                             if guard_response.is_success:
                                 guard_result = guard_response.json()
                                 if not guard_result.get("allowed", False):
@@ -357,7 +357,7 @@ class HashedCore:
 
                     # 5. Log successful operation (backend OR local ledger, not both)
                     logged = False
-                    
+
                     # Prefer backend logging if available
                     if self._http_client:
                         try:
@@ -381,7 +381,7 @@ class HashedCore:
                             logged = True
                         except Exception as e:
                             logger.warning(f"Failed to log to backend: {e}")
-                    
+
                     # Fallback to local ledger only if backend logging failed
                     if not logged and self._ledger:
                         await self._ledger.log(
@@ -648,46 +648,46 @@ class HashedCore:
     async def push_policies_to_backend(self) -> None:
         """
         Push local policies to the backend.
-        
+
         Uploads all local policies to the backend database so they're
         visible in the dashboard.
-        
+
         Raises:
             Exception: If push fails
         """
         if not self._http_client:
             logger.warning("HTTP client not initialized, skipping policy push")
             return
-        
+
         try:
             # First, get the agent_id from the backend using our public key
             agent_response = await self._http_client.get("/v1/agents")
             if not agent_response.is_success:
                 raise Exception(f"Failed to get agent info: {agent_response.status_code}")
-            
+
             agents_data = agent_response.json()
             agents = agents_data.get("agents", [])
-            
+
             # Find our agent by public key
             our_agent = next(
                 (agent for agent in agents if agent["public_key"] == self._identity.public_key_hex),
                 None
             )
-            
+
             if not our_agent:
                 logger.error("Agent not found in backend, cannot push policies")
                 return
-            
+
             agent_id = our_agent["id"]
             logger.debug(f"Found agent_id: {agent_id}")
-            
+
             # Get all local policies
             local_policies = self._policy_engine._policies
-            
+
             if not local_policies:
                 logger.info("No local policies to push")
                 return
-            
+
             # Push each policy to backend with agent_id
             pushed_count = 0
             for tool_name, policy in local_policies.items():
@@ -703,19 +703,19 @@ class HashedCore:
                             "metadata": policy.metadata,
                         }
                     )
-                    
+
                     if response.is_success or response.status_code == 409:  # 409 = already exists
                         pushed_count += 1
                         logger.debug(f"Policy '{tool_name}' pushed to backend")
                     else:
                         logger.warning(f"Failed to push policy '{tool_name}': {response.status_code}")
-                        
+
                 except Exception as e:
                     logger.warning(f"Error pushing policy '{tool_name}': {e}")
                     continue
-            
+
             logger.info(f"Pushed {pushed_count}/{len(local_policies)} policies to backend")
-            
+
         except Exception as e:
             logger.error(f"Failed to push policies: {e}")
             raise
@@ -723,28 +723,28 @@ class HashedCore:
     async def sync_policies_from_backend(self) -> None:
         """
         Sync policies from the backend.
-        
+
         Downloads current policies and updates the local PolicyEngine.
-        
+
         Raises:
             Exception: If sync fails
         """
         if not self._http_client:
             logger.warning("HTTP client not initialized, skipping policy sync")
             return
-        
+
         try:
             response = await self._http_client.get(
                 "/v1/policies/sync",
                 params={"agent_public_key": self._identity.public_key_hex}
             )
-            
+
             if not response.is_success:
                 raise Exception(f"Policy sync failed: {response.status_code} - {response.text}")
-            
+
             data = response.json()
             policies = data.get("policies", {})
-            
+
             # Clear existing policies and load new ones
             # Note: This is a simple implementation. In production, you might want
             # to merge policies more intelligently.
@@ -753,13 +753,13 @@ class HashedCore:
                     tool_name=tool_name,
                     max_amount=policy_data.get("max_amount"),
                     allowed=policy_data.get("allowed", True),
-                    **{k: v for k, v in policy_data.items() 
+                    **{k: v for k, v in policy_data.items()
                        if k not in ["max_amount", "allowed"]}
                 )
-            
+
             logger.info(f"Synced {len(policies)} policies from backend")
             logger.debug(f"Sync metadata: {data.get('synced_at')}")
-        
+
         except Exception as e:
             logger.error(f"Failed to sync policies: {e}")
             raise
@@ -767,21 +767,21 @@ class HashedCore:
     async def _background_sync(self) -> None:
         """
         Background task that periodically syncs policies.
-        
+
         Runs until cancelled or core is shutdown.
         """
         logger.debug("Background policy sync task started")
-        
+
         while self._initialized:
             try:
                 await asyncio.sleep(self._config.sync_interval)
-                
+
                 if not self._initialized:
                     break
-                
+
                 logger.debug("Running scheduled policy sync...")
                 await self.sync_policies_from_backend()
-                
+
             except asyncio.CancelledError:
                 logger.debug("Background sync cancelled")
                 break

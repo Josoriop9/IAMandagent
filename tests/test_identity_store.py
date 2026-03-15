@@ -426,6 +426,7 @@ class TestHashedCoreEnvIdentity:
     def test_core_uses_env_identity_when_set(self, monkeypatch):
         """HashedCore should use env var identity when no explicit identity given."""
         import base64
+
         from hashed.core import HashedCore
 
         original = IdentityManager()
@@ -443,6 +444,7 @@ class TestHashedCoreEnvIdentity:
     def test_core_explicit_identity_overrides_env(self, monkeypatch):
         """Explicit identity= parameter should override HASHED_AGENT_PRIVATE_KEY."""
         import base64
+
         from hashed.core import HashedCore
 
         env_identity = IdentityManager()
@@ -460,7 +462,6 @@ class TestHashedCoreEnvIdentity:
 
     def test_core_generates_ephemeral_identity_when_no_env(self, monkeypatch):
         """HashedCore should generate a new identity when env var is not set."""
-        import base64
         from hashed.core import HashedCore
 
         monkeypatch.delenv("HASHED_AGENT_PRIVATE_KEY", raising=False)

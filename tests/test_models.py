@@ -5,7 +5,7 @@ Tests for Pydantic models.
 import pytest
 from pydantic import ValidationError
 
-from hashed.models import HashRequest, HashResponse, HashAlgorithm
+from hashed.models import HashAlgorithm, HashRequest, HashResponse
 
 
 class TestHashRequest:

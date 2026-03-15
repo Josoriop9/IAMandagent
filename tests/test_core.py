@@ -15,14 +15,12 @@ Focus areas:
 """
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from hashed import HashedCore, HashedConfig, IdentityManager
+from hashed import HashedConfig, HashedCore, IdentityManager
 from hashed.core import create_core
 from hashed.guard import PermissionError
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 

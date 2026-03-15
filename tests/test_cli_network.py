@@ -7,8 +7,9 @@ rotate-key, whoami with credentials, per-agent policies, and JSON output.
 """
 
 import json
+from collections.abc import Generator
 from pathlib import Path
-from typing import Any, Generator, List, Optional
+from typing import Any, Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -58,7 +59,7 @@ def global_policy_file(tmp_workdir: Path) -> Path:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _async_client(get_side_effect: Optional[List[Any]] = None,
+def _async_client(get_side_effect: Optional[list[Any]] = None,
                   post_return: Any = None,
                   delete_return: Any = None) -> AsyncMock:
     """

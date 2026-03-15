@@ -11,15 +11,12 @@ Covers the lines NOT exercised by other test files:
   - from_private_key_bytes() generic exception → HashedCryptoError (line 235)
 """
 
-import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from hashed.exceptions import HashedCryptoError
 from hashed.identity import IdentityManager
-
 
 # ── __init__ ─────────────────────────────────────────────────────────────────
 
@@ -109,7 +106,7 @@ class TestVerifySignature:
     def test_tampered_signature_is_invalid(self) -> None:
         """A tampered signature should fail verification."""
         identity = IdentityManager()
-        sig = identity.sign_message("message")
+        identity.sign_message("message")
         tampered = b"\x00" * 64
         assert identity.verify_signature("message", tampered) is False
 
@@ -283,8 +280,8 @@ class TestFromPrivateKeyBytes:
 
     def test_wrong_key_type_raises_crypto_error(self) -> None:
         """A non-Ed25519 key type raises HashedCryptoError (line 208-209)."""
-        from cryptography.hazmat.primitives.asymmetric import ec
         from cryptography.hazmat.primitives import serialization as ser
+        from cryptography.hazmat.primitives.asymmetric import ec
 
         # Generate an ECDSA key (not Ed25519)
         ecdsa_key = ec.generate_private_key(ec.SECP256R1())

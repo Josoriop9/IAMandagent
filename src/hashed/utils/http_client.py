@@ -9,7 +9,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import Any, Optional, Set
+from typing import Any, Optional
 
 import httpx
 
@@ -19,7 +19,7 @@ from hashed.exceptions import HashedAPIError
 logger = logging.getLogger(__name__)
 
 # HTTP status codes that are worth retrying (transient errors)
-_RETRYABLE_STATUS_CODES: Set[int] = {429, 502, 503, 504}
+_RETRYABLE_STATUS_CODES: set[int] = {429, 502, 503, 504}
 
 # Hard cap on retry wait so agents don't stall indefinitely
 _MAX_RETRY_WAIT_SECONDS: float = 30.0

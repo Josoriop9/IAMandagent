@@ -9,22 +9,18 @@ import asyncio
 import json
 import os
 import re
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import typer
+from rich import box
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.syntax import Syntax
-from rich import box
 
-from hashed import HashedCore, HashedConfig, load_or_create_identity
-from hashed.identity import IdentityManager
-from hashed.guard import PermissionError
-from hashed.templates import render_agent_script, FRAMEWORKS, FRAMEWORK_LABELS, FRAMEWORK_INSTALL
+from hashed import HashedConfig, load_or_create_identity
+from hashed.templates import FRAMEWORK_INSTALL, FRAMEWORK_LABELS, FRAMEWORKS, render_agent_script
 
 # Initialize Typer app
 app = typer.Typer(
@@ -39,8 +35,8 @@ app = typer.Typer(
 def _app_root(ctx: typer.Context) -> None:
     """Show banner when 'hashed' is called with no subcommand."""
     if ctx.invoked_subcommand is None:
-        from hashed.banner import show_banner
         from hashed import __version__
+        from hashed.banner import show_banner
         show_banner(version=__version__)
         console.print(ctx.get_help())
         raise typer.Exit()
@@ -57,8 +53,8 @@ CREDENTIALS_FILE = CREDENTIALS_DIR / "credentials.json"
 # Requires: pip install hashed-sdk[secure]   (keyring>=24.0.0)
 # Falls back to plaintext JSON if the library is not installed.
 try:
-    import keyring as _keyring                          # type: ignore[import]
-    import keyring.errors as _keyring_errors            # type: ignore[import]
+    import keyring as _keyring  # type: ignore[import]
+    import keyring.errors as _keyring_errors  # type: ignore[import]
     _KEYRING_AVAILABLE = True
 except ImportError:
     _KEYRING_AVAILABLE = False
@@ -203,16 +199,16 @@ def init(
         if create_config:
             env_file = Path(".env")
             if not env_file.exists():
-                env_content = f"# Hashed Configuration\n"
-                env_content += f"HASHED_BACKEND_URL=http://localhost:8000\n"
-                env_content += f"HASHED_API_KEY=your_api_key_here\n"
+                env_content = "# Hashed Configuration\n"
+                env_content += "HASHED_BACKEND_URL=http://localhost:8000\n"
+                env_content += "HASHED_API_KEY=your_api_key_here\n"
                 env_content += f"HASHED_IDENTITY_PASSWORD={password}\n"
                 if framework in ("langchain", "crewai", "autogen"):
-                    env_content += f"OPENAI_API_KEY=your_openai_key_here\n"
-                    env_content += f"OPENAI_MODEL=gpt-4o-mini\n"
+                    env_content += "OPENAI_API_KEY=your_openai_key_here\n"
+                    env_content += "OPENAI_MODEL=gpt-4o-mini\n"
                 if framework == "strands":
-                    env_content += f"AWS_REGION=us-east-1\n"
-                    env_content += f"BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0\n"
+                    env_content += "AWS_REGION=us-east-1\n"
+                    env_content += "BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0\n"
                 env_file.write_text(env_content)
                 success(f"Created configuration: {env_file}")
                 warning("⚠️  Update HASHED_API_KEY in .env (from: hashed whoami)")
@@ -235,7 +231,7 @@ def init(
         console.print("[bold green]✓ Agent initialized![/bold green]")
 
         install_cmd = FRAMEWORK_INSTALL.get(framework)
-        console.print(f"\n[cyan]Next steps:[/cyan]")
+        console.print("\n[cyan]Next steps:[/cyan]")
         step = 1
         if install_cmd:
             console.print(f"  {step}. Install deps: [bold]{install_cmd}[/bold]")
@@ -285,13 +281,13 @@ def _write_agent_script(
     fw_label = FRAMEWORK_LABELS.get(framework, framework)
     info(f"  Framework: {fw_label}")
     if interactive:
-        info(f"  Mode: Interactive (REPL)")
+        info("  Mode: Interactive (REPL)")
 
     total_pols = len(agent_pols) + len(global_pols)
     if total_pols > 0:
         info(f"  Generated {total_pols} @core.guard() tool(s) from policies")
     else:
-        info(f"  No policies found → example tool generated")
+        info("  No policies found → example tool generated")
         info(f"  Add policies: hashed policy add <tool> --allow --agent \"{name}\"")
 
 
@@ -313,7 +309,7 @@ def identity_create(
 ):
     """
     🔑 Create a new cryptographic identity.
-    
+
     Generates Ed25519 keypair and saves encrypted to file.
     """
     try:
@@ -324,17 +320,17 @@ def identity_create(
             if password != confirm:
                 error("Passwords don't match")
                 raise typer.Exit(1)
-        
+
         # Create directory
         Path(output).parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Generate identity
         identity = load_or_create_identity(output, password)
-        
+
         success(f"Identity created: {output}")
         console.print(f"\n[cyan]Public Key:[/cyan] {identity.public_key_hex}")
         warning("⚠️  Keep this file secure and never commit to git!")
-        
+
     except Exception as e:
         error(f"Failed to create identity: {e}")
         raise typer.Exit(1)
@@ -347,7 +343,7 @@ def identity_show(
 ):
     """
     👁️  Show identity information.
-    
+
     Displays public key and other identity details.
     """
     try:
@@ -356,21 +352,21 @@ def identity_show(
             password = os.getenv("HASHED_IDENTITY_PASSWORD")
             if not password:
                 password = typer.prompt("Enter decryption password", hide_input=True)
-        
+
         # Load identity
         identity = load_or_create_identity(identity_file, password)
-        
+
         # Display
         table = Table(title="Identity Information", box=box.ROUNDED)
         table.add_column("Property", style="cyan")
         table.add_column("Value", style="green")
-        
+
         table.add_row("File", identity_file)
         table.add_row("Public Key", identity.public_key_hex)
         table.add_row("Algorithm", "Ed25519")
-        
+
         console.print(table)
-        
+
     except Exception as e:
         error(f"Failed to load identity: {e}")
         raise typer.Exit(1)
@@ -462,7 +458,7 @@ def identity_export(
         table.add_column("Step", style="cyan", width=4)
         table.add_column("Action", style="white")
 
-        table.add_row("1️⃣", f"Copy the base64 string above")
+        table.add_row("1️⃣", "Copy the base64 string above")
         table.add_row("2️⃣", "In Railway → Variables → Add variable:")
         table.add_row("  ", "  Name:  [cyan]HASHED_AGENT_PRIVATE_KEY[/cyan]")
         table.add_row("  ", "  Value: [dim]<paste the base64 string>[/dim]")
@@ -496,20 +492,20 @@ def identity_sign(
 ):
     """
     ✍️  Sign a message with identity.
-    
+
     Creates cryptographic signature for verification.
     """
     try:
         password = os.getenv("HASHED_IDENTITY_PASSWORD")
         if not password:
             password = typer.prompt("Enter password", hide_input=True)
-        
+
         identity = load_or_create_identity(identity_file, password)
         signature = identity.sign_message(message)
-        
+
         console.print(f"\n[cyan]Message:[/cyan] {message}")
         console.print(f"[cyan]Signature:[/cyan] {signature.hex()}")
-        
+
     except Exception as e:
         error(f"Failed to sign: {e}")
         raise typer.Exit(1)
@@ -564,7 +560,7 @@ def policy_add(
 ):
     """
     ➕ Add a policy rule (global or per-agent).
-    
+
     Examples:
         hashed policy add send_email --allow                                  # Global
         hashed policy add process_payment --allow -m 500 --agent payment_agent
@@ -572,13 +568,13 @@ def policy_add(
     """
     try:
         policies = _load_policies(config_file)
-        
+
         entry = {
             "allowed": allowed,
             "max_amount": max_amount,
             "created_at": datetime.now().isoformat()
         }
-        
+
         if agent_name:
             snake = _to_snake_case(agent_name)
             if snake not in policies["agents"]:
@@ -588,14 +584,14 @@ def policy_add(
         else:
             policies["global"][tool_name] = entry
             scope = "global"
-        
+
         _save_policies(policies, config_file)
-        
+
         success(f"Policy added: {tool_name} ({scope})")
         console.print(f"  Allowed: [{'green' if allowed else 'red'}]{allowed}[/]")
         if max_amount is not None:
             console.print(f"  Max Amount: [cyan]{max_amount}[/cyan]")
-        
+
     except Exception as e:
         error(f"Failed to add policy: {e}")
         raise typer.Exit(1)
@@ -609,23 +605,23 @@ def policy_list(
 ):
     """
     📋 List policies (all, global, or per-agent).
-    
+
     Examples:
         hashed policy list                    # All policies
         hashed policy list -a payment_agent   # Only payment_agent
     """
     try:
         policies = _load_policies(config_file)
-        
+
         if output_format == "json":
             console.print_json(data=policies)
             return
-        
+
         global_policies = policies.get("global", {})
         agent_policies = policies.get("agents", {})
-        
+
         has_any = False
-        
+
         # Show global policies
         if global_policies and not agent_name:
             has_any = True
@@ -634,11 +630,11 @@ def policy_list(
             table.add_column("Allowed", style="bold")
             table.add_column("Max Amount", style="yellow")
             table.add_column("Created", style="dim")
-            
+
             for tool, pol in global_policies.items():
                 _add_policy_row(table, tool, pol)
             console.print(table)
-        
+
         # Show agent policies
         agents_to_show = {}
         if agent_name:
@@ -650,7 +646,7 @@ def policy_list(
                 return
         else:
             agents_to_show = agent_policies
-        
+
         for agent_key, tools in agents_to_show.items():
             if tools:
                 has_any = True
@@ -659,14 +655,14 @@ def policy_list(
                 table.add_column("Allowed", style="bold")
                 table.add_column("Max Amount", style="yellow")
                 table.add_column("Created", style="dim")
-                
+
                 for tool, pol in tools.items():
                     _add_policy_row(table, tool, pol)
                 console.print(table)
-        
+
         if not has_any:
             warning("No policies found. Add with: hashed policy add <tool> --allow")
-        
+
     except Exception as e:
         error(f"Failed to list policies: {e}")
         raise typer.Exit(1)
@@ -689,14 +685,14 @@ def policy_remove(
 ):
     """
     ➖ Remove a policy rule.
-    
+
     Examples:
         hashed policy remove send_email               # Remove global
         hashed policy remove process_payment -a pay    # Remove from agent
     """
     try:
         policies = _load_policies(config_file)
-        
+
         if agent_name:
             snake = _to_snake_case(agent_name)
             agent_pols = policies.get("agents", {}).get(snake, {})
@@ -711,11 +707,11 @@ def policy_remove(
                 error(f"Global policy not found: {tool_name}")
                 raise typer.Exit(1)
             del policies["global"][tool_name]
-        
+
         _save_policies(policies, config_file)
         scope = f"agent:{_to_snake_case(agent_name)}" if agent_name else "global"
         success(f"Policy removed: {tool_name} ({scope})")
-        
+
     except Exception as e:
         error(f"Failed to remove policy: {e}")
         raise typer.Exit(1)
@@ -730,9 +726,9 @@ def policy_test(
 ):
     """
     🧪 Test if an operation would be allowed.
-    
+
     Resolves agent-specific first, then falls back to global.
-    
+
     Examples:
         hashed policy test process_payment -a payment_agent -m 200
         hashed policy test delete_data -a support_bot
@@ -740,18 +736,18 @@ def policy_test(
     try:
         policies = _load_policies(config_file)
         policy = _resolve_policy(policies, tool_name, agent_name)
-        
+
         scope = f"agent:{_to_snake_case(agent_name)}" if agent_name else "global"
-        
+
         if not policy:
             info(f"No policy for '{tool_name}' ({scope}) → default: [green]ALLOWED[/green]")
             return
-        
+
         # Check allowed
         if not policy["allowed"]:
             console.print(f"[red]✗ DENIED[/red] - Policy denies '{tool_name}' ({scope})")
             return
-        
+
         # Check amount
         if amount is not None and policy.get("max_amount") is not None:
             if amount > policy["max_amount"]:
@@ -759,9 +755,9 @@ def policy_test(
                 return
             console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted (${amount} ≤ ${policy['max_amount']})")
             return
-        
+
         console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted ({scope})")
-        
+
     except Exception as e:
         error(f"Failed to test policy: {e}")
         raise typer.Exit(1)
@@ -780,22 +776,22 @@ def _get_sync_credentials() -> tuple:
     """Get API key and backend URL for sync, preferring ~/.hashed/credentials.json."""
     from dotenv import load_dotenv
     load_dotenv()
-    
+
     # Priority: credentials.json > .env > HashedConfig
     creds = load_credentials()
     api_key = None
     backend_url = None
-    
+
     if creds:
         api_key = creds.get("api_key")
         backend_url = creds.get("backend_url")
-    
+
     # Fallback to config (env vars)
     if not api_key or not backend_url:
         config = get_config()
         api_key = api_key or config.api_key
         backend_url = backend_url or config.backend_url
-    
+
     return api_key, backend_url
 
 
@@ -805,10 +801,10 @@ def policy_push(
 ):
     """
     ⬆️  Push local policies to backend (JSON → Supabase).
-    
+
     Reads .hashed_policies.json and syncs all policies to the backend.
     Uses credentials from ~/.hashed/credentials.json (from hashed login).
-    
+
     Example:
         hashed policy push
     """
@@ -908,7 +904,7 @@ def policy_push(
                         if available:
                             info(f"    Available: {', '.join(available)}")
                         else:
-                            info(f"    No agents registered yet. Run the agent first.")
+                            info("    No agents registered yet. Run the agent first.")
                         continue
 
                     matched_name = agent_display.get(norm_key, agent_key)
@@ -958,7 +954,7 @@ def policy_push(
         except Exception as e:
             error(f"Push failed: {e}")
             raise typer.Exit(1)
-    
+
     console.print(Panel.fit("[bold cyan]Policy Push → Backend[/bold cyan]", border_style="cyan"))
     asyncio.run(_push())
 
@@ -969,23 +965,23 @@ def policy_pull(
 ):
     """
     ⬇️  Pull policies from backend to local JSON (Supabase → JSON).
-    
+
     Downloads all policies from backend and saves to .hashed_policies.json
-    
+
     Example:
         hashed policy pull
     """
     async def _pull():
         try:
             import httpx
-            
+
             api_key, backend_url = _get_sync_credentials()
             if not backend_url or not api_key:
                 error("No credentials found. Run: hashed login")
                 raise typer.Exit(1)
-            
+
             headers = {"X-API-KEY": api_key}
-            
+
             async with httpx.AsyncClient(timeout=30) as client:
                 # Get all policies
                 pol_resp = await client.get(
@@ -994,9 +990,9 @@ def policy_pull(
                 if not pol_resp.is_success:
                     error(f"Failed to fetch policies: {pol_resp.status_code}")
                     raise typer.Exit(1)
-                
+
                 backend_policies = pol_resp.json().get("policies", [])
-                
+
                 # Get agents for name mapping
                 agents_resp = await client.get(
                     f"{backend_url}/v1/agents", headers=headers
@@ -1005,17 +1001,17 @@ def policy_pull(
                 if agents_resp.is_success:
                     for a in agents_resp.json().get("agents", []):
                         agent_id_to_name[a["id"]] = _to_snake_case(a["name"])
-            
+
             # Build local structure
             local = {"global": {}, "agents": {}}
-            
+
             for pol in backend_policies:
                 entry = {
                     "allowed": pol["allowed"],
                     "max_amount": pol.get("max_amount"),
                     "created_at": pol.get("created_at", datetime.now().isoformat())
                 }
-                
+
                 if pol.get("agent_id"):
                     agent_snake = agent_id_to_name.get(pol["agent_id"], "unknown")
                     if agent_snake not in local["agents"]:
@@ -1023,22 +1019,22 @@ def policy_pull(
                     local["agents"][agent_snake][pol["tool_name"]] = entry
                 else:
                     local["global"][pol["tool_name"]] = entry
-            
+
             _save_policies(local, config_file)
-            
+
             global_count = len(local["global"])
             agent_count = sum(len(t) for t in local["agents"].values())
             agents_list = list(local["agents"].keys())
-            
+
             success(f"Pulled {global_count} global + {agent_count} agent policies")
             if agents_list:
                 info(f"  Agents: {', '.join(agents_list)}")
             info(f"  Saved to: {config_file}")
-            
+
         except Exception as e:
             error(f"Pull failed: {e}")
             raise typer.Exit(1)
-    
+
     console.print(Panel.fit("[bold cyan]Policy Pull ← Backend[/bold cyan]", border_style="cyan"))
     asyncio.run(_pull())
 
@@ -1055,12 +1051,12 @@ def agent_list():
     async def _list():
         try:
             config = get_config()
-            
+
             if not config.backend_url:
                 error("Backend URL not configured")
                 info("Set HASHED_BACKEND_URL environment variable")
                 raise typer.Exit(1)
-            
+
             # Simple HTTP request to backend
             import httpx
             async with httpx.AsyncClient() as client:
@@ -1068,24 +1064,24 @@ def agent_list():
                     f"{config.backend_url}/v1/agents",
                     headers={"X-API-KEY": config.api_key or ""}
                 )
-                
+
                 if not response.is_success:
                     error(f"Failed to fetch agents: {response.status_code}")
                     raise typer.Exit(1)
-                
+
                 data = response.json()
                 agents = data.get("agents", [])
-                
+
                 if not agents:
                     info("No agents registered")
                     return
-                
+
                 table = Table(title="Registered Agents", box=box.ROUNDED)
                 table.add_column("Name", style="cyan")
                 table.add_column("Type", style="yellow")
                 table.add_column("Public Key", style="dim")
                 table.add_column("Status", style="bold")
-                
+
                 for agent in agents:
                     status = "🟢 Active" if agent.get("status") == "active" else "🔴 Inactive"
                     table.add_row(
@@ -1094,13 +1090,13 @@ def agent_list():
                         agent["public_key"][:16] + "...",
                         status
                     )
-                
+
                 console.print(table)
-                
+
         except Exception as e:
             error(f"Failed to list agents: {e}")
             raise typer.Exit(1)
-    
+
     asyncio.run(_list())
 
 
@@ -1228,72 +1224,72 @@ def logs_list(
     async def _list():
         try:
             config = get_config()
-            
+
             if not config.backend_url:
                 error("Backend URL not configured")
                 raise typer.Exit(1)
-            
+
             import httpx
             async with httpx.AsyncClient() as client:
                 # Build params dict
                 params = {"limit": limit}
                 if status:
                     params["status"] = status
-                
+
                 response = await client.get(
                     f"{config.backend_url}/v1/logs",
                     params=params,
                     headers={"X-API-KEY": config.api_key or ""}
                 )
-                
+
                 if not response.is_success:
                     error(f"Failed to fetch logs: {response.status_code}")
                     raise typer.Exit(1)
-                
+
                 data = response.json()
                 logs = data.get("logs", [])
-                
+
                 if not logs:
                     info("No logs found")
                     return
-                
+
                 table = Table(title=f"Recent Logs (last {limit})", box=box.ROUNDED)
                 table.add_column("Time", style="dim")
                 table.add_column("Tool", style="cyan")
                 table.add_column("Status", style="bold")
                 table.add_column("Agent", style="yellow")
-                
+
                 for log in logs:
                     timestamp = log["timestamp"][:19].replace("T", " ")
                     tool = log["tool_name"]
                     log_status = log["status"]
                     agent = log.get("agent_name", "Unknown")[:20]
-                    
+
                     status_emoji = {
                         "success": "✓",
                         "denied": "✗",
                         "error": "⚠"
                     }.get(log_status, "•")
-                    
+
                     status_color = {
                         "success": "green",
                         "denied": "red",
                         "error": "yellow"
                     }.get(log_status, "white")
-                    
+
                     table.add_row(
                         timestamp,
                         tool,
                         f"[{status_color}]{status_emoji} {log_status}[/]",
                         agent
                     )
-                
+
                 console.print(table)
-                
+
         except Exception as e:
             error(f"Failed to list logs: {e}")
             raise typer.Exit(1)
-    
+
     asyncio.run(_list())
 
 
@@ -1409,11 +1405,12 @@ def signup(
 ):
     """
     📝 Create a new Hashed account and organization.
-    
+
     Signs up, waits for email confirmation, then creates your org + API key.
     """
-    import httpx
     import time
+
+    import httpx
 
     console.print(Panel.fit(
         "[bold cyan]Hashed - Create Account[/bold cyan]",
@@ -1559,7 +1556,7 @@ def login(
 ):
     """
     🔐 Login to your Hashed account.
-    
+
     Authenticates and saves API key to ~/.hashed/credentials.json
     """
     import httpx

@@ -14,16 +14,14 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from hashed.config import HashedConfig
 from hashed.core import HashedCore
-from hashed.guard import PermissionError
 from hashed.identity import IdentityManager
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,12 +29,12 @@ from hashed.identity import IdentityManager
 def _cfg(**overrides) -> HashedConfig:
     for var in ("HASHED_BACKEND_URL", "HASHED_API_KEY"):
         os.environ.pop(var, None)
-    defaults = dict(
-        backend_url="http://mock.test",
-        api_key="test_key",
-        fail_closed=False,
-        enable_auto_sync=False,
-    )
+    defaults = {
+        "backend_url": "http://mock.test",
+        "api_key": "test_key",
+        "fail_closed": False,
+        "enable_auto_sync": False,
+    }
     defaults.update(overrides)
     return HashedConfig(**defaults)
 

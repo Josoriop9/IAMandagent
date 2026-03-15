@@ -12,11 +12,7 @@ Python 3.9 compatible.
 """
 from __future__ import annotations
 
-from io import StringIO
 from unittest.mock import MagicMock, patch
-
-import pytest
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -115,7 +111,7 @@ class TestShowBanner:
 
     def test_show_banner_calls_console_print(self):
         """show_banner() must call console.print at least once per line + 2 blanks."""
-        from hashed.banner import show_banner, _HASH_LINES
+        from hashed.banner import _HASH_LINES, show_banner
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -125,7 +121,7 @@ class TestShowBanner:
 
     def test_show_banner_with_version_extra_print(self):
         """With version, tagline print is called (contains version string)."""
-        from hashed.banner import show_banner, _HASH_LINES
+        from hashed.banner import _HASH_LINES, show_banner
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -171,8 +167,9 @@ class TestShowBanner:
 
     def test_show_banner_uses_text_objects(self):
         """Each logo row is rendered as a Rich Text object (not raw string)."""
-        from hashed.banner import show_banner
         from rich.text import Text
+
+        from hashed.banner import show_banner
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -222,18 +219,20 @@ class TestBannerCLIIntegration:
     def test_hashed_no_subcommand_shows_banner(self):
         """Running 'hashed' without subcommand triggers show_banner."""
         from typer.testing import CliRunner
+
         from hashed.cli import app
         runner = CliRunner()
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
-            result = runner.invoke(app, [])
+            runner.invoke(app, [])
             # Banner should have been triggered (console.print called)
             assert mock_console.print.call_count >= 1
 
     def test_hashed_login_does_not_show_banner(self):
         """Running 'hashed login' should NOT trigger show_banner."""
         from typer.testing import CliRunner
+
         from hashed.cli import app
         runner = CliRunner()
         with patch("hashed.banner.show_banner") as mock_banner:
@@ -244,6 +243,7 @@ class TestBannerCLIIntegration:
     def test_hashed_version_does_not_show_banner(self):
         """Running 'hashed version' should NOT trigger show_banner."""
         from typer.testing import CliRunner
+
         from hashed.cli import app
         runner = CliRunner()
         with patch("hashed.banner.show_banner") as mock_banner:

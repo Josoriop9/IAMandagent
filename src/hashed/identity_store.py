@@ -44,10 +44,10 @@ def load_or_create_identity(
     Example:
         >>> # First run: generates and saves
         >>> identity = load_or_create_identity("./secrets/agent.pem", "my_password")
-        >>> 
+        >>>
         >>> # Subsequent runs: loads the same identity
         >>> identity = load_or_create_identity("./secrets/agent.pem", "my_password")
-        >>> 
+        >>>
         >>> # Use with HashedCore
         >>> core = HashedCore(identity=identity, agent_name="MyBot")
     """
