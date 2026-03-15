@@ -169,3 +169,6 @@ secrets/
 coverage.xml
 .coverage
 htmlcov/
+
+# AI session memory — local only, never commit
+AI_CONTEXT.md
