@@ -170,7 +170,6 @@ coverage.xml
 .coverage
 htmlcov/
 
-# AI session memory — local only, never commit
-AI_CONTEXT.md
-QA_GUIDE.md
-REPOS.md
+# Internal docs — local only, never commit
+# Contains: AI_CONTEXT.md, QA_GUIDE.md, REPOS.md
+internal/
