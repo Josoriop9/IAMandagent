@@ -1050,19 +1050,18 @@ def agent_list():
     """
     async def _list():
         try:
-            config = get_config()
+            api_key, backend_url = _get_sync_credentials()
 
-            if not config.backend_url:
-                error("Backend URL not configured")
-                info("Set HASHED_BACKEND_URL environment variable")
+            if not backend_url or not api_key:
+                error("Not logged in or missing credentials. Run: hashed login")
                 raise typer.Exit(1)
 
             # Simple HTTP request to backend
             import httpx
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{config.backend_url}/v1/agents",
-                    headers={"X-API-KEY": config.api_key or ""}
+                    f"{backend_url}/v1/agents",
+                    headers={"X-API-KEY": api_key}
                 )
 
                 if not response.is_success:
@@ -1223,10 +1222,10 @@ def logs_list(
     """
     async def _list():
         try:
-            config = get_config()
+            api_key, backend_url = _get_sync_credentials()
 
-            if not config.backend_url:
-                error("Backend URL not configured")
+            if not backend_url or not api_key:
+                error("Not logged in or missing credentials. Run: hashed login")
                 raise typer.Exit(1)
 
             import httpx
@@ -1237,9 +1236,9 @@ def logs_list(
                     params["status"] = status
 
                 response = await client.get(
-                    f"{config.backend_url}/v1/logs",
+                    f"{backend_url}/v1/logs",
                     params=params,
-                    headers={"X-API-KEY": config.api_key or ""}
+                    headers={"X-API-KEY": api_key}
                 )
 
                 if not response.is_success:
