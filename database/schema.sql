@@ -232,6 +232,37 @@ CREATE TRIGGER update_agent_last_seen_trigger
     AFTER INSERT ON ledger_logs
     FOR EACH ROW EXECUTE FUNCTION update_agent_last_seen();
 
+-- Trigger: auto-create organization when a new user signs up via Supabase Auth
+-- NOTE: Uses gen_random_uuid() — no pgcrypto dependency required.
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+DECLARE
+    new_api_key TEXT;
+BEGIN
+    -- Generate unique API key (native Postgres 13+ — no extension needed)
+    new_api_key := 'hashed_' || replace(
+        gen_random_uuid()::text || gen_random_uuid()::text,
+        '-',
+        ''
+    );
+
+    INSERT INTO public.organizations (name, api_key, owner_id)
+    VALUES (
+        COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email) || '''s Organization',
+        new_api_key,
+        NEW.id
+    );
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+CREATE TRIGGER on_auth_user_created
+    AFTER INSERT ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user();
+
 -- ============================================================================
 -- ROW LEVEL SECURITY — DISABLED
 -- The backend uses the service_role key which has full access.

@@ -1,0 +1,20 @@
+-- ============================================================================
+-- Migration 006: Fix handle_new_user trigger — remove pgcrypto dependency
+-- Applied: 2026-03-16
+-- Supabase projects: hashed-dev ✅  |  production ✅
+-- ============================================================================
+-- Problem:
+--   The original handle_new_user() trigger called:
+--     encode(gen_random_bytes(32), 'hex')
+--   which requires the pgcrypto extension in the search_path.
+--   In Supabase, pgcrypto lives in the 'extensions' schema, not 'public',
+--   so the function was invisible to the trigger and signup failed with:
+--     ERROR: function gen_random_bytes(integer) does not exist (SQLSTATE 42883)
+--
+-- Fix:
+--   Replace gen_random_bytes(32) with gen_random_uuid()::text concatenation.
+--   gen_random_uuid() is native PostgreSQL 13+ — zero extension dependencies.
+--   The result is still 64 chars of cryptographically random hex.
+--
+-- Rollback:
+--   CREATE OR REPLACE FUNCTION public.handle_new_user() ... (original version)

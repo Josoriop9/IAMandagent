@@ -25,8 +25,12 @@ RETURNS TRIGGER AS $$
 DECLARE
     new_api_key TEXT;
 BEGIN
-    -- Generate unique API key
-    new_api_key := 'hashed_' || encode(gen_random_bytes(32), 'hex');
+    -- Generate unique API key (no pgcrypto dependency — gen_random_uuid() is native Postgres 13+)
+    new_api_key := 'hashed_' || replace(
+        gen_random_uuid()::text || gen_random_uuid()::text,
+        '-',
+        ''
+    );
     
     -- Create organization for new user
     INSERT INTO public.organizations (name, api_key, owner_id)
