@@ -11,13 +11,49 @@
 
 **Governance & Audit Framework for AI Agents**
 
+[![CI](https://github.com/Josoriop9/IAMandagent/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Josoriop9/IAMandagent/actions/workflows/ci.yml)
+[![Security Audit](https://img.shields.io/badge/Security%20Audit-Pending-orange.svg)](SECURITY.md)
 [![PyPI](https://img.shields.io/pypi/v/hashed-sdk.svg)](https://pypi.org/project/hashed-sdk/)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Coverage](https://img.shields.io/badge/coverage-73%25-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
-[![Tests](https://img.shields.io/badge/tests-344%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
+[![Coverage](https://img.shields.io/badge/coverage-76%25-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/blob/main/coverage.xml)
+[![Tests](https://img.shields.io/badge/tests-422%20passed-brightgreen.svg)](https://github.com/Josoriop9/IAMandagent/actions)
 
 </div>
+
+---
+
+## ⚡ Quick Install
+
+```bash
+pip install hashed-sdk
+```
+
+## 🔑 The 3-Line Demo
+
+```python
+from hashed import HashedCore, HashedConfig
+
+core = HashedCore(config=HashedConfig(), agent_name="my-agent")
+
+@core.guard("send_email")          # ← policy enforced, signed, logged
+async def send_email(to: str): ...
+```
+
+Every call is **cryptographically signed** (Ed25519), **policy-validated**, and written to an **immutable audit log** — automatically.
+
+## 🔗 Official Links
+
+| | |
+|---|---|
+| 📦 **PyPI** | [pypi.org/project/hashed-sdk](https://pypi.org/project/hashed-sdk/) |
+| 📖 **Documentation** | [docs/API_REFERENCE.md](docs/API_REFERENCE.md) |
+| 🏗️ **Protocol Spec** | [SPEC.md](SPEC.md) — Hashed Identity Protocol |
+| 🐛 **Issue Tracker** | [github.com/Josoriop9/IAMandagent/issues](https://github.com/Josoriop9/IAMandagent/issues) |
+| 🔒 **Security Policy** | [SECURITY.md](SECURITY.md) |
+| 📋 **Changelog** | [CHANGELOG.md](CHANGELOG.md) |
+
+---
 
 A professional Python SDK that provides cryptographic identity, policy enforcement, and immutable audit logging for AI agents. Built for production-grade AI systems that require accountability, compliance, and security.
 

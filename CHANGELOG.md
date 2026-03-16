@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-03-15
+
+### Added
+- **`SPEC.md`** — Hashed Identity Protocol (HIP) technical specification:
+  Ed25519 key derivation, canonical signature payload structure,
+  ledger immutability via forward-linked hash chain, circuit breaker FSM.
+- **README "God Mode"** — restructured above-the-fold for PyPI visibility:
+  Quick Install, The 3-Line Demo, Official Links table.
+
+### Changed
+- **README badges** updated: CI (dynamic GitHub Actions), Security Audit: Pending,
+  License: MIT, Coverage: 76%, Tests: 422 passed.
+
 ## [0.3.0] — 2026-03-15
 
 ### Added
