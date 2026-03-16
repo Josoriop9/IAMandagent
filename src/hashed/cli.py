@@ -200,7 +200,7 @@ def init(
             env_file = Path(".env")
             if not env_file.exists():
                 env_content = "# Hashed Configuration\n"
-                env_content += "HASHED_BACKEND_URL=http://localhost:8000\n"
+                env_content += "HASHED_BACKEND_URL=https://iamandagent-production.up.railway.app\n"
                 env_content += "HASHED_API_KEY=your_api_key_here\n"
                 env_content += f"HASHED_IDENTITY_PASSWORD={password}\n"
                 if framework in ("langchain", "crewai", "autogen"):
@@ -1673,7 +1673,7 @@ def rotate_key(
         error("Not logged in. Run: hashed login")
         raise typer.Exit(1)
 
-    backend_url = creds.get("backend_url", "http://localhost:8000")
+    backend_url = creds.get("backend_url", "https://iamandagent-production.up.railway.app")
     api_key = creds.get("api_key", "")
 
     console.print(Panel.fit(
