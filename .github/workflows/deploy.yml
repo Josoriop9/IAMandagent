@@ -109,7 +109,8 @@ jobs:
         run: |
           pip install build twine
           python -m build
-          twine upload dist/*
+          # --skip-existing: gracefully skip if version was already published manually
+          twine upload dist/* --skip-existing
           echo "✅ Published hashed-sdk v${{ steps.version_check.outputs.current }} to PyPI"
 
       - name: Create GitHub Release
@@ -120,3 +121,6 @@ jobs:
           name: "v${{ steps.version_check.outputs.current }}"
           generate_release_notes: true
           draft: false
+          # If tag was already pushed manually, create release from existing tag
+          # fail_on_unmatched_files: false prevents errors when no extra files are attached
+          fail_on_unmatched_files: false
