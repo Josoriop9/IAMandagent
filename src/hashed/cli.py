@@ -1650,6 +1650,120 @@ def whoami():
     console.print(table)
 
 
+@app.command("account-delete")
+def account_delete(
+    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts (DANGEROUS)"),
+    backend_url: Optional[str] = typer.Option(
+        None, "--backend", "-b",
+        help="Override backend URL (default: from credentials)"
+    ),
+):
+    """
+    ☠️  IRREVERSIBLE — Delete your account, organization, and ALL data.
+
+    \b
+    THIS COMMAND IS HYPER-DESTRUCTIVE. It permanently deletes:
+      • Your organization record
+      • ALL agents registered to your org
+      • ALL policies
+      • ALL audit logs (ledger)
+      • ALL approval queue entries
+      • Your Supabase Auth user account
+
+    There is NO undo. There is NO recovery. Data is gone forever.
+
+    You must type your email address to confirm.
+
+    Examples:
+        hashed account-delete
+        hashed account-delete --yes   # Skip prompts (CI/testing only)
+    """
+    import httpx
+
+    creds = load_credentials()
+    if not creds:
+        error("Not logged in. Run: hashed login")
+        raise typer.Exit(1)
+
+    url = backend_url or creds.get("backend_url", "https://iamandagent-production.up.railway.app")
+    api_key = creds.get("api_key", "")
+    email = creds.get("email", "your account")
+    org_name = creds.get("org_name", "your organization")
+
+    # ── Destructive warning panel ──────────────────────────────────────────
+    console.print()
+    console.print(Panel(
+        f"[bold red]☠️  HYPER-DESTRUCTIVE OPERATION[/bold red]\n\n"
+        f"[red]This will PERMANENTLY delete:[/red]\n"
+        f"  [red]•[/red] Organization: [bold]{org_name}[/bold]\n"
+        f"  [red]•[/red] ALL agents, policies, audit logs\n"
+        f"  [red]•[/red] Account: [bold]{email}[/bold]\n\n"
+        f"[bold red]There is NO undo. Data is gone forever.[/bold red]",
+        border_style="red",
+        title="[bold red]⚠️  DANGER ZONE[/bold red]",
+    ))
+    console.print()
+
+    if not yes:
+        # Anti-fat-finger check: user must type their email exactly
+        console.print(f"[bold red]To confirm, type your email address:[/bold red] [dim]{email}[/dim]")
+        typed = typer.prompt("Email")
+        if typed.strip() != email:
+            error("Email does not match. Deletion cancelled.")
+            raise typer.Exit(1)
+
+        console.print()
+        confirmed = typer.confirm(
+            "[bold red]FINAL WARNING: Delete everything permanently?[/bold red]",
+            default=False,
+        )
+        if not confirmed:
+            info("Deletion cancelled.")
+            raise typer.Exit(0)
+
+    # ── Call backend ───────────────────────────────────────────────────────
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.delete(
+                f"{url}/v1/auth/account",
+                headers={"X-API-KEY": api_key},
+            )
+
+            if response.status_code == 401:
+                error("Invalid API key. Run: hashed login")
+                raise typer.Exit(1)
+
+            if not response.is_success:
+                detail = response.json().get("detail", "Deletion failed")
+                error(f"Deletion failed: {detail}")
+                raise typer.Exit(1)
+
+            data = response.json()
+
+        # ── Clear local credentials ────────────────────────────────────────
+        clear_credentials()
+
+        console.print()
+        console.print(Panel(
+            f"[green]✓ Account permanently deleted[/green]\n\n"
+            f"[dim]Org ID: {data.get('deleted_org_id', '-')}[/dim]\n"
+            f"[dim]Auth user deleted: {data.get('auth_user_deleted', False)}[/dim]\n"
+            f"[dim]Deleted at: {data.get('deleted_at', '-')}[/dim]\n\n"
+            f"[dim]Local credentials cleared from {CREDENTIALS_FILE}[/dim]",
+            border_style="green",
+            title="[green]Deleted[/green]",
+        ))
+
+    except httpx.ConnectError:
+        error(f"Cannot connect to backend at {url}")
+        raise typer.Exit(1)
+    except typer.Exit:
+        raise
+    except Exception as e:
+        error(f"Deletion failed: {e}")
+        raise typer.Exit(1)
+
+
 @app.command("rotate-key")
 def rotate_key(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),

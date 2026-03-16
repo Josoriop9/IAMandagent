@@ -605,6 +605,74 @@ async def auth_me(org: dict = Depends(verify_api_key)):
     }
 
 
+@app.delete("/v1/auth/account", status_code=status.HTTP_200_OK)
+@limiter.limit("3/hour")
+async def delete_account(request: Request, org: dict = Depends(verify_api_key)):
+    """
+    ☠️  IRREVERSIBLE — Delete account, organization, and ALL associated data.
+
+    Permanently deletes (in order):
+    - The organization record → CASCADE removes: agents, policies,
+      ledger_logs, approval_queue, rate_limit_tracker
+    - The Supabase Auth user account
+
+    There is NO undo. This action is permanent and immediate.
+
+    Requires: X-API-KEY header (your current org API key).
+
+    Returns:
+        deleted_org_id: UUID of the deleted organization
+        auth_user_deleted: Whether the Auth user was also removed
+        deleted_at: UTC timestamp of the deletion
+    """
+    org_id = org["id"]
+    owner_id = org.get("owner_id")   # auth.users.id
+
+    try:
+        # Step 1 — Delete organization (CASCADE deletes all related data)
+        delete_resp = supabase.table("organizations").delete().eq("id", org_id).execute()
+        if not delete_resp.data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Organization not found or already deleted"
+            )
+
+        # Step 2 — Delete Supabase Auth user (if we have owner_id)
+        auth_deleted = False
+        if owner_id:
+            try:
+                supabase.auth.admin.delete_user(owner_id)
+                auth_deleted = True
+            except Exception as auth_err:
+                # Log but don't fail — org is already deleted; user can be
+                # cleaned manually in Supabase Auth dashboard if needed.
+                logger.warning(
+                    f"Auth user deletion skipped for org {org_id}: {auth_err}"
+                )
+
+        logger.info(
+            f"Account deleted: org_id={org_id}, "
+            f"org_name='{org['name']}', auth_deleted={auth_deleted}"
+        )
+
+        return {
+            "deleted": True,
+            "deleted_org_id": org_id,
+            "org_name": org["name"],
+            "auth_user_deleted": auth_deleted,
+            "deleted_at": datetime.utcnow().isoformat(),
+            "message": "Account and all associated data permanently deleted.",
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Deletion failed: {str(e)}"
+        )
+
+
 @app.post("/v1/auth/rotate-key")
 @limiter.limit("3/hour")             # Prevent abuse — max 3 rotations per hour
 async def rotate_api_key(request: Request, org: dict = Depends(verify_api_key)):

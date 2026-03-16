@@ -381,6 +381,78 @@ hashed rotate-key
 
 ---
 
+## ☠️ Danger Zone
+
+### `hashed account-delete`
+
+> **⚠️ HYPER-DESTRUCTIVE COMMAND — There is NO undo. Data is gone forever.**
+
+Permanently deletes **everything** associated with your account:
+
+| Deleted | Detail |
+|---------|--------|
+| Organization | The org record itself |
+| Agents | ALL agents in the org |
+| Policies | ALL policies (global + per-agent) |
+| Audit logs | ALL ledger entries |
+| Approval queue | ALL pending approvals |
+| Auth user | Your Supabase Auth account |
+
+```bash
+# Interactive mode — requires typing email to confirm
+hashed account-delete
+
+# Skip confirmation prompts (CI/testing ONLY — extremely dangerous)
+hashed account-delete --yes
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes`, `-y` | `false` | Skip confirmation prompts |
+| `--backend`, `-b` | (from credentials) | Override backend URL |
+
+**What happens step by step:**
+
+1. Shows a red "DANGER ZONE" warning panel with org name + email
+2. Asks you to **type your email exactly** (anti-fat-finger check)
+3. Asks a final `yes/no` confirmation
+4. Calls `DELETE /v1/auth/account` on the backend
+5. Backend deletes org (cascades all data) then deletes Auth user
+6. Clears your local `~/.hashed/credentials.json`
+
+**Example output:**
+
+```
+╭─────────────────────────── ⚠️  DANGER ZONE ───────────────────────────╮
+│  ☠️  HYPER-DESTRUCTIVE OPERATION                                       │
+│                                                                        │
+│  This will PERMANENTLY delete:                                        │
+│    • Organization: Acme Corp                                          │
+│    • ALL agents, policies, audit logs                                 │
+│    • Account: you@company.com                                         │
+│                                                                        │
+│  There is NO undo. Data is gone forever.                              │
+╰────────────────────────────────────────────────────────────────────────╯
+
+To confirm, type your email address: you@company.com
+Email: you@company.com
+FINAL WARNING: Delete everything permanently? [y/N]: y
+
+╭──── Deleted ────╮
+│  ✓ Account permanently deleted   │
+│  Org ID: abc123...               │
+│  Auth user deleted: True         │
+│  Deleted at: 2026-03-15T23:00:00 │
+╰──────────────────╯
+```
+
+**When to use this:**
+- Cleaning up a test account to start fresh
+- Closing an organization that's no longer needed
+- CI/CD teardown scripts (use `--yes`)
+
+---
+
 ## Identity Management
 
 ### `hashed identity create`
