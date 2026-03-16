@@ -641,4 +641,14 @@ Built with:
 
 ---
 
+---
+
+## ⚠️ Disclaimer
+
+> **Note:** This is a personal research project developed in my own time, using my own resources.  
+> All code, opinions, and architectural decisions are my own and do not represent  
+> the views, strategies, or position of my current employer.
+
+---
+
 **Built with ❤️ for responsible AI**
