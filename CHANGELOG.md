@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-03-15
+
+### Added
+- **Circuit Breaker** (`_CircuitBreaker` class in `core.py`) — opens after 3 consecutive backend
+  failures, 60-second cooldown, auto-resets on first success after cooldown.
+  Configurable via `HASHED_FAIL_CLOSED=true` (deny on outage) or default fail-open (allow on outage).
+- **Performance tracking** — every `@guard`-decorated call logs
+  `[hashed] '<tool>' governance overhead: X.Xms` at DEBUG level.
+- **Async/sync interop fix** — `sync_wrapper` now detects a running event loop and
+  uses `ThreadPoolExecutor` to avoid `RuntimeError: This event loop is already running`
+  (FastAPI, Jupyter, pytest-asyncio environments).
+- **Exponential backoff in background policy sync** — on failure: 10 s → 20 s → 40 s → … → 300 s cap;
+  resets to 0 after a successful sync.
+- **`circuit_breaker` property** on `HashedCore` — exposes the `_CircuitBreaker` instance
+  for external observability and testing.
+- **28 new tests** in `tests/test_circuit_breaker.py` covering all new code paths.
+
+### Changed
+- `guard()` god-method decomposed into five focused helpers following SRP:
+  `_validate_local_policy`, `_execute_remote_guard`, `_log_to_all_transports`,
+  `_log_denial`, `_log_error`.
+- `HashedConfig` is accessed via `with_overrides()` (frozen Pydantic model — never mutated directly).
+
+### Fixed
+- `ruff I001` lint — `import logging` moved to module level in test files.
+
+### Metrics
+- `core.py` branch coverage: **84% → 91%**
+- Total test suite: **422 passed, 0 failed** (from 394)
+
 ### Planned
 - Ledger durability (persist buffer to disk on crash)
 - API key expiration (TTL-based auto-rotation)
