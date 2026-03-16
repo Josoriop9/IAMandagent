@@ -97,7 +97,7 @@ jobs:
 
       - name: Set up Python
         if: steps.version_check.outputs.changed == 'true'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
