@@ -1679,7 +1679,7 @@ def whoami(
     if show_key:
         console.print()
         warning("⚠️  Keep this key secret — do not share or commit to git")
-        console.print(f"\n[dim]Copy to .env:[/dim]")
+        console.print("\n[dim]Copy to .env:[/dim]")
         console.print(f"  [bold]HASHED_API_KEY={api_key_raw}[/bold]")
 
 
