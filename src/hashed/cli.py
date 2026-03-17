@@ -199,9 +199,14 @@ def init(
         if create_config:
             env_file = Path(".env")
             if not env_file.exists():
+                # Auto-populate API key from saved credentials (if logged in)
+                saved_creds = load_credentials()
+                saved_api_key = saved_creds.get("api_key") if saved_creds else None
+                api_key_value = saved_api_key or "your_api_key_here"
+
                 env_content = "# Hashed Configuration\n"
                 env_content += "HASHED_BACKEND_URL=https://iamandagent-production.up.railway.app\n"
-                env_content += "HASHED_API_KEY=your_api_key_here\n"
+                env_content += f"HASHED_API_KEY={api_key_value}\n"
                 env_content += f"HASHED_IDENTITY_PASSWORD={password}\n"
                 if framework in ("langchain", "crewai", "autogen"):
                     env_content += "OPENAI_API_KEY=your_openai_key_here\n"
@@ -211,7 +216,10 @@ def init(
                     env_content += "BEDROCK_MODEL_ID=us.amazon.nova-pro-v1:0\n"
                 env_file.write_text(env_content)
                 success(f"Created configuration: {env_file}")
-                warning("⚠️  Update HASHED_API_KEY in .env (from: hashed whoami)")
+                if saved_api_key:
+                    success("✓ HASHED_API_KEY auto-populated from your login credentials")
+                else:
+                    warning("⚠️  Update HASHED_API_KEY in .env — run: hashed whoami --show-key")
             else:
                 info(".env file already exists, skipping")
 
@@ -1636,24 +1644,43 @@ def logout():
 
 
 @app.command()
-def whoami():
+def whoami(
+    show_key: bool = typer.Option(
+        False, "--show-key", "-k",
+        help="Reveal the full API key (keep secret — do not share)",
+    ),
+):
     """
     👤 Show current logged-in user info.
+
+    Use --show-key to reveal the full API key for copying into .env files.
     """
     creds = load_credentials()
     if not creds:
         error("Not logged in. Run: hashed login")
         raise typer.Exit(1)
 
+    api_key_raw = creds.get("api_key", "-")
+    if show_key:
+        api_key_display = f"[bold yellow]{api_key_raw}[/bold yellow]"
+    else:
+        api_key_display = api_key_raw[:25] + "...  [dim](use --show-key to reveal)[/dim]"
+
     table = Table(title="Current Session", box=box.ROUNDED)
     table.add_column("Property", style="cyan")
     table.add_column("Value", style="green")
     table.add_row("Email", creds.get("email", "-"))
     table.add_row("Organization", creds.get("org_name", "-"))
-    table.add_row("API Key", creds.get("api_key", "-")[:25] + "...")
+    table.add_row("API Key", api_key_display)
     table.add_row("Backend", creds.get("backend_url", "-"))
     table.add_row("Credentials File", str(CREDENTIALS_FILE))
     console.print(table)
+
+    if show_key:
+        console.print()
+        warning("⚠️  Keep this key secret — do not share or commit to git")
+        console.print(f"\n[dim]Copy to .env:[/dim]")
+        console.print(f"  [bold]HASHED_API_KEY={api_key_raw}[/bold]")
 
 
 @app.command("account-delete")
