@@ -1448,49 +1448,56 @@ def signup(
                 error(detail)
                 raise typer.Exit(1)
 
+        signup_data = response.json()
+        # If server auto-confirmed the user (HASHED_SKIP_EMAIL_CONFIRMATION=true),
+        # skip polling entirely and go straight to login.
+        already_confirmed = signup_data.get("email_confirmed", False)
         success("Account created!")
-        console.print(f"\n[yellow]📧 Confirmation email sent to [bold]{email}[/bold][/yellow]")
-        console.print("   Please check your inbox and click the confirmation link.\n")
+        if already_confirmed:
+            console.print("\n[green]✅ Email auto-confirmed — no confirmation step needed.[/green]\n")
+        else:
+            console.print(f"\n[yellow]📧 Confirmation email sent to [bold]{email}[/bold][/yellow]")
+            console.print("   Please check your inbox and click the confirmation link.\n")
 
     except httpx.ConnectError:
         error(f"Cannot connect to backend at {backend_url}")
         info("Make sure the server is running: python3 server/server.py")
         raise typer.Exit(1)
 
-    # Step 2: Poll for email confirmation
-    console.print("[dim]⏳ Waiting for email confirmation... (press Ctrl+C to skip)[/dim]")
+    # Step 2: Poll for email confirmation (skipped when server auto-confirmed)
+    confirmed = already_confirmed
+    if not already_confirmed:
+        console.print("[dim]⏳ Waiting for email confirmation... (press Ctrl+C to skip)[/dim]")
+        try:
+            with httpx.Client(timeout=10) as client:
+                for i in range(120):  # Wait up to 6 minutes
+                    time.sleep(3)
+                    try:
+                        check = client.get(
+                            f"{backend_url}/v1/auth/check-confirmation",
+                            params={"email": email}
+                        )
+                        if check.is_success and check.json().get("confirmed"):
+                            confirmed = True
+                            break
+                    except Exception:
+                        pass
 
-    confirmed = False
-    try:
-        with httpx.Client(timeout=10) as client:
-            for i in range(120):  # Wait up to 6 minutes
-                time.sleep(3)
-                try:
-                    check = client.get(
-                        f"{backend_url}/v1/auth/check-confirmation",
-                        params={"email": email}
-                    )
-                    if check.is_success and check.json().get("confirmed"):
-                        confirmed = True
-                        break
-                except Exception:
-                    pass
+                    # Show spinner dots
+                    dots = "." * ((i % 3) + 1)
+                    console.print(f"\r[dim]   Checking{dots}   [/dim]", end="")
 
-                # Show spinner dots
-                dots = "." * ((i % 3) + 1)
-                console.print(f"\r[dim]   Checking{dots}   [/dim]", end="")
+        except KeyboardInterrupt:
+            console.print()
+            info("Skipped waiting. After confirming your email, run:")
+            console.print("  [bold]hashed login[/bold]")
+            raise typer.Exit(0)
 
-    except KeyboardInterrupt:
-        console.print()
-        info("Skipped waiting. After confirming your email, run:")
-        console.print("  [bold]hashed login[/bold]")
-        raise typer.Exit(0)
-
-    if not confirmed:
-        console.print()
-        warning("Timed out waiting for confirmation.")
-        info("After confirming your email, run: [bold]hashed login[/bold]")
-        raise typer.Exit(0)
+        if not confirmed:
+            console.print()
+            warning("Timed out waiting for confirmation.")
+            info("After confirming your email, run: [bold]hashed login[/bold]")
+            raise typer.Exit(0)
 
     # Step 3: Email confirmed! Now login to create org + get API key
     console.print()

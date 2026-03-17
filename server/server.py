@@ -446,10 +446,16 @@ async def auth_signup(request: Request, body: AuthSignupRequest):
     2. Stores pending org_name for post-confirmation setup
     """
     try:
+        # HASHED_SKIP_EMAIL_CONFIRMATION=true → auto-confirm at creation time.
+        # Set this env var in Railway when you want users to skip the email
+        # confirmation step (e.g., while SMTP is not yet configured, or for
+        # dev/staging environments).  Defaults to False (secure for production).
+        skip_confirmation = os.getenv("HASHED_SKIP_EMAIL_CONFIRMATION", "false").lower() == "true"
+
         auth_response = supabase.auth.admin.create_user({
             "email": body.email,
             "password": body.password,
-            "email_confirm": False,
+            "email_confirm": skip_confirmation,   # True = auto-confirm; False = send email
             "user_metadata": {"org_name": body.org_name}
         })
         
@@ -457,21 +463,22 @@ async def auth_signup(request: Request, body: AuthSignupRequest):
         if not user:
             raise HTTPException(status_code=400, detail="Failed to create user")
         
-        try:
-            supabase.auth.admin.generate_link({
-                "type": "signup",
-                "email": body.email,
-                "password": body.password,
-            })
-        except Exception:
-            pass
+        if not skip_confirmation:
+            try:
+                supabase.auth.admin.generate_link({
+                    "type": "signup",
+                    "email": body.email,
+                    "password": body.password,
+                })
+            except Exception:
+                pass
         
         return {
-            "message": "Account created! Check your email for confirmation.",
+            "message": "Account created!" if skip_confirmation else "Account created! Check your email for confirmation.",
             "user_id": user.id,
             "email": body.email,
             "org_name": body.org_name,
-            "email_confirmed": False
+            "email_confirmed": skip_confirmation,   # CLI reads this to skip polling
         }
     
     except HTTPException:
