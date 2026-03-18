@@ -1,6 +1,6 @@
 # Hashed CLI — Complete Reference
 
-> Version: 0.2.1  
+> Version: 0.3.4  
 > Install: `pip install hashed-sdk`
 
 The `hashed` CLI lets you manage AI agent identities, governance policies, and audit logs without touching the web dashboard.
@@ -84,23 +84,48 @@ hashed logout
 
 ### `hashed whoami`
 
-Show current session info.
+Show current session info. By default the API key is truncated for security.
 
 ```bash
-hashed whoami
+hashed whoami           # Show session (API key truncated)
+hashed whoami --show-key  # Reveal full API key for copying into .env
+hashed whoami -k          # Short alias for --show-key
 ```
 
-**Output:**
+| Flag | Description |
+|------|-------------|
+| `--show-key`, `-k` | Reveal the full API key (⚠️ keep secret — do not share) |
+
+**Default output (key truncated):**
 ```
-╭─────────────────────────────────╮
-│  Current Session                │
-├──────────────┬──────────────────┤
-│ Email        │ you@company.com  │
-│ Organization │ Acme Corp        │
-│ API Key      │ hashed_abc123... │
-│ Backend      │ http://localhost │
-╰──────────────┴──────────────────╯
+╭──────────────────────────────────────────────────────╮
+│  Current Session                                     │
+├──────────────────┬───────────────────────────────────┤
+│ Email            │ you@company.com                   │
+│ Organization     │ Acme Corp                         │
+│ API Key          │ hashed_abc123xyz...  (use --show-key to reveal) │
+│ Backend          │ https://iamandagent-production...  │
+│ Credentials File │ /Users/you/.hashed/credentials.json │
+╰──────────────────┴───────────────────────────────────╯
 ```
+
+**With `--show-key` (copy to .env):**
+```
+╭──────────────────────────────────────────────────────╮
+│  Current Session                                     │
+├──────────────────┬───────────────────────────────────┤
+│ Email            │ you@company.com                   │
+│ Organization     │ Acme Corp                         │
+│ API Key          │ hashed_abc123xyz...FULL_KEY_HERE   │
+╰──────────────────┴───────────────────────────────────╯
+
+⚠ Keep this key secret — do not share or commit to git
+
+Copy to .env:
+  HASHED_API_KEY=hashed_abc123xyz...FULL_KEY_HERE
+```
+
+> **Tip:** If you already ran `hashed login`, `hashed init` will auto-populate `HASHED_API_KEY` in your `.env` automatically — no need to copy it manually.
 
 ---
 
