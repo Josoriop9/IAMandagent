@@ -118,7 +118,7 @@ jobs:
           EOF
 
       - name: Upload Bandit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: bandit-report
@@ -158,7 +158,7 @@ jobs:
         continue-on-error: true            # pip-audit format varies; Dependabot covers this
 
       - name: Upload pip-audit report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pip-audit-report
@@ -191,7 +191,7 @@ jobs:
         continue-on-error: true            # Non-blocking until baseline is clean
 
       - name: Upload Semgrep SARIF
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: semgrep-sarif
