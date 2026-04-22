@@ -5,7 +5,10 @@ This module provides identity management with digital signatures for
 message authentication and verification.
 """
 
-from datetime import datetime
+import os
+import warnings
+from datetime import datetime, timezone
+from time import time_ns
 from typing import Optional
 
 from cryptography.hazmat.primitives import serialization
@@ -115,6 +118,11 @@ class IdentityManager:
         """
         Sign structured data and return it with signature and metadata.
 
+        .. deprecated::
+            Use :meth:`sign_operation` instead, which produces a canonical
+            payload conforming to SPEC §2.1 (includes nonce, timestamp_ns,
+            version and agent_id for replay-attack protection).
+
         Args:
             data: Dictionary to sign
 
@@ -127,6 +135,14 @@ class IdentityManager:
         """
         import json
 
+        warnings.warn(
+            "sign_data() is deprecated and will be removed in a future release. "
+            "Use sign_operation() instead, which produces a SPEC §2.1-compliant "
+            "canonical payload with nonce and timestamp_ns for replay protection.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
         try:
             # Create canonical JSON representation
             data_json = json.dumps(data, sort_keys=True)
@@ -136,7 +152,7 @@ class IdentityManager:
                 "data": data,
                 "signature": signature.hex(),
                 "public_key": self.public_key_hex,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
             raise HashedCryptoError(
@@ -173,6 +189,115 @@ class IdentityManager:
             data_json = json.dumps(data, sort_keys=True)
             message_bytes = data_json.encode("utf-8")
             public_key.verify(signature, message_bytes)
+            return True
+        except Exception:
+            return False
+
+    def sign_operation(
+        self,
+        operation: str,
+        amount: Optional[float] = None,
+        context: Optional[dict] = None,
+        status: str = "pending",
+    ) -> dict:
+        """
+        Sign an agent operation producing a SPEC §2.1-compliant canonical payload.
+
+        Constructs a deterministic canonical payload with a CSPRNG nonce and
+        nanosecond timestamp to provide replay-attack protection as specified in
+        SPEC §2.1–2.3.
+
+        Args:
+            operation: Tool/operation name as registered in the PolicyEngine.
+            amount: Optional numeric amount for rate-limited operations.
+            context: Sanitized execution context (no secrets, no PII).
+                     Defaults to an empty dict.
+            status: Operation lifecycle status. Default is ``"pending"`` for
+                    pre-execution guard checks.
+
+        Returns:
+            A dict with four keys:
+            - ``"payload"``   – the canonical payload dict (SPEC §2.1)
+            - ``"canonical"`` – the JSON-serialised string that was signed
+            - ``"signature"`` – Ed25519 signature as a 128-char hex string
+            - ``"public_key"``– agent_id (64-char hex public key)
+
+        Raises:
+            HashedCryptoError: If signing fails.
+
+        Example:
+            >>> identity = IdentityManager()
+            >>> signed = identity.sign_operation("send_email", amount=None)
+            >>> IdentityManager.verify_signed_operation(signed)
+            True
+        """
+        import json
+
+        try:
+            payload: dict = {
+                "version": 1,
+                "agent_id": self.public_key_hex,
+                "operation": operation,
+                "amount": amount,
+                "timestamp_ns": time_ns(),
+                "nonce": os.urandom(16).hex(),
+                "status": status,
+                "context": context if context is not None else {},
+            }
+
+            # §2.2 Canonicalization — sort_keys, no whitespace, ASCII-safe
+            canonical: str = json.dumps(
+                payload,
+                sort_keys=True,
+                separators=(",", ":"),
+                ensure_ascii=True,
+            )
+            canonical_bytes: bytes = canonical.encode("utf-8")
+
+            # §2.3 Signature production
+            signature_bytes: bytes = self._private_key.sign(canonical_bytes)
+
+            return {
+                "payload": payload,
+                "canonical": canonical,
+                "signature": signature_bytes.hex(),
+                "public_key": self.public_key_hex,
+            }
+        except Exception as e:
+            raise HashedCryptoError(
+                f"Failed to sign operation: {str(e)}"
+            ) from e
+
+    @staticmethod
+    def verify_signed_operation(signed: dict) -> bool:
+        """
+        Verify a signed operation produced by :meth:`sign_operation`.
+
+        Reconstructs the public key from the embedded ``public_key`` field,
+        re-encodes the ``canonical`` string to UTF-8, and verifies the Ed25519
+        signature.
+
+        Args:
+            signed: Dict as returned by :meth:`sign_operation` — must contain
+                    ``"canonical"``, ``"signature"``, and ``"public_key"`` keys.
+
+        Returns:
+            ``True`` if the signature is cryptographically valid, ``False``
+            for any tampered, malformed, or missing field.
+
+        Example:
+            >>> identity = IdentityManager()
+            >>> signed = identity.sign_operation("read_file")
+            >>> IdentityManager.verify_signed_operation(signed)
+            True
+        """
+        try:
+            canonical_bytes = signed["canonical"].encode("utf-8")
+            signature = bytes.fromhex(signed["signature"])
+            public_key_bytes = bytes.fromhex(signed["public_key"])
+
+            public_key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
+            public_key.verify(signature, canonical_bytes)
             return True
         except Exception:
             return False

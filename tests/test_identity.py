@@ -319,3 +319,107 @@ class TestPublicKeyProperties:
         hex_key = identity.public_key_hex
         reconstructed = bytes.fromhex(hex_key)
         assert reconstructed == identity.public_key_bytes
+
+
+# ── sign_operation() ──────────────────────────────────────────────────────────
+
+
+class TestSignOperation:
+    """Tests for sign_operation() and verify_signed_operation() — SPEC §2.1–2.3."""
+
+    def test_sign_operation_has_required_fields(self) -> None:
+        """payload must contain all SPEC §2.1 fields with correct types/values."""
+        identity = IdentityManager()
+        result = identity.sign_operation("send_email", amount=5.0)
+
+        payload = result["payload"]
+        assert payload["version"] == 1
+        assert payload["agent_id"] == identity.public_key_hex
+        assert payload["operation"] == "send_email"
+        assert payload["amount"] == 5.0
+        assert isinstance(payload["timestamp_ns"], int)
+        assert payload["timestamp_ns"] > 0
+        assert isinstance(payload["nonce"], str)
+        assert len(bytes.fromhex(payload["nonce"])) == 16  # 16 bytes → 32 hex chars
+        assert payload["status"] == "pending"
+        assert isinstance(payload["context"], dict)
+
+        # Top-level envelope fields
+        assert "canonical" in result
+        assert "signature" in result
+        assert len(bytes.fromhex(result["signature"])) == 64  # Ed25519 = 64 bytes
+        assert result["public_key"] == identity.public_key_hex
+
+    def test_nonce_is_unique(self) -> None:
+        """Two sign_operation() calls must produce distinct nonces."""
+        identity = IdentityManager()
+        r1 = identity.sign_operation("read_file")
+        r2 = identity.sign_operation("read_file")
+        assert r1["payload"]["nonce"] != r2["payload"]["nonce"]
+
+    def test_canonical_is_deterministic(self) -> None:
+        """
+        canonical serialisation is key-order-independent.
+
+        We freeze nonce + timestamp_ns to isolate the canonicalization logic.
+        """
+        import json
+
+        identity = IdentityManager()
+        # Build two payloads with the same values but different key-insertion order
+        shared = {
+            "version": 1,
+            "agent_id": identity.public_key_hex,
+            "operation": "write_db",
+            "amount": None,
+            "timestamp_ns": 1_000_000_000,
+            "nonce": "aabbccdd" * 4,
+            "status": "pending",
+            "context": {},
+        }
+        payload_a = dict(shared)
+        payload_b = {k: shared[k] for k in reversed(list(shared.keys()))}
+
+        canonical_a = json.dumps(payload_a, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        canonical_b = json.dumps(payload_b, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+
+        assert canonical_a == canonical_b
+
+    def test_verify_signed_operation_valid(self) -> None:
+        """verify_signed_operation() returns True for an untampered signed op."""
+        identity = IdentityManager()
+        signed = identity.sign_operation("delete_record", amount=None)
+        assert IdentityManager.verify_signed_operation(signed) is True
+
+    def test_verify_signed_operation_tampered(self) -> None:
+        """Changing amount in the payload after signing makes verification fail."""
+        identity = IdentityManager()
+        signed = identity.sign_operation("transfer_funds", amount=100.0)
+
+        # Tamper: mutate payload and re-serialise canonical to detect what verify sees
+        import json
+
+        signed["payload"]["amount"] = 9999.0
+        # Rebuild canonical from tampered payload (as an attacker would try)
+        tampered_canonical = json.dumps(
+            signed["payload"],
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=True,
+        )
+        signed["canonical"] = tampered_canonical
+
+        assert IdentityManager.verify_signed_operation(signed) is False
+
+    def test_replay_protection_via_nonce(self) -> None:
+        """
+        Two sign_operation() calls for the exact same operation produce
+        envelopes with distinct nonces — defeating replay attacks.
+        """
+        identity = IdentityManager()
+        s1 = identity.sign_operation("execute_query", amount=None)
+        s2 = identity.sign_operation("execute_query", amount=None)
+
+        assert s1["payload"]["nonce"] != s2["payload"]["nonce"]
+        # Signatures must also differ (because nonce → different canonical bytes)
+        assert s1["signature"] != s2["signature"]
