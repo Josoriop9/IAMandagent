@@ -165,6 +165,59 @@ asyncio.run(main())
 
 ---
 
+## 🦜 LangChain Integration
+
+```bash
+pip install hashed-sdk[langchain]
+```
+
+Drop `HashedCallbackHandler` into any LangChain `AgentExecutor` to get
+**automatic policy enforcement, Ed25519 signing, and immutable audit logging**
+on every tool call — with zero changes to your tools or agent logic.
+
+```python
+import asyncio
+from langchain.agents import AgentExecutor, create_openai_tools_agent
+from langchain_openai import ChatOpenAI
+from hashed import HashedCore, HashedConfig
+from hashed.integrations.langchain import HashedCallbackHandler
+
+async def main():
+    # 1. Set up Hashed governance
+    core = HashedCore(config=HashedConfig(), agent_name="my-langchain-agent")
+    await core.initialize()
+
+    # 2. Define policies (local — no network needed)
+    core.policy_engine.add_policy("send_email", allowed=True, max_amount=10)
+    core.policy_engine.add_policy("wire_transfer", allowed=False)  # always blocked
+
+    # 3. Attach the handler to any AgentExecutor
+    handler = HashedCallbackHandler(core=core)   # raise_on_deny=True by default
+    agent_executor = AgentExecutor(
+        agent=agent,
+        tools=tools,
+        callbacks=[handler],
+    )
+
+    result = await agent_executor.ainvoke({"input": "Send a welcome email to alice@example.com"})
+    print(result)
+
+asyncio.run(main())
+```
+
+**What happens on each tool call:**
+
+| Hook | Action |
+|---|---|
+| `on_tool_start` | Validates `tool_name` + optional `amount` against `PolicyEngine` (sync, no network). Raises `PermissionError` if denied. |
+| `on_tool_end` | Logs `status="success"` with a canonical Ed25519-signed envelope (SPEC §2.1). |
+| `on_tool_error` | Logs `status="error"` with error type and message in the signed context. |
+
+> **Tip:** set `raise_on_deny=False` for audit-only mode — the tool runs but
+> every denied call is still cryptographically logged.
+
+---
+
 ## 📚 Core Concepts
 
 ### 1. Cryptographic Identity
