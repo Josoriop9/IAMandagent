@@ -10,7 +10,7 @@
 1. [LangChain](#1-langchain)
 2. [CrewAI](#2-crewai)
 3. [Amazon Strands](#3-amazon-strands)
-4. [AutoGen (Microsoft)](#4-autogen-microsoft)
+4. [AutoGen](#4-autogen)
 5. [Framework comparison](#5-framework-comparison)
 
 ---
@@ -374,7 +374,7 @@ asyncio.run(main())
 
 ---
 
-## 4. AutoGen (Microsoft)
+## 4. AutoGen
 
 **Install:** `pip install "hashed-sdk[autogen]"`
 
@@ -382,7 +382,7 @@ asyncio.run(main())
 
 ```python
 """
-Microsoft AutoGen agent with Hashed policy enforcement.
+AutoGen agent with Hashed policy enforcement.
 
 AutoGen uses a function_map to register tools.  Wrap each function
 with @core.guard() before registering it with the agent.

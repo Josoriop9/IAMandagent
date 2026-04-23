@@ -21,7 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Replaced deprecated `datetime.utcnow()` with `datetime.now(timezone.utc)` project-wide (ruff `UP` compliance).
 - Updated module docstrings to reflect AI agent governance focus (`__init__.py`, `models.py`, `crypto/__init__.py`).
-- Added `## How Hashed differs from Microsoft Agent Governance Toolkit` positioning section in `README.md`.
 - `pyproject.toml`: version bumped to `0.4.0`; added `# NOTE` comment on `[crewai]`/`[autogen]`/`[strands]` extras not yet having integration modules.
 
 ### Backwards Compatibility
