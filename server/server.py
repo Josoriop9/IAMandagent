@@ -531,37 +531,69 @@ async def auth_login(request: Request, body: AuthLoginRequest):
                 "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
             }
         
-        # New user (first login after confirmation) - create organization
-        org_name = (user.user_metadata or {}).get("org_name", f"{body.email.split('@')[0]}'s Organization")
-        
-        # Generate API key with prefix
-        import secrets
-        api_key = f"hashed_{secrets.token_hex(32)}"
-        
+        # No user_organizations link found.
+        # IDEMPOTENT: check organizations table by owner_id BEFORE creating a new one.
+        # This prevents duplicate org creation when user_organizations link is lost
+        # (e.g., after a Railway restart mid-transaction or Supabase RLS race condition).
+        import secrets as _login_secrets
+
+        existing_org_res = supabase.table("organizations")\
+            .select("*")\
+            .eq("owner_id", str(user.id))\
+            .execute()
+
+        if existing_org_res.data:
+            # Org already exists — reconstruct the missing user_organizations link.
+            org = existing_org_res.data[0]
+            logger.warning(
+                "user_organizations link missing for user %s, "
+                "org '%s' (%s) already exists — reconstructing link",
+                user.id, org["name"], org["id"],
+            )
+            supabase.table("user_organizations").insert({
+                "user_id": str(user.id),
+                "organization_id": org["id"],
+                "role": "owner",
+            }).execute()
+            return {
+                "message": "Login successful",
+                "email": user.email,
+                "org_name": org["name"],
+                "api_key": org["api_key"],
+                "org_id": org["id"],
+                "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000"),
+            }
+
+        # Truly new user (first login after email confirmation) — create org.
+        org_name = (user.user_metadata or {}).get(
+            "org_name", f"{body.email.split('@')[0]}'s Organization"
+        )
+        api_key = f"hashed_{_login_secrets.token_hex(32)}"
+
         # Create organization (with owner_id for dashboard compatibility)
         org_response = supabase.table("organizations").insert({
             "name": org_name,
             "api_key": api_key,
             "is_active": True,
-            "owner_id": str(user.id)
+            "owner_id": str(user.id),
         }).execute()
-        
+
         org = org_response.data[0]
-        
+
         # Link user to organization
         supabase.table("user_organizations").insert({
             "user_id": str(user.id),
             "organization_id": org["id"],
-            "role": "owner"
+            "role": "owner",
         }).execute()
-        
+
         return {
             "message": "Login successful! Organization created.",
             "email": user.email,
             "org_name": org["name"],
             "api_key": api_key,
             "org_id": org["id"],
-            "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000")
+            "backend_url": os.getenv("PUBLIC_BACKEND_URL", "http://localhost:8000"),
         }
     
     except HTTPException:
