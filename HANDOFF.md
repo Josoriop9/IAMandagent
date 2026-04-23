@@ -98,7 +98,8 @@
 ## Last Commits
 
 ```
-8e42c84 (HEAD -> main) refactor(core): wire canonical sign_operation + hash-chained ledger end-to-end
+76f3179 (HEAD -> main) docs: update handoff after PROMPT 3
+8e42c84 refactor(core): wire canonical sign_operation + hash-chained ledger end-to-end
 b5115b2 docs: update handoff after PROMPT 2
 ffeef29 feat(ledger): forward-linked hash chain per SPEC §3.2 with tamper detection
 dc8629a docs: update handoff after PROMPT 1
