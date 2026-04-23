@@ -1,6 +1,6 @@
 # Hashed — Handoff Document
 
-> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 3 (core wiring)
+> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 4 (LangChain integration)
 
 ---
 
@@ -8,7 +8,7 @@
 
 - ✅ **Core SDK is production-ready and published to PyPI** as `hashed-sdk==0.3.4` — `hashed` CLI works end-to-end (login, init, agent list, logs, whoami, account-delete)
 - ✅ **FastAPI backend** deployed on Railway; `SUPABASE_KEY` (service_role) is correctly set — all `/v1/*` endpoints return 200
-- ✅ **436 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
+- ✅ **447 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
 - ✅ **AsyncLedger** is crash-safe (SQLite WAL + Fernet AES-128 encryption with PBKDF2 key derivation from API key)
 - ✅ **Circuit breaker** (3 failures → open, 60s cooldown) guards all backend HTTP calls in `HashedCore`
 - ✅ **`identity.py` now has `sign_operation()`** — SPEC §2.1-compliant canonical payload with `nonce`, `timestamp_ns`, `version`, `agent_id`; `sign_data()` marked deprecated
@@ -71,6 +71,15 @@
 | `src/hashed/core.py` | Step 3 of `async_wrapper`: replaced `sign_data()` call with `sign_operation(operation, amount, context, status="allowed")`. `_execute_remote_guard`: replaced `sign_data()` with `sign_operation(status="pending")` and extended POST `/guard` body with `nonce`, `timestamp_ns`, `canonical`. `_log_to_all_transports`: param changed from `signature: str` to `signed: dict`; metadata now includes `nonce`, `timestamp_ns`, `canonical`, `version` for both backend and ledger transports. `_log_denial`: now calls `sign_operation(status="denied")` before logging. `_log_error`: now calls `sign_operation(status="error")` and includes full canonical metadata. `sign_data()` no longer called anywhere in `core.py`. |
 | `tests/test_core.py` | Added `TestCanonicalSignedPayload` class with 3 tests: `test_guard_produces_canonical_payload` (verifies all 8 SPEC §2.1 fields in `signed["payload"]`), `test_denial_is_also_signed_canonically` (verifies `payload.status == "denied"` and nonce present), `test_remote_guard_sends_nonce` (verifies `/guard` POST body contains `nonce`, `timestamp_ns`, `signature`, `canonical`). Total tests in file: 27. |
 
+### PROMPT 4 — LangChain `HashedCallbackHandler`
+
+| File | What changed |
+|---|---|
+| `src/hashed/integrations/__init__.py` | New file. Package docstring listing available integrations (LangChain, CrewAI). No imports — keeps framework deps fully optional. |
+| `src/hashed/integrations/langchain.py` | New file. Lazy import of `BaseCallbackHandler` via `try/except` — module importable even without langchain. `_LANGCHAIN_AVAILABLE` flag. `_extract_amount(input_str)` — parses JSON input for `"amount"` key. `_schedule_log(coro)` — fire-and-forget async logging (event loop–aware). `HashedCallbackHandler(BaseCallbackHandler)`: `__init__(core, raise_on_deny=True)` guards against missing langchain. `on_tool_start` validates tool name + amount against `PolicyEngine` (sync). `on_tool_end` logs `status="success"` via `sign_operation()` + `_log_to_all_transports`. `on_tool_error` logs `status="error"` with error context. |
+| `tests/test_integration_langchain.py` | New file. 11 tests across 4 classes: `TestImportGuard` (1 test: `_LANGCHAIN_AVAILABLE=False` → ImportError with pip message), `TestOnToolStart` (6 tests: allow, deny+raise, deny+silent, amount extraction, missing name, None serialized), `TestOnToolEnd` (2 tests: success log with canonical envelope, truncation), `TestOnToolError` (2 tests: error log with context, non-propagation of logging failure). All 11 tests run without langchain installed. |
+| `README.md` | Added `## 🦜 LangChain Integration` section between Quick Start and Core Concepts. Includes install snippet, usage example, hook behavior table, and audit-only tip. |
+
 ---
 
 ## Known Issues / TODOs
@@ -83,6 +92,7 @@
 - ~~**Canonical payload in `identity.py`**~~ — ✅ **DONE (PROMPT 1)**: `sign_operation()` added with full SPEC §2.1 envelope. `sign_data()` deprecated.
 - ~~**Hash chain in `AsyncLedger`**~~ — ✅ **DONE (PROMPT 2)**: `_compute_entry_hash`, `_wal_get_last_entry_hash`, `_wal_get_all_for_verify`, `verify_chain()`. 48/48 tests passing. commit `ffeef29`.
 - ~~**Wire `sign_operation()` into `core.py`**~~ — ✅ **DONE (PROMPT 3)**: `_execute_remote_guard` uses `sign_operation(status="pending")` + sends `nonce`/`timestamp_ns`/`canonical` to `/guard`. `_log_to_all_transports` accepts `signed: dict`. `_log_denial` signs with `status="denied"`. `_log_error` signs with `status="error"`. commit `8e42c84`.
+- ~~**LangChain `HashedCallbackHandler`**~~ — ✅ **DONE (PROMPT 4)**: `src/hashed/integrations/langchain.py` created. Lazy import guard, `on_tool_start` (policy validation), `on_tool_end` (success log), `on_tool_error` (error log). 11/11 tests, no langchain required in test env. README section added. commit `9026e13`.
 
 ### 🟢 Lower Priority / Tech Debt
 - `identity_store.py` lines 244-284 (keyring fallback) — not covered by tests (79% coverage)
@@ -98,7 +108,9 @@
 ## Last Commits
 
 ```
-76f3179 (HEAD -> main) docs: update handoff after PROMPT 3
+9026e13 (HEAD -> main) feat(integrations): real LangChain callback handler with policy enforcement
+a0762a9 docs: update handoff after PROMPT 3
+76f3179 docs: update handoff after PROMPT 3
 8e42c84 refactor(core): wire canonical sign_operation + hash-chained ledger end-to-end
 b5115b2 docs: update handoff after PROMPT 2
 ffeef29 feat(ledger): forward-linked hash chain per SPEC §3.2 with tamper detection
@@ -130,15 +142,16 @@ bc165cc refactor(core): Sprint 7 principal-engineer quality refactor
 ## Test State
 
 ```
-436 passed, 1 skipped, 18 warnings in 4.00s   ← +3 tests from TestCanonicalSignedPayload
+447 passed, 1 skipped, 18 warnings in 4.08s   ← +11 tests from TestImportGuard / TestOnToolStart / TestOnToolEnd / TestOnToolError
 
 Coverage summary (key modules):
-  src/hashed/core.py              84%   ← guard() wiring added new code; existing tests still cover 84%
+  src/hashed/core.py              84%
   src/hashed/guard.py            100%
   src/hashed/exceptions.py        85%
-  src/hashed/identity.py          96%   ← 2 uncovered lines in sign_operation exception path (minor)
+  src/hashed/identity.py          96%
   src/hashed/models.py            97%
   src/hashed/ledger.py            85%
+  src/hashed/integrations/langchain.py  87%   ← new module; _schedule_log pragma no cover branches
   src/hashed/identity_store.py    79%   ← gap: keyring fallback paths
   src/hashed/crypto/hasher.py     83%   ← gap: error paths
   src/hashed/utils/http_client.py 95%
@@ -160,10 +173,10 @@ Execute in this order — each is a self-contained prompt:
 **3. ~~Wire new identity + ledger into `core.py`~~** ✅ **DONE — commit `8e42c84`**
 > `_execute_remote_guard` uses `sign_operation(status="pending")` + sends `nonce`/`timestamp_ns`/`canonical` to `/guard`. `_log_to_all_transports` accepts `signed: dict` with full canonical metadata. `_log_denial` signs with `status="denied"`. `_log_error` signs with `status="error"`. 436/436 tests green.
 
-**4. LangChain integration (real `HashedCallbackHandler`)** ← **NEXT**
-> In `src/hashed/integrations/langchain.py`, implement `HashedCallbackHandler(BaseCallbackHandler)` that calls `core.guard(tool_name)` on `on_tool_start` and logs result on `on_tool_end`. Add `examples/langchain_example.py`. Update `docs/FRAMEWORK_GUIDES.md`.
+**4. ~~LangChain integration (real `HashedCallbackHandler`)~~** ✅ **DONE — commit `9026e13`**
+> `src/hashed/integrations/langchain.py` created. Lazy import guard (`_LANGCHAIN_AVAILABLE`). `on_tool_start`: validates tool + amount against `PolicyEngine` (sync). `on_tool_end`: logs `status="success"` with canonical `sign_operation()` envelope. `on_tool_error`: logs `status="error"`. `_schedule_log` fire-and-forget (event loop–aware). 11/11 tests, no langchain required in test env. README `## 🦜 LangChain Integration` section added. 447/447 tests green.
 
-**5. CrewAI integration (`wrap_tool` + `HashedBaseTool`)**
+**5. CrewAI integration (`wrap_tool` + `HashedBaseTool`)** ← **NEXT**
 > In `src/hashed/integrations/crewai.py`, implement `wrap_tool(crewai_tool, core)` decorator and `HashedBaseTool(BaseTool)` mixin. Add `examples/crewai_example.py`. Update `docs/FRAMEWORK_GUIDES.md`.
 
 **6. Cleanup final**
