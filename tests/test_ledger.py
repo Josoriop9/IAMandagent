@@ -21,6 +21,9 @@ import pytest
 from hashed.config import HashedConfig
 from hashed.ledger import (
     AsyncLedger,
+    _compute_entry_hash,
+    _wal_get_all_for_verify,
+    _wal_get_last_entry_hash,
     _wal_get_unsent,
     _wal_init,
     _wal_insert,
@@ -64,7 +67,7 @@ class TestWalInit:
 class TestWalInsertAndRetrieve:
 
     def test_insert_returns_positive_id(self, tmp_path: Path) -> None:
-        """_wal_insert returns a positive integer row id."""
+        """_wal_insert returns (row_id, entry_hash) — row_id is a positive int."""
         db = str(tmp_path / "wal.db")
         _wal_init(db)
         entry = {
@@ -73,9 +76,10 @@ class TestWalInsertAndRetrieve:
             "metadata": {"agent": "bot"},
             "timestamp": "2026-01-01T00:00:00",
         }
-        row_id = _wal_insert(db, entry)
+        row_id, entry_hash = _wal_insert(db, entry)
         assert isinstance(row_id, int)
         assert row_id >= 1
+        assert len(entry_hash) == 64  # SHA-256 hex
 
     def test_insert_increments_ids(self, tmp_path: Path) -> None:
         """Each insert returns a strictly increasing row id."""
@@ -86,7 +90,8 @@ class TestWalInsertAndRetrieve:
             "data": {},
             "timestamp": "2026-01-01T00:00:00",
         }
-        ids = [_wal_insert(db, entry) for _ in range(3)]
+        results = [_wal_insert(db, entry) for _ in range(3)]
+        ids = [r[0] for r in results]
         assert ids[0] < ids[1] < ids[2]
 
     def test_get_unsent_returns_inserted_row(self, tmp_path: Path) -> None:
@@ -103,7 +108,7 @@ class TestWalInsertAndRetrieve:
         """_wal_get_unsent does not return rows deleted by _wal_mark_sent."""
         db = str(tmp_path / "wal.db")
         _wal_init(db)
-        row_id = _wal_insert(db, {"event_type": "x", "data": {}, "timestamp": "t"})
+        row_id, _ = _wal_insert(db, {"event_type": "x", "data": {}, "timestamp": "t"})
         _wal_mark_sent(db, [row_id])
         rows = _wal_get_unsent(db)
         assert rows == []
@@ -121,14 +126,16 @@ class TestWalMarkSent:
         """_wal_mark_sent deletes all listed row ids from the WAL."""
         db = str(tmp_path / "wal.db")
         _wal_init(db)
-        ids = [
+        results = [
             _wal_insert(db, {"event_type": "a", "data": {}, "timestamp": "t"})
             for _ in range(3)
         ]
-        _wal_mark_sent(db, ids[:2])
+        # _wal_insert now returns (row_id, entry_hash) — extract just the ids
+        row_ids = [r[0] for r in results]
+        _wal_mark_sent(db, row_ids[:2])
         remaining = _wal_get_unsent(db)
         assert len(remaining) == 1
-        assert remaining[0][0] == ids[2]
+        assert remaining[0][0] == row_ids[2]
 
     def test_mark_sent_empty_list_is_noop(self, tmp_path: Path) -> None:
         """Calling _wal_mark_sent with an empty list does not raise."""
@@ -882,3 +889,172 @@ class TestSendBatchErrorPaths:
             logs = [{"event_type": "z", "data": {}, "metadata": {}, "timestamp": "t"}]
             await ledger._send_batch(logs)
             await ledger.stop(flush=False)
+
+
+# ── Hash chain (SPEC §3.2) ───────────────────────────────────────────────────
+
+
+class TestHashChain:
+    """
+    Tests for the forward-linked SHA-256 hash chain introduced in SPEC §3.2.
+
+    Verifies that:
+    - Every new entry receives prev_hash = "genesis" (first) or the prior
+      entry's entry_hash (subsequent).
+    - verify_chain() returns valid=True for an untampered chain.
+    - verify_chain() detects direct SQLite data modification (tampering).
+    - The chain state (_last_entry_hash) survives a ledger restart.
+    - _compute_entry_hash is deterministic for the same inputs.
+    """
+
+    @pytest.fixture()
+    def wal_db(self, tmp_path: Path) -> str:
+        db = str(tmp_path / "chain_test.db")
+        _wal_init(db)
+        return db
+
+    # ── 1. First entry has prev_hash == "genesis" ─────────────────────────────
+
+    def test_first_entry_has_genesis_prev_hash(self, wal_db: str) -> None:
+        """The very first WAL entry must have prev_hash == 'genesis'."""
+        entry = {
+            "event_type": "transfer",
+            "data": {"amount": 100},
+            "metadata": {},
+            "timestamp": "2026-01-01T00:00:00",
+        }
+        _wal_insert(wal_db, entry, prev_hash="genesis")
+
+        rows = _wal_get_all_for_verify(wal_db)
+        assert len(rows) == 1
+        # Row layout: (id, event_type, data, metadata, timestamp, prev_hash, entry_hash)
+        _, _, _, _, _, stored_prev_hash, stored_entry_hash = rows[0]
+        assert stored_prev_hash == "genesis"
+        assert len(stored_entry_hash) == 64
+
+    # ── 2. Consecutive entries are linked ────────────────────────────────────
+
+    def test_chain_links_consecutive_entries(self, wal_db: str) -> None:
+        """Entry 2's prev_hash must equal entry 1's entry_hash."""
+        e1 = {"event_type": "op1", "data": {"n": 1}, "metadata": {}, "timestamp": "t1"}
+        e2 = {"event_type": "op2", "data": {"n": 2}, "metadata": {}, "timestamp": "t2"}
+
+        _, hash1 = _wal_insert(wal_db, e1, prev_hash="genesis")
+        _wal_insert(wal_db, e2, prev_hash=hash1)
+
+        rows = _wal_get_all_for_verify(wal_db)
+        assert len(rows) == 2
+
+        _, _, _, _, _, prev2, hash2 = rows[1]
+        assert prev2 == hash1
+        assert len(hash2) == 64
+
+    # ── 3. verify_chain reports valid on untampered chain ────────────────────
+
+    @pytest.mark.asyncio
+    async def test_verify_chain_valid_returns_true(self, wal_db: str) -> None:
+        """After logging 3 entries, verify_chain() must return valid=True."""
+        mock_client = AsyncMock()
+        mock_client.aclose = AsyncMock()
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            await ledger.log("evt.a", {"x": 1})
+            await ledger.log("evt.b", {"x": 2})
+            await ledger.log("evt.c", {"x": 3})
+            result = await ledger.verify_chain()
+            await ledger.stop(flush=False)
+
+        assert result["valid"] is True
+        assert result["total_entries"] == 3
+        assert result["broken_at"] is None
+
+    # ── 4. verify_chain detects SQLite-level data tampering ──────────────────
+
+    @pytest.mark.asyncio
+    async def test_verify_chain_detects_tampering(self, wal_db: str) -> None:
+        """Directly modifying the 'data' column in SQLite breaks the chain."""
+        mock_client = AsyncMock()
+        mock_client.aclose = AsyncMock()
+
+        ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger.start()
+            await ledger.log("evt.x", {"amount": 50})
+            await ledger.log("evt.y", {"amount": 100})
+            await ledger.stop(flush=False)
+
+        # Tamper: change the data column of row 1 directly in SQLite
+        with sqlite3.connect(wal_db) as conn:
+            rows = conn.execute("SELECT id FROM wal_entries ORDER BY id").fetchall()
+            tampered_id = rows[0][0]
+            conn.execute(
+                "UPDATE wal_entries SET data = ? WHERE id = ?",
+                (json.dumps({"amount": 999}), tampered_id),
+            )
+            conn.commit()
+
+        # Re-open a ledger and verify
+        ledger2 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger2.start()
+            result = await ledger2.verify_chain()
+            await ledger2.stop(flush=False)
+
+        assert result["valid"] is False
+        assert result["broken_at"] == tampered_id
+        assert "tampered" in result["reason"]
+
+    # ── 5. _last_entry_hash survives a ledger restart ────────────────────────
+
+    @pytest.mark.asyncio
+    async def test_chain_survives_restart(self, wal_db: str) -> None:
+        """After stop() + start() the new entry correctly chains to the last."""
+        mock_client = AsyncMock()
+        mock_client.aclose = AsyncMock()
+
+        # ── Session 1: log two entries ────────────────────────────────────────
+        ledger1 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger1.start()
+            await ledger1.log("session1.a", {"s": 1})
+            await ledger1.log("session1.b", {"s": 2})
+            last_hash_session1 = ledger1._last_entry_hash
+            await ledger1.stop(flush=False)
+
+        # ── Session 2: new ledger on same WAL ─────────────────────────────────
+        ledger2 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger2.start()
+            # After start(), _last_entry_hash should equal last entry of session 1
+            assert ledger2._last_entry_hash == last_hash_session1
+            await ledger2.log("session2.a", {"s": 3})
+            await ledger2.stop(flush=False)
+
+        # The third WAL row should have prev_hash == last_hash_session1
+        rows = _wal_get_all_for_verify(wal_db)
+        assert len(rows) == 3
+        _, _, _, _, _, third_prev, _ = rows[2]
+        assert third_prev == last_hash_session1
+
+        # Full chain should be valid
+        ledger3 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
+        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
+             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+            await ledger3.start()
+            result = await ledger3.verify_chain()
+            await ledger3.stop(flush=False)
+
+        assert result["valid"] is True
+        assert result["total_entries"] == 3
