@@ -46,8 +46,16 @@ def global_policy_file(tmp_workdir: Path) -> Path:
     """Pre-populate .hashed_policies.json with 2 global policies."""
     data = {
         "global": {
-            "send_email": {"allowed": True,  "max_amount": None, "created_at": "2026-01-01"},
-            "delete_record": {"allowed": False, "max_amount": None, "created_at": "2026-01-01"},
+            "send_email": {
+                "allowed": True,
+                "max_amount": None,
+                "created_at": "2026-01-01",
+            },
+            "delete_record": {
+                "allowed": False,
+                "max_amount": None,
+                "created_at": "2026-01-01",
+            },
         },
         "agents": {},
     }
@@ -59,9 +67,11 @@ def global_policy_file(tmp_workdir: Path) -> Path:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _async_client(get_side_effect: Optional[list[Any]] = None,
-                  post_return: Any = None,
-                  delete_return: Any = None) -> AsyncMock:
+def _async_client(
+    get_side_effect: Optional[list[Any]] = None,
+    post_return: Any = None,
+    delete_return: Any = None,
+) -> AsyncMock:
     """
     Build an AsyncMock that behaves like an httpx.AsyncClient context manager.
 
@@ -69,7 +79,10 @@ def _async_client(get_side_effect: Optional[list[Any]] = None,
     post_return     : return value for .post() calls
     delete_return   : return value for .delete() calls
     """
-    def _resp(ok: bool = True, status: int = 200, body: Optional[dict] = None) -> MagicMock:
+
+    def _resp(
+        ok: bool = True, status: int = 200, body: Optional[dict] = None
+    ) -> MagicMock:
         m = MagicMock(is_success=ok, status_code=status)
         m.json.return_value = body or {}
         return m
@@ -89,10 +102,12 @@ def _async_client(get_side_effect: Optional[list[Any]] = None,
     return client
 
 
-def _sync_client(post_return: Any = None,
-                 get_return: Any = None) -> MagicMock:
+def _sync_client(post_return: Any = None, get_return: Any = None) -> MagicMock:
     """Build a MagicMock that behaves like an httpx.Client context manager."""
-    def _resp(ok: bool = True, status: int = 200, body: Optional[dict] = None) -> MagicMock:
+
+    def _resp(
+        ok: bool = True, status: int = 200, body: Optional[dict] = None
+    ) -> MagicMock:
         m = MagicMock(is_success=ok, status_code=status)
         m.json.return_value = body or {}
         return m
@@ -138,7 +153,11 @@ class TestPolicyPush:
 
         assert result.exit_code == 0
         output_lower = result.output.lower()
-        assert "sync complete" in output_lower or "upserted" in output_lower or "✓" in result.output
+        assert (
+            "sync complete" in output_lower
+            or "upserted" in output_lower
+            or "✓" in result.output
+        )
 
     def test_push_without_credentials_fails(self, tmp_workdir: Path) -> None:
         """policy push without stored credentials → exit code 1."""
@@ -149,7 +168,11 @@ class TestPolicyPush:
         ):
             result = runner.invoke(app, ["policy", "push"])
         output_lower = result.output.lower()
-        assert result.exit_code != 0 or "login" in output_lower or "credentials" in output_lower
+        assert (
+            result.exit_code != 0
+            or "login" in output_lower
+            or "credentials" in output_lower
+        )
 
 
 # ── Policy pull ───────────────────────────────────────────────────────────────
@@ -208,7 +231,11 @@ class TestPolicyPull:
         ):
             result = runner.invoke(app, ["policy", "pull"])
         output_lower = result.output.lower()
-        assert result.exit_code != 0 or "login" in output_lower or "credentials" in output_lower
+        assert (
+            result.exit_code != 0
+            or "login" in output_lower
+            or "credentials" in output_lower
+        )
 
 
 # ── Agent list ────────────────────────────────────────────────────────────────
@@ -233,10 +260,13 @@ class TestAgentListCLI:
         client = _async_client(get_side_effect=[agents_resp])
 
         with (
-            patch.dict("os.environ", {
-                "HASHED_BACKEND_URL": "http://localhost:8000",
-                "HASHED_API_KEY": "hashed_testkey",
-            }),
+            patch.dict(
+                "os.environ",
+                {
+                    "HASHED_BACKEND_URL": "http://localhost:8000",
+                    "HASHED_API_KEY": "hashed_testkey",
+                },
+            ),
             patch("httpx.AsyncClient", return_value=client),
         ):
             result = runner.invoke(app, ["agent", "list"])
@@ -244,7 +274,9 @@ class TestAgentListCLI:
         assert result.exit_code == 0
         assert "Research Bot" in result.output
 
-    def test_agent_list_no_backend_url_exits_with_error(self, tmp_workdir: Path) -> None:
+    def test_agent_list_no_backend_url_exits_with_error(
+        self, tmp_workdir: Path
+    ) -> None:
         """agent list without HASHED_BACKEND_URL configured → exit code 1."""
         empty_cfg = HashedConfig(api_url="http://x", backend_url=None, api_key=None)
         with patch("hashed.cli.get_config", return_value=empty_cfg):
@@ -279,12 +311,18 @@ class TestLoginCLI:
             patch("httpx.Client", return_value=client),
             patch("hashed.cli.save_credentials", side_effect=_capture),
         ):
-            result = runner.invoke(app, [
-                "login",
-                "--email", "dev@example.com",
-                "--password", "secret123",
-                "--backend", "http://localhost:8000",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "login",
+                    "--email",
+                    "dev@example.com",
+                    "--password",
+                    "secret123",
+                    "--backend",
+                    "http://localhost:8000",
+                ],
+            )
 
         assert result.exit_code == 0
         assert saved.get("api_key") == "hashed_fresh_key_999"
@@ -297,12 +335,18 @@ class TestLoginCLI:
         client = _sync_client(post_return=bad_resp)
 
         with patch("httpx.Client", return_value=client):
-            result = runner.invoke(app, [
-                "login",
-                "--email", "x@x.com",
-                "--password", "wrong",
-                "--backend", "http://localhost:8000",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "login",
+                    "--email",
+                    "x@x.com",
+                    "--password",
+                    "wrong",
+                    "--backend",
+                    "http://localhost:8000",
+                ],
+            )
 
         assert result.exit_code != 0
 
@@ -314,12 +358,18 @@ class TestLoginCLI:
         client.post.side_effect = _httpx.ConnectError("refused")
 
         with patch("httpx.Client", return_value=client):
-            result = runner.invoke(app, [
-                "login",
-                "--email", "dev@example.com",
-                "--password", "pass",
-                "--backend", "http://localhost:8000",
-            ])
+            result = runner.invoke(
+                app,
+                [
+                    "login",
+                    "--email",
+                    "dev@example.com",
+                    "--password",
+                    "pass",
+                    "--backend",
+                    "http://localhost:8000",
+                ],
+            )
 
         assert result.exit_code != 0
 
@@ -388,12 +438,19 @@ class TestPerAgentPolicyCLI:
         policy add <tool> --allow --agent <name> creates the tool under
         policies['agents'][<snake_name>].
         """
-        result = runner.invoke(app, [
-            "policy", "add", "process_payment",
-            "--allow",
-            "--max-amount", "500",
-            "--agent", "Pay Agent",
-        ])
+        result = runner.invoke(
+            app,
+            [
+                "policy",
+                "add",
+                "process_payment",
+                "--allow",
+                "--max-amount",
+                "500",
+                "--agent",
+                "Pay Agent",
+            ],
+        )
         assert result.exit_code == 0
         data = json.loads((tmp_workdir / ".hashed_policies.json").read_text())
         agent_pols = data.get("agents", {}).get("pay_agent", {})
@@ -407,9 +464,13 @@ class TestPerAgentPolicyCLI:
         agent's policy section.
         """
         # Seed an agent-specific policy
-        runner.invoke(app, ["policy", "add", "send_sms", "--allow", "--agent", "SMS Bot"])
+        runner.invoke(
+            app, ["policy", "add", "send_sms", "--allow", "--agent", "SMS Bot"]
+        )
         # Remove it
-        result = runner.invoke(app, ["policy", "remove", "send_sms", "--agent", "SMS Bot"])
+        result = runner.invoke(
+            app, ["policy", "remove", "send_sms", "--agent", "SMS Bot"]
+        )
         assert result.exit_code == 0
         data = json.loads((tmp_workdir / ".hashed_policies.json").read_text())
         assert "send_sms" not in data.get("agents", {}).get("sms_bot", {})

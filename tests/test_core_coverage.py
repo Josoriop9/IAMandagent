@@ -44,6 +44,7 @@ def _mock_http(
     policy_status: int = 200,
 ) -> AsyncMock:
     """AsyncMock http client wired for push_policies_to_backend tests."""
+
     def _resp(status, body):
         r = MagicMock()
         r.status_code = status
@@ -73,7 +74,7 @@ def _mock_http(
         return agents_resp
 
     client.post = AsyncMock(side_effect=_post)
-    client.get  = AsyncMock(side_effect=_get)
+    client.get = AsyncMock(side_effect=_get)
     return client
 
 
@@ -99,7 +100,9 @@ class TestPushPoliciesToBackend:
         """Each local policy is POSTed to /v1/policies with the agent_id."""
         core, identity = self._core_with_policies()
         mock_http = _mock_http(
-            agents_body={"agents": [{"id": "agent-42", "public_key": identity.public_key_hex}]}
+            agents_body={
+                "agents": [{"id": "agent-42", "public_key": identity.public_key_hex}]
+            }
         )
         core._http_client = mock_http
 
@@ -110,7 +113,8 @@ class TestPushPoliciesToBackend:
 
         # POST /v1/policies called once per local policy (2 policies)
         policy_posts = [
-            c for c in mock_http.post.call_args_list
+            c
+            for c in mock_http.post.call_args_list
             if "/v1/policies" in str(c.args[0] if c.args else "")
         ]
         assert len(policy_posts) == 2
@@ -126,7 +130,8 @@ class TestPushPoliciesToBackend:
 
         # No POST to /v1/policies
         policy_posts = [
-            c for c in mock_http.post.call_args_list
+            c
+            for c in mock_http.post.call_args_list
             if "/v1/policies" in str(c.args[0] if c.args else "")
         ]
         assert len(policy_posts) == 0
@@ -154,7 +159,8 @@ class TestPushPoliciesToBackend:
         await core.push_policies_to_backend()  # no policies → returns early
 
         policy_posts = [
-            c for c in mock_http.post.call_args_list
+            c
+            for c in mock_http.post.call_args_list
             if "/v1/policies" in str(c.args[0] if c.args else "")
         ]
         assert len(policy_posts) == 0
@@ -185,7 +191,9 @@ class TestPushPoliciesToBackend:
         """409 Conflict on POST means policy already exists — still counted as pushed."""
         core, identity = self._core_with_policies()
         mock_http = _mock_http(
-            agents_body={"agents": [{"id": "agent-1", "public_key": identity.public_key_hex}]},
+            agents_body={
+                "agents": [{"id": "agent-1", "public_key": identity.public_key_hex}]
+            },
             policy_status=409,
         )
         core._http_client = mock_http
@@ -222,16 +230,18 @@ class TestPushLocalJsonPoliciesAgentSpecific:
             os.chdir(tmpdir)
             try:
                 policy_file = Path(tmpdir) / ".hashed_policies.json"
-                policy_file.write_text(json.dumps({
-                    "global": {
-                        "read_file": {"allowed": True}
-                    },
-                    "agents": {
-                        "my_test_bot": {
-                            "write_file": {"allowed": True, "max_amount": None}
+                policy_file.write_text(
+                    json.dumps(
+                        {
+                            "global": {"read_file": {"allowed": True}},
+                            "agents": {
+                                "my_test_bot": {
+                                    "write_file": {"allowed": True, "max_amount": None}
+                                }
+                            },
                         }
-                    }
-                }))
+                    )
+                )
 
                 post_calls = []
 
@@ -249,7 +259,12 @@ class TestPushLocalJsonPoliciesAgentSpecific:
                     r.is_success = True
                     if "/v1/agents" in str(url):
                         r.json.return_value = {
-                            "agents": [{"id": "agent-42", "public_key": identity.public_key_hex}]
+                            "agents": [
+                                {
+                                    "id": "agent-42",
+                                    "public_key": identity.public_key_hex,
+                                }
+                            ]
                         }
                     else:
                         r.json.return_value = {"policies": {}}
@@ -258,7 +273,7 @@ class TestPushLocalJsonPoliciesAgentSpecific:
                 mock_http = AsyncMock()
                 mock_http.aclose = AsyncMock()
                 mock_http.post = AsyncMock(side_effect=_post)
-                mock_http.get  = AsyncMock(side_effect=_get)
+                mock_http.get = AsyncMock(side_effect=_get)
                 core._http_client = mock_http
 
                 pushed = await core._push_local_json_policies()
@@ -268,7 +283,8 @@ class TestPushLocalJsonPoliciesAgentSpecific:
 
                 # The agent-scoped policy should carry agent_id in params
                 agent_scoped = [
-                    c for c in post_calls
+                    c
+                    for c in post_calls
                     if c["kwargs"].get("params", {}).get("agent_id")
                 ]
                 assert len(agent_scoped) == 1
@@ -287,12 +303,16 @@ class TestPushLocalJsonPoliciesAgentSpecific:
             os.chdir(tmpdir)
             try:
                 policy_file = Path(tmpdir) / ".hashed_policies.json"
-                policy_file.write_text(json.dumps({
-                    "global": {"read_file": {"allowed": True}},
-                    "agents": {
-                        "my_test_bot": {"write_file": {"allowed": True}}
-                    }
-                }))
+                policy_file.write_text(
+                    json.dumps(
+                        {
+                            "global": {"read_file": {"allowed": True}},
+                            "agents": {
+                                "my_test_bot": {"write_file": {"allowed": True}}
+                            },
+                        }
+                    )
+                )
 
                 post_calls = []
 
@@ -314,7 +334,7 @@ class TestPushLocalJsonPoliciesAgentSpecific:
                 mock_http = AsyncMock()
                 mock_http.aclose = AsyncMock()
                 mock_http.post = AsyncMock(side_effect=_post)
-                mock_http.get  = AsyncMock(side_effect=_get)
+                mock_http.get = AsyncMock(side_effect=_get)
                 core._http_client = mock_http
 
                 pushed = await core._push_local_json_policies()
@@ -350,7 +370,7 @@ class TestBackgroundSync:
             backend_url="http://mock.test",
             api_key="key",
             enable_auto_sync=True,
-            sync_interval=60,   # minimum allowed; sleep is mocked to be instant
+            sync_interval=60,  # minimum allowed; sleep is mocked to be instant
         )
         identity = IdentityManager()
         core = HashedCore(config=cfg, identity=identity, agent_name="sync-bot")
@@ -378,11 +398,13 @@ class TestBackgroundSync:
         mock_http = AsyncMock()
         mock_http.aclose = AsyncMock()
         mock_http.post = AsyncMock(return_value=reg_resp)
-        mock_http.get  = AsyncMock(side_effect=_get)
+        mock_http.get = AsyncMock(side_effect=_get)
 
         # Patch asyncio.sleep so the interval doesn't actually wait 30s
-        with patch("hashed.core.httpx.AsyncClient", return_value=mock_http), \
-             patch("hashed.core.asyncio.sleep", new=AsyncMock(return_value=None)):
+        with (
+            patch("hashed.core.httpx.AsyncClient", return_value=mock_http),
+            patch("hashed.core.asyncio.sleep", new=AsyncMock(return_value=None)),
+        ):
             await core.initialize()
             # Give the event loop a moment to run the background task
             await asyncio.sleep(0)
@@ -437,10 +459,12 @@ class TestBackgroundSync:
         mock_http = AsyncMock()
         mock_http.aclose = AsyncMock()
         mock_http.post = AsyncMock(return_value=reg_resp)
-        mock_http.get  = AsyncMock(side_effect=_get)
+        mock_http.get = AsyncMock(side_effect=_get)
 
-        with patch("hashed.core.httpx.AsyncClient", return_value=mock_http), \
-             patch("hashed.core.asyncio.sleep", new=AsyncMock(return_value=None)):
+        with (
+            patch("hashed.core.httpx.AsyncClient", return_value=mock_http),
+            patch("hashed.core.asyncio.sleep", new=AsyncMock(return_value=None)),
+        ):
             await core.initialize()
             # Yield enough times for the background task to run 2 iterations
             for _ in range(10):

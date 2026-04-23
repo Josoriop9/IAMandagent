@@ -104,13 +104,17 @@ class TestBuildToolSpecs:
 
     def test_denied_tool_status_label(self) -> None:
         """Denied tools have 'DENIED by policy' in their status."""
-        specs = _build_tool_specs({}, {"block_all": {"allowed": False, "max_amount": None}})
+        specs = _build_tool_specs(
+            {}, {"block_all": {"allowed": False, "max_amount": None}}
+        )
         spec = specs[0]
         assert "DENIED" in spec["status"]
 
     def test_allowed_tool_status_label(self) -> None:
         """Allowed tools have 'allowed' in their status (case-sensitive)."""
-        specs = _build_tool_specs({}, {"allow_op": {"allowed": True, "max_amount": None}})
+        specs = _build_tool_specs(
+            {}, {"allow_op": {"allowed": True, "max_amount": None}}
+        )
         spec = specs[0]
         assert spec["status"] == "allowed"
 
@@ -138,7 +142,14 @@ class TestDefaultSpec:
     def test_has_required_keys(self) -> None:
         """Default spec contains all required keys."""
         keys = _default_spec()[0].keys()
-        for required in ("name", "allowed", "max_amount", "scope", "param_type", "param_name"):
+        for required in (
+            "name",
+            "allowed",
+            "max_amount",
+            "scope",
+            "param_type",
+            "param_name",
+        ):
             assert required in keys
 
 
@@ -269,7 +280,9 @@ class TestRenderAutogen:
 
 class TestRenderAgentScript:
 
-    @pytest.mark.parametrize("framework", ["plain", "langchain", "crewai", "strands", "autogen"])
+    @pytest.mark.parametrize(
+        "framework", ["plain", "langchain", "crewai", "strands", "autogen"]
+    )
     def test_all_frameworks_return_string(self, framework: str) -> None:
         """render_agent_script dispatches correctly for each supported framework."""
         result = render_agent_script(

@@ -23,6 +23,7 @@ from __future__ import annotations
 # SHARED HELPERS
 # ============================================================================
 
+
 def _build_tool_specs(agent_pols: dict, global_pols: dict) -> list[dict]:
     """
     Build a list of tool spec dicts from policies.
@@ -37,35 +38,40 @@ def _build_tool_specs(agent_pols: dict, global_pols: dict) -> list[dict]:
     specs = []
     for tool_name, pol in all_tools.items():
         max_amt = pol.get("max_amount")
-        specs.append({
-            "name": tool_name,
-            "allowed": pol["allowed"],
-            "max_amount": max_amt,
-            "scope": pol["_scope"],
-            "param_type": "float" if max_amt is not None else "str",
-            "param_name": "amount" if max_amt is not None else "data",
-            "status": "allowed" if pol["allowed"] else "DENIED by policy",
-        })
+        specs.append(
+            {
+                "name": tool_name,
+                "allowed": pol["allowed"],
+                "max_amount": max_amt,
+                "scope": pol["_scope"],
+                "param_type": "float" if max_amt is not None else "str",
+                "param_name": "amount" if max_amt is not None else "data",
+                "status": "allowed" if pol["allowed"] else "DENIED by policy",
+            }
+        )
 
     return specs
 
 
 def _default_spec() -> list[dict]:
     """Return a single example tool spec when no policies exist."""
-    return [{
-        "name": "example_operation",
-        "allowed": True,
-        "max_amount": None,
-        "scope": "global",
-        "param_type": "str",
-        "param_name": "data",
-        "status": "allowed",
-    }]
+    return [
+        {
+            "name": "example_operation",
+            "allowed": True,
+            "max_amount": None,
+            "scope": "global",
+            "param_type": "str",
+            "param_name": "data",
+            "status": "allowed",
+        }
+    ]
 
 
 # ============================================================================
 # PLAIN TEMPLATE
 # ============================================================================
+
 
 def render_plain(
     name: str,
@@ -90,16 +96,16 @@ def render_plain(
         return {{"status": "success", "tool": "{s['name']}", "{s['param_name']}": {s['param_name']}}}
 '''
         arg = "100.0" if s["param_type"] == "float" else '"test"'
-        call_block += f'''
+        call_block += f"""
     try:
         result = await {s['name']}({arg})
         print(f"  ✓ {s['name']}: {{result}}")
     except Exception as e:
         print(f"  ✗ {s['name']}: {{e}}")
-'''
+"""
 
     if interactive:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Interactive Mode
     # ================================================================
@@ -120,14 +126,14 @@ def render_plain(
         except KeyboardInterrupt:
             print("\\nGoodbye!")
             break
-'''
+"""
     else:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Execute Operations
     # ================================================================
     print("Running operations...")
-{call_block}'''
+{call_block}"""
 
     return f'''"""
 {name} - Hashed AI Agent (Plain Python)
@@ -177,6 +183,7 @@ if __name__ == "__main__":
 # LANGCHAIN TEMPLATE
 # ============================================================================
 
+
 def render_langchain(
     name: str,
     agent_type: str,
@@ -201,7 +208,9 @@ def render_langchain(
         # Do NOT reveal allowed/denied status here: it causes the LLM to
         # self-censor before calling the tool, bypassing the audit trail.
         if max_amt is not None:
-            neutral_desc = f"Execute {s['name']} operation with the given amount (max: ${max_amt})"
+            neutral_desc = (
+                f"Execute {s['name']} operation with the given amount (max: ${max_amt})"
+            )
         else:
             neutral_desc = f"Execute the {s['name'].replace('_', ' ')} operation"
 
@@ -224,7 +233,7 @@ def render_langchain(
     tools_var = "[" + ", ".join(tool_list) + "]"
 
     if interactive:
-        run_block = '''
+        run_block = """
     # ================================================================
     # Interactive Chat Loop
     # ainvoke() is required so StructuredTool(coroutine=...) works correctly
@@ -243,10 +252,10 @@ def render_langchain(
         except KeyboardInterrupt:
             print("\\nGoodbye!")
             break
-'''
+"""
     else:
         tool_names = ", ".join(s["name"] for s in specs)
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Batch Execution
     # ainvoke() is required so StructuredTool(coroutine=...) works correctly
@@ -255,7 +264,7 @@ def render_langchain(
         {{"input": "Run all available tools and report results: {tool_names}"}}
     )
     print(f"Result: {{result['output']}}")
-'''
+"""
 
     return f'''"""
 {name} - Hashed AI Agent (LangChain)
@@ -339,6 +348,7 @@ if __name__ == "__main__":
 # CREWAI TEMPLATE
 # ============================================================================
 
+
 def render_crewai(
     name: str,
     agent_type: str,
@@ -389,7 +399,7 @@ def render_crewai(
     tools_list = "[" + ", ".join(tool_instances) + "]"
 
     if interactive:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Interactive Chat Loop
     # ================================================================
@@ -413,9 +423,9 @@ def render_crewai(
         except KeyboardInterrupt:
             print("\\nGoodbye!")
             break
-'''
+"""
     else:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Batch Execution
     # ================================================================
@@ -427,7 +437,7 @@ def render_crewai(
     crew = Crew(agents=[ai_agent], tasks=[task], process=Process.sequential, verbose=True)
     result = crew.kickoff()
     print(f"\\n{name} Result:\\n{{result}}")
-'''
+"""
 
     return f'''"""
 {name} - Hashed AI Agent (CrewAI)
@@ -502,6 +512,7 @@ if __name__ == "__main__":
 # STRANDS TEMPLATE (Amazon)
 # ============================================================================
 
+
 def render_strands(
     name: str,
     agent_type: str,
@@ -537,7 +548,7 @@ def render_strands(
     tools_str = ", ".join(tool_list)
 
     if interactive:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Interactive Chat Loop
     # ================================================================
@@ -555,9 +566,9 @@ def render_strands(
         except KeyboardInterrupt:
             print("\\nGoodbye!")
             break
-'''
+"""
     else:
-        run_block = f'''
+        run_block = f"""
     # ================================================================
     # Batch Execution
     # ================================================================
@@ -565,7 +576,7 @@ def render_strands(
         "Demonstrate all available tools: {', '.join(tool_list)}. Show results for each."
     )
     print(f"Response: {{response}}")
-'''
+"""
 
     return f'''"""
 {name} - Hashed AI Agent (Amazon Strands)
@@ -644,6 +655,7 @@ if __name__ == "__main__":
 # AUTOGEN TEMPLATE (Microsoft)
 # ============================================================================
 
+
 def render_autogen(
     name: str,
     agent_type: str,
@@ -674,14 +686,14 @@ def render_autogen(
         return f"{s['name']} executed: {{{s['param_name']}}}"
 
 '''
-        tool_registrations += f'''    autogen.register_function(
+        tool_registrations += f"""    autogen.register_function(
         {s['name']},
         caller=assistant,
         executor=user_proxy,
         name="{s['name']}",
         description="{description}",
     )
-'''
+"""
         tool_list.append(s["name"])
 
     human_input = "ALWAYS" if interactive else "NEVER"
@@ -837,9 +849,7 @@ def render_agent_script(
 
     renderer = renderers.get(framework)
     if not renderer:
-        raise ValueError(
-            f"Unknown framework '{framework}'. Choose from: {FRAMEWORKS}"
-        )
+        raise ValueError(f"Unknown framework '{framework}'. Choose from: {FRAMEWORKS}")
 
     return renderer(
         name=name,

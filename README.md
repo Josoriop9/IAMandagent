@@ -74,6 +74,21 @@ Hashed is a complete governance framework for AI agents that ensures:
 
 ---
 
+## How Hashed differs from Microsoft Agent Governance Toolkit
+
+Hashed is a focused Python SDK, not a multi-package enterprise stack.
+While Microsoft's Agent Governance Toolkit provides a comprehensive seven-package fabric covering policy engines, mesh networking, and SRE patterns across multiple languages, Hashed is purpose-built for Python developers who want governance in three lines of code.
+
+Hashed integrates natively with the Python AI agent ecosystem starting with LangChain via callback handlers that ship in the box.
+CrewAI, AutoGen, and AWS Strands integrations are planned for v0.5.0+.
+
+Hashed includes a tamper-evident hash-chained audit ledger by default, with a local write-ahead log encrypted using a Fernet key derived from the API key via PBKDF2-HMAC-SHA256.
+Tampering with any historical entry is detectable in O(n) verification.
+
+The two are complementary: Microsoft's toolkit fits enterprise governance programs spanning many teams and stacks; Hashed fits the individual developer or startup that needs cryptographic accountability for their Python agents today, in fifteen minutes.
+
+---
+
 ## ✨ Key Features
 
 ### 🔐 Identity Management

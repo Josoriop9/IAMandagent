@@ -18,9 +18,13 @@ from hashed.utils.http_client import HTTPClient, _backoff_delay
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
-def _config(api_url: str = "http://test.local", api_key: str = "test_key") -> HashedConfig:
+
+def _config(
+    api_url: str = "http://test.local", api_key: str = "test_key"
+) -> HashedConfig:
     """Return a HashedConfig with no real env vars."""
     import os
+
     for v in ("HASHED_BACKEND_URL", "HASHED_API_KEY"):
         os.environ.pop(v, None)
     return HashedConfig(api_url=api_url, api_key=api_key)
@@ -55,6 +59,7 @@ class TestBackoffDelay:
 
     def test_capped_at_max_wait(self):
         from hashed.utils.http_client import _MAX_RETRY_WAIT_SECONDS
+
         delay = _backoff_delay(100, jitter=False)
         assert delay <= _MAX_RETRY_WAIT_SECONDS
 
@@ -98,6 +103,7 @@ class TestHTTPClientInit:
 
     def test_get_headers_no_auth_when_no_api_key(self):
         import os
+
         os.environ.pop("HASHED_API_KEY", None)
         cfg = HashedConfig(api_url="http://x", api_key=None)
         client = HTTPClient(cfg)
@@ -152,6 +158,7 @@ class TestRequestAsync:
 
     def test_404_raises_immediately_no_retry(self):
         """4xx errors should not be retried."""
+
         async def run():
             cfg = _config()
             client = HTTPClient(cfg)
@@ -164,12 +171,13 @@ class TestRequestAsync:
                     await client.request_async("GET", "/missing")
 
             assert "404" in str(exc_info.value)
-            assert async_inner.request.call_count == 1   # no retry
+            assert async_inner.request.call_count == 1  # no retry
 
         asyncio.run(run())
 
     def test_503_retries_and_eventually_raises(self):
         """503 is retryable — exhausts retries then raises."""
+
         async def run():
             cfg = _config()
             client = HTTPClient(cfg)
@@ -193,12 +201,13 @@ class TestRequestAsync:
 
     def test_503_retries_then_succeeds(self):
         """On transient error followed by success, returns json."""
+
         async def run():
             cfg = _config()
             client = HTTPClient(cfg)
 
             fail = _mock_response(503, text="unavail")
-            ok   = _mock_response(200, body={"result": "done"})
+            ok = _mock_response(200, body={"result": "done"})
             async_inner = AsyncMock()
             async_inner.request = AsyncMock(side_effect=[fail, ok])
 
@@ -215,13 +224,12 @@ class TestRequestAsync:
 
     def test_network_error_retries(self):
         """ConnectError is retried, then raises HashedAPIError."""
+
         async def run():
             cfg = _config()
             client = HTTPClient(cfg)
             async_inner = AsyncMock()
-            async_inner.request = AsyncMock(
-                side_effect=httpx.ConnectError("refused")
-            )
+            async_inner.request = AsyncMock(side_effect=httpx.ConnectError("refused"))
 
             with (
                 patch.object(client, "_get_async_client", return_value=async_inner),
@@ -236,16 +244,18 @@ class TestRequestAsync:
 
     def test_429_respects_retry_after_header(self):
         """429 with Retry-After header should sleep for that duration (capped)."""
+
         async def run():
             cfg = _config()
             client = HTTPClient(cfg)
 
             fail = _mock_response(429, headers={"Retry-After": "2"})
-            ok   = _mock_response(200, body={"ok": 1})
+            ok = _mock_response(200, body={"ok": 1})
             async_inner = AsyncMock()
             async_inner.request = AsyncMock(side_effect=[fail, ok])
 
             sleep_calls = []
+
             async def _fake_sleep(t):
                 sleep_calls.append(t)
 
@@ -315,9 +325,7 @@ class TestRequestSync:
         cfg = _config()
         client = HTTPClient(cfg)
         sync_inner = MagicMock()
-        sync_inner.request = MagicMock(
-            side_effect=httpx.ConnectError("refused")
-        )
+        sync_inner.request = MagicMock(side_effect=httpx.ConnectError("refused"))
 
         with (
             patch.object(client, "_get_sync_client", return_value=sync_inner),
@@ -350,9 +358,11 @@ class TestHTTPClientLifecycle:
 
     def test_close_async_noop_when_no_client(self):
         """close_async() when client is None should not raise."""
+
         async def run():
             client = HTTPClient(_config())
-            await client.close_async()   # no exception
+            await client.close_async()  # no exception
+
         asyncio.run(run())
 
     def test_close_sync_closes_client(self):

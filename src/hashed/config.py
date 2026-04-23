@@ -49,19 +49,19 @@ class HashedConfig(BaseModel):
     # Priority: env vars > .env file > ~/.hashed/credentials.json
     api_key: Optional[str] = Field(
         default_factory=lambda: (
-            os.getenv("API_KEY") or
-            os.getenv("HASHED_API_KEY") or
-            _load_credential("api_key") or
-            None
+            os.getenv("API_KEY")
+            or os.getenv("HASHED_API_KEY")
+            or _load_credential("api_key")
+            or None
         ),
         description="API key for backend authentication (X-API-KEY header)",
     )
     backend_url: Optional[str] = Field(
         default_factory=lambda: (
-            os.getenv("BACKEND_URL") or
-            os.getenv("HASHED_BACKEND_URL") or
-            _load_credential("backend_url") or
-            "https://iamandagent-production.up.railway.app"
+            os.getenv("BACKEND_URL")
+            or os.getenv("HASHED_BACKEND_URL")
+            or _load_credential("backend_url")
+            or "https://iamandagent-production.up.railway.app"
         ),
         description="Backend Control Plane URL",
     )
@@ -116,7 +116,8 @@ class HashedConfig(BaseModel):
     #
     # Set HASHED_FAIL_CLOSED=true in your .env for production financial agents.
     fail_closed: bool = Field(
-        default_factory=lambda: os.getenv("HASHED_FAIL_CLOSED", "false").lower() == "true",
+        default_factory=lambda: os.getenv("HASHED_FAIL_CLOSED", "false").lower()
+        == "true",
         description=(
             "When True, operations are denied if the backend is unreachable "
             "(fail-closed / secure-by-default). "
@@ -127,7 +128,7 @@ class HashedConfig(BaseModel):
     )
 
     model_config = ConfigDict(
-        frozen=True,            # Make the config immutable
+        frozen=True,  # Make the config immutable
         validate_assignment=True,
     )
 
@@ -138,9 +139,7 @@ class HashedConfig(BaseModel):
         if not v:
             raise HashedConfigError("API URL cannot be empty")
         if not v.startswith(("http://", "https://")):
-            raise HashedConfigError(
-                "API URL must start with http:// or https://"
-            )
+            raise HashedConfigError("API URL must start with http:// or https://")
         return v.rstrip("/")
 
     @classmethod
@@ -165,9 +164,7 @@ class HashedConfig(BaseModel):
         try:
             return cls(
                 api_key=os.getenv("HASHED_API_KEY"),
-                api_url=os.getenv(
-                    "HASHED_API_URL", "https://api.hashed.example.com"
-                ),
+                api_url=os.getenv("HASHED_API_URL", "https://api.hashed.example.com"),
                 timeout=float(os.getenv("HASHED_TIMEOUT", "30.0")),
                 max_retries=int(os.getenv("HASHED_MAX_RETRIES", "3")),
                 verify_ssl=os.getenv("HASHED_VERIFY_SSL", "true").lower() == "true",

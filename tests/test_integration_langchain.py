@@ -13,22 +13,20 @@ Design notes
 """
 
 import asyncio
-import importlib
-import sys
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from hashed import HashedConfig, HashedCore, IdentityManager
+from hashed import HashedConfig, HashedCore
 from hashed.guard import PermissionError
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _offline_core(**kwargs) -> HashedCore:
     """Construct a HashedCore with no backend URL (no HTTP calls)."""
     import os
+
     old_backend = os.environ.pop("HASHED_BACKEND_URL", None)
     old_api_key = os.environ.pop("HASHED_API_KEY", None)
     try:
@@ -74,7 +72,9 @@ class TestImportGuard:
         import hashed.integrations.langchain as lc_mod
 
         with patch.object(lc_mod, "_LANGCHAIN_AVAILABLE", False):
-            with pytest.raises(ImportError, match="pip install hashed-sdk\\[langchain\\]"):
+            with pytest.raises(
+                ImportError, match="pip install hashed-sdk\\[langchain\\]"
+            ):
                 lc_mod.HashedCallbackHandler(core=MagicMock())
 
 
@@ -157,7 +157,9 @@ class TestOnToolEnd:
             captured["signed"] = signed
 
         with patch.object(core, "_log_to_all_transports", side_effect=_fake_log):
-            with patch.object(lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)):
+            with patch.object(
+                lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)
+            ):
                 handler.on_tool_end("Email sent successfully")
 
         assert captured["tool_name"] == "send_email"
@@ -178,8 +180,11 @@ class TestOnToolEnd:
             captured_result["result"] = result
 
         import hashed.integrations.langchain as lc_mod
+
         with patch.object(core, "_log_to_all_transports", side_effect=_fake_log):
-            with patch.object(lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)):
+            with patch.object(
+                lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)
+            ):
                 handler.on_tool_end("x" * 500)
 
         # The handler itself slices to 200 chars before passing to _log_to_all_transports
@@ -209,7 +214,9 @@ class TestOnToolError:
         err = ValueError("Something went wrong")
 
         with patch.object(core, "_log_to_all_transports", side_effect=_fake_log):
-            with patch.object(lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)):
+            with patch.object(
+                lc_mod, "_schedule_log", side_effect=lambda coro: asyncio.run(coro)
+            ):
                 handler.on_tool_error(err)
 
         assert captured["tool_name"] == "risky_tool"
@@ -229,6 +236,8 @@ class TestOnToolError:
         handler._last_tool_name = "fragile_tool"
 
         # Force the log call to raise
-        with patch.object(core, "_log_to_all_transports", side_effect=RuntimeError("log boom")):
+        with patch.object(
+            core, "_log_to_all_transports", side_effect=RuntimeError("log boom")
+        ):
             # Must not raise
             handler.on_tool_error(ValueError("tool boom"))

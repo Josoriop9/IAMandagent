@@ -26,6 +26,7 @@ _SERVER_DIR = str(Path(__file__).parent.parent / "server")
 if _SERVER_DIR not in sys.path:
     sys.path.insert(0, _SERVER_DIR)
 
+
 # Stub server-only packages that are NOT installed in the local dev venv
 # (they live only inside the Railway Docker container).
 def _stub_module(name: str) -> MagicMock:
@@ -34,14 +35,18 @@ def _stub_module(name: str) -> MagicMock:
     sys.modules[name] = mod
     return mod
 
+
 # slowapi — only exists in Docker / Railway
 # Use a pass-through decorator so @limiter.limit(...) doesn't replace route
 # handlers with MagicMock objects (which would cause 422 for all routes).
 def _passthrough_limit(*args: Any, **kwargs: Any):
     """No-op rate-limit decorator for tests."""
+
     def decorator(func: Any) -> Any:
         return func
+
     return decorator
+
 
 _mock_limiter_instance = MagicMock()
 _mock_limiter_instance.limit = _passthrough_limit
@@ -50,7 +55,9 @@ _slowapi = _stub_module("slowapi")
 _slowapi.Limiter = MagicMock(return_value=_mock_limiter_instance)
 _slowapi._rate_limit_exceeded_handler = MagicMock()
 _stub_module("slowapi.util").get_remote_address = MagicMock()
-_stub_module("slowapi.errors").RateLimitExceeded = type("RateLimitExceeded", (Exception,), {})
+_stub_module("slowapi.errors").RateLimitExceeded = type(
+    "RateLimitExceeded", (Exception,), {}
+)
 
 # Patch create_client BEFORE the module executes its module-level code.
 _mock_supabase = MagicMock()
@@ -83,7 +90,9 @@ def _mock_supabase_auth(api_key: str = "hashed_testkey") -> MagicMock:
     """
     chain = MagicMock()
     chain.execute.return_value.data = [_org_record(api_key)]
-    _mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value = chain
+    _mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value = (
+        chain
+    )
     return _mock_supabase
 
 
@@ -122,7 +131,9 @@ class TestAuthGuard:
         # Supabase returns empty list for unknown key
         chain = MagicMock()
         chain.execute.return_value.data = []
-        _mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value = chain
+        _mock_supabase.table.return_value.select.return_value.eq.return_value.eq.return_value = (
+            chain
+        )
 
         with TestClient(app) as client:
             resp = client.get("/v1/agents", headers={"X-API-KEY": "wrong_key"})
@@ -366,11 +377,15 @@ class TestPoliciesEndpoints:
         def _table(name: str) -> MagicMock:
             if name == "organizations":
                 m = MagicMock()
-                m.select.return_value.eq.return_value.eq.return_value = self._org_chain()
+                m.select.return_value.eq.return_value.eq.return_value = (
+                    self._org_chain()
+                )
                 return m
             if name == "policies":
                 m = MagicMock()
-                m.select.return_value.eq.return_value.order.return_value = policies_chain
+                m.select.return_value.eq.return_value.order.return_value = (
+                    policies_chain
+                )
                 return m
             return MagicMock()
 
@@ -402,7 +417,9 @@ class TestPoliciesEndpoints:
         def _table(name: str) -> MagicMock:
             if name == "organizations":
                 m = MagicMock()
-                m.select.return_value.eq.return_value.eq.return_value = self._org_chain()
+                m.select.return_value.eq.return_value.eq.return_value = (
+                    self._org_chain()
+                )
                 return m
             if name == "policies":
                 m = MagicMock()

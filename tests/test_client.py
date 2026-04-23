@@ -78,6 +78,7 @@ class TestHashedClient:
     def test_derive_key(self, client: HashedClient) -> None:
         """Test key derivation."""
         import os
+
         salt = os.urandom(16)
         key = client.derive_key("password", salt, length=32)
 

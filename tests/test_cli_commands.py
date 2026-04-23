@@ -85,7 +85,9 @@ def policy_file(tmp_workdir: Path) -> Path:
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 
-def _make_response(status_code: int = 200, payload: Optional[Union[dict, list]] = None) -> MagicMock:
+def _make_response(
+    status_code: int = 200, payload: Optional[Union[dict, list]] = None
+) -> MagicMock:
     """Build a MagicMock that mimics an httpx.Response."""
     mock = MagicMock()
     mock.status_code = status_code
@@ -107,7 +109,7 @@ class TestLogsListCommand:
                 "id": "log-001",
                 "tool_name": "transfer_money",
                 "status": "success",
-                "agent_name": "Dev Test Agent",   # ← field added by Bug A fix
+                "agent_name": "Dev Test Agent",  # ← field added by Bug A fix
                 "timestamp": "2026-03-10T03:45:06",
                 "organization_id": "org-uuid-001",
                 "agent_id": "agent-uuid-001",
@@ -135,21 +137,27 @@ class TestLogsListCommand:
             new=AsyncMock(return_value=resp),
         )
 
-    def test_logs_list_shows_agent_name(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_shows_agent_name(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """Agent names (not 'Unknown') must appear in the logs table."""
         with self._patch_http():
             result = runner.invoke(app, ["logs", "list"])
         assert result.exit_code == 0, result.output
         assert "Dev Test Agent" in result.output
 
-    def test_logs_list_shows_tool_name(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_shows_tool_name(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """Tool name column must be present in output."""
         with self._patch_http():
             result = runner.invoke(app, ["logs", "list"])
         assert result.exit_code == 0, result.output
         assert "transfer_money" in result.output
 
-    def test_logs_list_shows_status_success(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_shows_status_success(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """Status column shows '✓ success' for successful operations."""
         with self._patch_http():
             result = runner.invoke(app, ["logs", "list"])
@@ -157,23 +165,32 @@ class TestLogsListCommand:
         # Either raw "success" or the Rich checkmark
         assert "success" in result.output.lower() or "✓" in result.output
 
-    def test_logs_list_shows_status_denied(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_shows_status_denied(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """Status column shows denied indicator for denied operations."""
         with self._patch_http():
             result = runner.invoke(app, ["logs", "list"])
         assert result.exit_code == 0, result.output
         assert "denied" in result.output.lower() or "✗" in result.output
 
-    def test_logs_list_respects_limit_flag(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_respects_limit_flag(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """--limit flag is forwarded to the API call."""
-        with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=_make_response(200, self._LOGS_PAYLOAD))) as mock_get:
+        with patch(
+            "httpx.AsyncClient.get",
+            new=AsyncMock(return_value=_make_response(200, self._LOGS_PAYLOAD)),
+        ) as mock_get:
             result = runner.invoke(app, ["logs", "list", "--limit", "5"])
         assert result.exit_code == 0, result.output
         # Verify the call was made (limit is a query param — hard to assert value
         # without inspecting call args, but at least the command ran cleanly)
         assert mock_get.called
 
-    def test_logs_list_empty_shows_no_logs_message(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_empty_shows_no_logs_message(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """When no logs returned, command exits cleanly with a helpful message."""
         empty = {"logs": [], "count": 0, "limit": 10, "offset": 0}
         with self._patch_http(empty):
@@ -182,7 +199,9 @@ class TestLogsListCommand:
         # Should not raise an exception regardless of output content
         assert isinstance(result.output, str)
 
-    def test_logs_list_unknown_agent_fallback(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_logs_list_unknown_agent_fallback(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """Logs without agent_name still display gracefully (Unknown fallback)."""
         payload = {
             "logs": [
@@ -227,7 +246,9 @@ class TestAgentListCommand:
         "count": 1,
     }
 
-    def test_agent_list_shows_agent_name(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_agent_list_shows_agent_name(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """'hashed agent list' displays agent names."""
         resp = _make_response(200, self._AGENTS_PAYLOAD)
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=resp)):
@@ -242,12 +263,18 @@ class TestAgentListCommand:
             result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0, result.output
 
-    def test_agent_list_no_credentials_exits_gracefully(self, tmp_workdir: Path) -> None:
+    def test_agent_list_no_credentials_exits_gracefully(
+        self, tmp_workdir: Path
+    ) -> None:
         """Without credentials, command exits gracefully (not with unhandled exception)."""
         result = runner.invoke(app, ["agent", "list"])
         # Either exit 0 with helpful message, or non-zero with error — but not a crash
         assert isinstance(result.exit_code, int)
-        assert result.output or result.exception is None or "credentials" in str(result.output).lower()
+        assert (
+            result.output
+            or result.exception is None
+            or "credentials" in str(result.output).lower()
+        )
 
 
 # ── hashed agent create ────────────────────────────────────────────────────────
@@ -274,10 +301,14 @@ class TestAgentSubcommands:
         assert "list" in result.output
         assert "delete" in result.output
 
-    def test_agent_list_uses_org_credentials(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_agent_list_uses_org_credentials(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """'hashed agent list' uses API key from credentials file."""
         resp = _make_response(200, {"agents": [], "count": 0})
-        with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=resp)) as mock_get:
+        with patch(
+            "httpx.AsyncClient.get", new=AsyncMock(return_value=resp)
+        ) as mock_get:
             result = runner.invoke(app, ["agent", "list"])
         assert result.exit_code == 0, result.output
         # Verify an HTTP GET was made (confirms credentials were loaded)
@@ -301,13 +332,16 @@ class TestInitCommand:
         This is a local operation — doesn't need network.
         """
         # Mock the HTTP signup/login part to avoid network
-        resp_login = _make_response(200, {
-            "api_key": "hashed_testkey",
-            "org_name": "TestOrg",
-            "org_id": "org-001",
-            "backend_url": "http://localhost:8000",
-            "email": "test@example.com",
-        })
+        resp_login = _make_response(
+            200,
+            {
+                "api_key": "hashed_testkey",
+                "org_name": "TestOrg",
+                "org_id": "org-001",
+                "backend_url": "http://localhost:8000",
+                "email": "test@example.com",
+            },
+        )
         with patch("httpx.AsyncClient.post", new=AsyncMock(return_value=resp_login)):
             result = runner.invoke(
                 app,
@@ -324,25 +358,45 @@ class TestInitCommand:
 
 class TestPolicyPushCommand:
 
-    def test_policy_push_success(self, fake_credentials: dict, policy_file: Path, tmp_workdir: Path) -> None:
+    def test_policy_push_success(
+        self, fake_credentials: dict, policy_file: Path, tmp_workdir: Path
+    ) -> None:
         """'hashed policy push' uploads policies and reports success."""
         # Mock GET /v1/agents and POST /v1/policies
-        agents_resp = _make_response(200, {
-            "agents": [{"id": "agent-001", "name": "MyAgent", "public_key": "abc123"}],
-            "count": 1,
-        })
+        agents_resp = _make_response(
+            200,
+            {
+                "agents": [
+                    {"id": "agent-001", "name": "MyAgent", "public_key": "abc123"}
+                ],
+                "count": 1,
+            },
+        )
         _make_response(200, {"policies": [], "count": 0})
-        post_resp = _make_response(201, {"policy": {"id": "pol-001"}, "message": "Policy created"})
+        post_resp = _make_response(
+            201, {"policy": {"id": "pol-001"}, "message": "Policy created"}
+        )
 
         with contextlib.ExitStack() as stack:
-            stack.enter_context(patch("httpx.AsyncClient.get", new=AsyncMock(return_value=agents_resp)))
-            stack.enter_context(patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_resp)))
-            stack.enter_context(patch("httpx.AsyncClient.delete", new=AsyncMock(return_value=_make_response(200, {}))))
+            stack.enter_context(
+                patch("httpx.AsyncClient.get", new=AsyncMock(return_value=agents_resp))
+            )
+            stack.enter_context(
+                patch("httpx.AsyncClient.post", new=AsyncMock(return_value=post_resp))
+            )
+            stack.enter_context(
+                patch(
+                    "httpx.AsyncClient.delete",
+                    new=AsyncMock(return_value=_make_response(200, {})),
+                )
+            )
             result = runner.invoke(app, ["policy", "push"])
 
         assert result.exit_code == 0, result.output
 
-    def test_policy_push_with_no_policy_file(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_policy_push_with_no_policy_file(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """'hashed policy push' without .hashed_policies.json exits gracefully."""
         result = runner.invoke(app, ["policy", "push"])
         # Should not crash — either shows helpful error or exits 0 with warning
@@ -355,29 +409,39 @@ class TestPolicyPushCommand:
 
 class TestWhoamiAndStatus:
 
-    def test_whoami_with_credentials(self, fake_credentials: dict, tmp_workdir: Path) -> None:
+    def test_whoami_with_credentials(
+        self, fake_credentials: dict, tmp_workdir: Path
+    ) -> None:
         """'hashed whoami' with valid credentials file shows org/email info."""
-        resp = _make_response(200, {
-            "org_name": "TestOrg",
-            "org_id": "org-uuid-001",
-            "api_key_prefix": "hashed_testkey...",
-            "is_active": True,
-        })
+        resp = _make_response(
+            200,
+            {
+                "org_name": "TestOrg",
+                "org_id": "org-uuid-001",
+                "api_key_prefix": "hashed_testkey...",
+                "is_active": True,
+            },
+        )
         with patch("httpx.AsyncClient.get", new=AsyncMock(return_value=resp)):
             result = runner.invoke(app, ["whoami"])
         assert result.exit_code == 0, result.output
         # Should show org name or email
-        assert "TestOrg" in result.output or "test@example.com" in result.output or isinstance(result.output, str)
+        assert (
+            "TestOrg" in result.output
+            or "test@example.com" in result.output
+            or isinstance(result.output, str)
+        )
 
     def test_version_is_semver(self) -> None:
         """'hashed version' output matches semver pattern (x.y.z)."""
         import re
+
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
         # Match x.y or x.y.z
-        assert re.search(r"\d+\.\d+", result.output), (
-            f"Expected semver in output. Got:\n{result.output}"
-        )
+        assert re.search(
+            r"\d+\.\d+", result.output
+        ), f"Expected semver in output. Got:\n{result.output}"
 
 
 # ── hashed top-level help & structure ─────────────────────────────────────────

@@ -29,7 +29,7 @@ def _backend_config(
     backend_url: str = "http://mock-backend.test",
     api_key: str = "test_key",
     fail_closed: bool = False,
-    enable_auto_sync: bool = False,   # disable background task in most tests
+    enable_auto_sync: bool = False,  # disable background task in most tests
 ) -> HashedConfig:
     """HashedConfig pointing at a fake backend. Clears real env vars."""
     for var in ("HASHED_BACKEND_URL", "HASHED_API_KEY"):
@@ -58,6 +58,7 @@ def _mock_http_client(
     POST /log       → 200 ok
     GET  /v1/agents → agents_body
     """
+
     def _resp(status: int, body: dict) -> MagicMock:
         r = MagicMock()
         r.status_code = status
@@ -70,10 +71,12 @@ def _mock_http_client(
     client.aclose = AsyncMock()
 
     # POST calls: /register, /guard, /log, /v1/policies
-    reg_resp = _resp(register_status, register_body or {"id": "agent-1", "name": "Test"})
+    reg_resp = _resp(
+        register_status, register_body or {"id": "agent-1", "name": "Test"}
+    )
     log_resp = _resp(200, {"ok": True})
     guard_resp = _resp(200, guard_body or {"allowed": True})
-    pol_resp  = _resp(200, {"id": "p-1"})
+    pol_resp = _resp(200, {"id": "p-1"})
 
     # Side-effect by URL substring is tricky; use a simple counter approach
     post_side_effects = {
@@ -87,12 +90,12 @@ def _mock_http_client(
         for key, resp in post_side_effects.items():
             if key in str(url):
                 return resp
-        return log_resp   # default
+        return log_resp  # default
 
     client.post = AsyncMock(side_effect=_post)
 
     # GET calls
-    sync_resp   = _resp(200, sync_body   or {"policies": {}, "synced_at": "2026-01-01"})
+    sync_resp = _resp(200, sync_body or {"policies": {}, "synced_at": "2026-01-01"})
     agents_resp = _resp(200, agents_body or {"agents": []})
 
     async def _get(url, **kwargs):
@@ -144,7 +147,7 @@ class TestInitializeWithBackend:
 
         with patch("hashed.core.httpx.AsyncClient", return_value=mock_http):
             await core.initialize()
-            await core.initialize()   # second call — should not raise
+            await core.initialize()  # second call — should not raise
             assert core._initialized is True
             await core.shutdown()
 
@@ -268,7 +271,7 @@ class TestRegisterAgent:
         mock_http = _mock_http_client(register_status=500)
 
         with patch("hashed.core.httpx.AsyncClient", return_value=mock_http):
-            await core.initialize()   # must not raise
+            await core.initialize()  # must not raise
             assert core._initialized is True
             await core.shutdown()
 
@@ -285,7 +288,7 @@ class TestSyncPoliciesFromBackend:
         cfg = _backend_config()
         core = HashedCore(config=cfg)
         mock_http = _mock_http_client()
-        core._http_client = mock_http   # inject directly (no initialize)
+        core._http_client = mock_http  # inject directly (no initialize)
 
         # Override GET to return specific policies
         sync_resp = MagicMock()
@@ -294,7 +297,7 @@ class TestSyncPoliciesFromBackend:
         sync_resp.json.return_value = {
             "policies": {
                 "wire_transfer": {"allowed": True, "max_amount": 1000.0},
-                "delete_user":   {"allowed": False, "max_amount": None},
+                "delete_user": {"allowed": False, "max_amount": None},
             },
             "synced_at": "2026-03-01T00:00:00",
         }
@@ -328,7 +331,7 @@ class TestSyncPoliciesFromBackend:
         """sync_policies_from_backend() is a no-op when _http_client is None."""
         cfg = _backend_config()
         core = HashedCore(config=cfg)
-        core._http_client = None   # no backend
+        core._http_client = None  # no backend
 
         # Should not raise — just logs a warning and returns
         await core.sync_policies_from_backend()
@@ -363,12 +366,12 @@ class TestPushLocalJsonPolicies:
 
         pushed = await core._push_local_json_policies()
 
-        assert pushed == 2   # 2 global policies
+        assert pushed == 2  # 2 global policies
 
     @pytest.mark.asyncio
     async def test_push_returns_zero_when_no_file(self, tmp_path: Path, monkeypatch):
         """_push_local_json_policies() returns 0 if no policy file exists."""
-        monkeypatch.chdir(tmp_path)   # empty dir — no .hashed_policies.json
+        monkeypatch.chdir(tmp_path)  # empty dir — no .hashed_policies.json
 
         cfg = _backend_config()
         core = HashedCore(config=cfg)
@@ -423,7 +426,9 @@ class TestGuardWithBackend:
         """Guard with backend returning allowed=False returns HASHED BLOCKED."""
         cfg = _backend_config()
         core = HashedCore(config=cfg)
-        mock_http = _mock_http_client(guard_body={"allowed": False, "message": "not allowed"})
+        mock_http = _mock_http_client(
+            guard_body={"allowed": False, "message": "not allowed"}
+        )
         core._http_client = mock_http
         core._initialized = True
 
@@ -433,7 +438,11 @@ class TestGuardWithBackend:
 
         result = await risky_op()
         assert isinstance(result, str)
-        assert "HASHED BLOCKED" in result or "not allowed" in result.lower() or "permission" in result.lower()
+        assert (
+            "HASHED BLOCKED" in result
+            or "not allowed" in result.lower()
+            or "permission" in result.lower()
+        )
 
     @pytest.mark.asyncio
     async def test_backend_unreachable_fail_open_allows(self):

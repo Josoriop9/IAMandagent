@@ -370,10 +370,14 @@ def load_identity_from_env() -> Optional["IdentityManager"]:
 
     try:
         from hashed.identity import IdentityManager  # local import to avoid circular
-        identity = IdentityManager.from_private_key_bytes(pem_bytes, password=password_bytes)
+
+        identity = IdentityManager.from_private_key_bytes(
+            pem_bytes, password=password_bytes
+        )
         logger.info(
             "Agent identity loaded from HASHED_AGENT_PRIVATE_KEY env var "
-            "(public_key=%s)", identity.public_key_hex[:16] + "..."
+            "(public_key=%s)",
+            identity.public_key_hex[:16] + "...",
         )
         return identity
     except Exception as exc:
@@ -411,6 +415,7 @@ def export_identity_for_env(filepath: str, password: Optional[str] = None) -> st
     logger.info(
         "Exported identity from %s as base64 (%d chars). "
         "Set as HASHED_AGENT_PRIVATE_KEY in your cloud provider.",
-        filepath, len(b64)
+        filepath,
+        len(b64),
     )
     return b64

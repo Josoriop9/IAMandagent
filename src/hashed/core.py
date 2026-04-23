@@ -34,6 +34,7 @@ logger = logging.getLogger(__name__)
 # Circuit Breaker
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class _CircuitBreaker:
     """
     Simple state-machine circuit breaker for backend HTTP calls.
@@ -89,6 +90,7 @@ class _CircuitBreaker:
 # HashedCore
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class HashedCore:
     """
     Core client integrating identity, policies, and ledger.
@@ -121,14 +123,18 @@ class HashedCore:
             self._identity = identity
         else:
             from hashed.identity_store import load_identity_from_env
+
             _env_identity = load_identity_from_env()
-            self._identity = _env_identity if _env_identity is not None else IdentityManager()
+            self._identity = (
+                _env_identity if _env_identity is not None else IdentityManager()
+            )
 
         self._policy_engine = PolicyEngine()
         self._ledger: Optional[AsyncLedger] = None
         self._ledger_endpoint = ledger_endpoint or (
             f"{self._config.backend_url}{self._config.ledger_endpoint}"
-            if self._config.backend_url else None
+            if self._config.backend_url
+            else None
         )
         self._agent_name = agent_name or "Unnamed Agent"
         self._agent_type = agent_type
@@ -205,7 +211,9 @@ class HashedCore:
                 try:
                     pushed = await self._push_local_json_policies()
                     if pushed > 0:
-                        logger.info(f"First-run auto-push: {pushed} policies uploaded to backend")
+                        logger.info(
+                            f"First-run auto-push: {pushed} policies uploaded to backend"
+                        )
                 except Exception as e:
                     logger.warning(f"First-run policy push failed (non-fatal): {e}")
 
@@ -217,7 +225,9 @@ class HashedCore:
 
             if self._config.enable_auto_sync:
                 self._sync_task = asyncio.create_task(self._background_sync())
-                logger.info(f"Background policy sync started (interval: {self._config.sync_interval}s)")
+                logger.info(
+                    f"Background policy sync started (interval: {self._config.sync_interval}s)"
+                )
 
         if self._ledger_endpoint:
             self._ledger = AsyncLedger(
@@ -357,7 +367,9 @@ class HashedCore:
                     # A loop is already running — dispatch to a dedicated thread
                     # to avoid RuntimeError: "This event loop is already running."
                     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
-                        future = pool.submit(asyncio.run, async_wrapper(*args, **kwargs))
+                        future = pool.submit(
+                            asyncio.run, async_wrapper(*args, **kwargs)
+                        )
                         return future.result()
                 except RuntimeError:
                     # No running loop — safe to call asyncio.run directly
@@ -581,9 +593,7 @@ class HashedCore:
             tool_name, "denied", amount, str(error), signed
         )
 
-    async def _log_error(
-        self, tool_name: str, amount: Any, error: Exception
-    ) -> None:
+    async def _log_error(self, tool_name: str, amount: Any, error: Exception) -> None:
         """Log an unexpected error to the local ledger with a canonical signed envelope."""
         if self._ledger:
             try:
@@ -753,11 +763,16 @@ class HashedCore:
         try:
             agent_response = await self._http_client.get("/v1/agents")
             if not agent_response.is_success:
-                raise Exception(f"Failed to get agent info: {agent_response.status_code}")
+                raise Exception(
+                    f"Failed to get agent info: {agent_response.status_code}"
+                )
 
             our_agent = next(
-                (a for a in agent_response.json().get("agents", [])
-                 if a["public_key"] == self._identity.public_key_hex),
+                (
+                    a
+                    for a in agent_response.json().get("agents", [])
+                    if a["public_key"] == self._identity.public_key_hex
+                ),
                 None,
             )
 
@@ -782,7 +797,9 @@ class HashedCore:
                             "tool_name": tool_name,
                             "allowed": policy.allowed,
                             "max_amount": policy.max_amount,
-                            "requires_approval": policy.metadata.get("requires_approval", False),
+                            "requires_approval": policy.metadata.get(
+                                "requires_approval", False
+                            ),
                             "metadata": policy.metadata,
                         },
                     )
@@ -791,7 +808,9 @@ class HashedCore:
                 except Exception as e:
                     logger.warning(f"Error pushing policy '{tool_name}': {e}")
 
-            logger.info(f"Pushed {pushed_count}/{len(local_policies)} policies to backend")
+            logger.info(
+                f"Pushed {pushed_count}/{len(local_policies)} policies to backend"
+            )
 
         except Exception as e:
             logger.error(f"Failed to push policies: {e}")
@@ -822,8 +841,11 @@ class HashedCore:
                     tool_name=tool_name,
                     max_amount=policy_data.get("max_amount"),
                     allowed=policy_data.get("allowed", True),
-                    **{k: v for k, v in policy_data.items()
-                       if k not in ["max_amount", "allowed"]},
+                    **{
+                        k: v
+                        for k, v in policy_data.items()
+                        if k not in ["max_amount", "allowed"]
+                    },
                 )
 
             logger.info(f"Synced {len(policies)} policies from backend")
@@ -874,6 +896,7 @@ class HashedCore:
 # ──────────────────────────────────────────────────────────────────────────────
 # Convenience factory
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 def create_core(
     ledger_endpoint: Optional[str] = None,

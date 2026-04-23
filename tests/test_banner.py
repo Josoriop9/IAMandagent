@@ -10,6 +10,7 @@ Coverage targets:
 All tests are pure unit tests — no network, no filesystem, no async.
 Python 3.9 compatible.
 """
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -18,17 +19,20 @@ from unittest.mock import MagicMock, patch
 # Constants
 # ---------------------------------------------------------------------------
 
+
 class TestBannerConstants:
     """Validate the block-art constants."""
 
     def test_hash_lines_is_list_of_strings(self):
         from hashed.banner import _HASH_LINES
+
         assert isinstance(_HASH_LINES, list)
         for line in _HASH_LINES:
             assert isinstance(line, str), f"Expected str, got {type(line)}"
 
     def test_hashed_lines_is_list_of_strings(self):
         from hashed.banner import _HASHED_LINES
+
         assert isinstance(_HASHED_LINES, list)
         for line in _HASHED_LINES:
             assert isinstance(line, str), f"Expected str, got {type(line)}"
@@ -36,45 +40,54 @@ class TestBannerConstants:
     def test_hash_lines_has_six_rows(self):
         """# symbol needs exactly 6 rows to align with HASHED block art."""
         from hashed.banner import _HASH_LINES
+
         assert len(_HASH_LINES) == 6
 
     def test_hashed_lines_has_six_rows(self):
         """HASHED block art has exactly 6 rows."""
         from hashed.banner import _HASHED_LINES
+
         assert len(_HASHED_LINES) == 6
 
     def test_hash_lines_contain_block_chars(self):
         """Every line must contain the ██ block character."""
         from hashed.banner import _HASH_LINES
+
         for line in _HASH_LINES:
             assert "██" in line, f"Expected block chars in: {repr(line)}"
 
     def test_hashed_lines_contain_block_chars(self):
         """HASHED block art uses ██ and box-drawing chars."""
         from hashed.banner import _HASHED_LINES
+
         for line in _HASHED_LINES:
             assert len(line) > 0, "Line must not be empty"
 
     def test_hash_style_is_string(self):
         from hashed.banner import _HASH_STYLE
+
         assert isinstance(_HASH_STYLE, str)
         assert len(_HASH_STYLE) > 0
 
     def test_hashed_style_is_string(self):
         from hashed.banner import _HASHED_STYLE
+
         assert isinstance(_HASHED_STYLE, str)
         assert len(_HASHED_STYLE) > 0
 
     def test_gap_is_string(self):
         from hashed.banner import _GAP
+
         assert isinstance(_GAP, str)
 
     def test_version_style_is_string(self):
         from hashed.banner import _VERSION_STYLE
+
         assert isinstance(_VERSION_STYLE, str)
 
     def test_tagline_style_is_string(self):
         from hashed.banner import _TAGLINE_STYLE
+
         assert isinstance(_TAGLINE_STYLE, str)
 
 
@@ -82,12 +95,14 @@ class TestBannerConstants:
 # show_banner()
 # ---------------------------------------------------------------------------
 
+
 class TestShowBanner:
     """Tests for the show_banner() function."""
 
     def test_show_banner_no_args_does_not_raise(self):
         """show_banner() with default args must not raise."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -96,6 +111,7 @@ class TestShowBanner:
     def test_show_banner_with_version_does_not_raise(self):
         """show_banner(version='1.2.3') must not raise."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -104,6 +120,7 @@ class TestShowBanner:
     def test_show_banner_tagline_false_does_not_raise(self):
         """show_banner(tagline=False) must not raise."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -112,6 +129,7 @@ class TestShowBanner:
     def test_show_banner_calls_console_print(self):
         """show_banner() must call console.print at least once per line + 2 blanks."""
         from hashed.banner import _HASH_LINES, show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -122,6 +140,7 @@ class TestShowBanner:
     def test_show_banner_with_version_extra_print(self):
         """With version, tagline print is called (contains version string)."""
         from hashed.banner import _HASH_LINES, show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -132,6 +151,7 @@ class TestShowBanner:
     def test_show_banner_tagline_false_fewer_prints(self):
         """tagline=False skips the tagline print, so fewer calls."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console_with = MagicMock()
             mock_console_without = MagicMock()
@@ -149,6 +169,7 @@ class TestShowBanner:
     def test_show_banner_empty_version_skips_version_markup(self):
         """version='' should not include version markup in tagline."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -159,6 +180,7 @@ class TestShowBanner:
     def test_show_banner_creates_one_console(self):
         """show_banner() creates exactly one Console instance."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -170,25 +192,25 @@ class TestShowBanner:
         from rich.text import Text
 
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
             show_banner()
             # Collect all positional args from print calls
             all_args = [
-                call.args[0]
-                for call in mock_console.print.call_args_list
-                if call.args
+                call.args[0] for call in mock_console.print.call_args_list if call.args
             ]
             # At least one call should pass a Text object
             text_objects = [a for a in all_args if isinstance(a, Text)]
-            assert len(text_objects) == 6, (
-                f"Expected 6 Text rows (one per logo line), got {len(text_objects)}"
-            )
+            assert (
+                len(text_objects) == 6
+            ), f"Expected 6 Text rows (one per logo line), got {len(text_objects)}"
 
     def test_show_banner_version_021(self):
         """Smoke test with actual project version string."""
         from hashed.banner import show_banner
+
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
             mock_console_cls.return_value = mock_console
@@ -198,11 +220,13 @@ class TestShowBanner:
     def test_show_banner_callable(self):
         """show_banner is callable."""
         from hashed import banner
+
         assert callable(banner.show_banner)
 
     def test_banner_module_importable(self):
         """banner module must import cleanly."""
         import importlib
+
         mod = importlib.import_module("hashed.banner")
         assert hasattr(mod, "show_banner")
         assert hasattr(mod, "_HASH_LINES")
@@ -213,6 +237,7 @@ class TestShowBanner:
 # Integration: banner in CLI context
 # ---------------------------------------------------------------------------
 
+
 class TestBannerCLIIntegration:
     """Test that the banner is wired up in the CLI callback."""
 
@@ -221,6 +246,7 @@ class TestBannerCLIIntegration:
         from typer.testing import CliRunner
 
         from hashed.cli import app
+
         runner = CliRunner()
         with patch("hashed.banner.Console") as mock_console_cls:
             mock_console = MagicMock()
@@ -234,6 +260,7 @@ class TestBannerCLIIntegration:
         from typer.testing import CliRunner
 
         from hashed.cli import app
+
         runner = CliRunner()
         with patch("hashed.banner.show_banner") as mock_banner:
             # login will fail (no network) but banner should not be called
@@ -245,6 +272,7 @@ class TestBannerCLIIntegration:
         from typer.testing import CliRunner
 
         from hashed.cli import app
+
         runner = CliRunner()
         with patch("hashed.banner.show_banner") as mock_banner:
             runner.invoke(app, ["version"])

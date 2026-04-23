@@ -181,6 +181,4 @@ class Hasher:
             )
             return kdf.derive(password.encode())
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to derive key: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to derive key: {str(e)}") from e

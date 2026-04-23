@@ -74,6 +74,7 @@ class TestSignMessage:
     def test_sign_message_exception_raises_crypto_error(self) -> None:
         """sign_message() wraps internal exceptions in HashedCryptoError (lines 81-82)."""
         from unittest.mock import MagicMock
+
         identity = IdentityManager()
 
         # Replace the C-extension private key with a mock that raises on sign()
@@ -113,7 +114,7 @@ class TestVerifySignature:
     def test_verify_with_explicit_public_key(self) -> None:
         """verify_signature() with an explicit public_key argument (lines 111-112)."""
         signer = IdentityManager()
-        verifier = IdentityManager()   # different identity
+        verifier = IdentityManager()  # different identity
 
         sig = signer.sign_message("cross verify")
 
@@ -126,7 +127,7 @@ class TestVerifySignature:
     def test_verify_with_wrong_public_key_returns_false(self) -> None:
         """Verification with the wrong public key returns False."""
         signer = IdentityManager()
-        other  = IdentityManager()
+        other = IdentityManager()
 
         sig = signer.sign_message("secret")
 
@@ -198,13 +199,13 @@ class TestVerifySignedData:
     def test_tampered_signature_returns_false(self) -> None:
         identity = IdentityManager()
         signed = identity.sign_data({"x": 1})
-        signed["signature"] = "00" * 64   # all zeros
+        signed["signature"] = "00" * 64  # all zeros
         assert IdentityManager.verify_signed_data(signed) is False
 
     def test_tampered_data_returns_false(self) -> None:
         identity = IdentityManager()
         signed = identity.sign_data({"amount": 100})
-        signed["data"]["amount"] = 9999   # tamper
+        signed["data"]["amount"] = 9999  # tamper
         assert IdentityManager.verify_signed_data(signed) is False
 
     def test_missing_field_returns_false(self) -> None:
@@ -380,8 +381,12 @@ class TestSignOperation:
         payload_a = dict(shared)
         payload_b = {k: shared[k] for k in reversed(list(shared.keys()))}
 
-        canonical_a = json.dumps(payload_a, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-        canonical_b = json.dumps(payload_b, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+        canonical_a = json.dumps(
+            payload_a, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
+        canonical_b = json.dumps(
+            payload_b, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+        )
 
         assert canonical_a == canonical_b
 

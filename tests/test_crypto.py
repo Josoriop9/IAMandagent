@@ -2,7 +2,6 @@
 Tests for cryptography operations.
 """
 
-
 from hashed.crypto.hasher import Hasher
 from hashed.models import HashRequest
 

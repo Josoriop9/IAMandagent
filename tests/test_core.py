@@ -24,6 +24,7 @@ from hashed.guard import PermissionError
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+
 def _offline_core(**kwargs) -> HashedCore:
     """Create a HashedCore with no backend_url so no HTTP calls are made.
 
@@ -33,6 +34,7 @@ def _offline_core(**kwargs) -> HashedCore:
     that could make the default factory pick up a real URL.
     """
     import os
+
     # Temporarily clear env vars so HashedConfig defaults to None
     old_backend = os.environ.pop("HASHED_BACKEND_URL", None)
     old_api_key = os.environ.pop("HASHED_API_KEY", None)
@@ -58,6 +60,7 @@ class TestHashedCoreProperties:
 
     def test_policy_engine_property_returns_engine(self):
         from hashed.guard import PolicyEngine
+
         core = _offline_core()
         assert isinstance(core.policy_engine, PolicyEngine)
 
@@ -102,7 +105,7 @@ class TestCreateCore:
 
     def test_create_core_with_config(self):
         """Config passed to create_core() should be used as-is."""
-        core = _offline_core()           # already builds an offline config
+        core = _offline_core()  # already builds an offline config
         core2 = create_core(config=core._config)
         assert core2._config is core._config
 
@@ -120,9 +123,9 @@ class TestShutdown:
 
     def test_shutdown_sets_initialized_false(self):
         core = _offline_core()
-        core._initialized = True      # force-set as if initialized
-        core._ledger = None           # no real ledger
-        core._http_client = None      # no real http client
+        core._initialized = True  # force-set as if initialized
+        core._ledger = None  # no real ledger
+        core._http_client = None  # no real http client
         asyncio.run(core.shutdown())
         assert core._initialized is False
 
@@ -208,7 +211,11 @@ class TestGuardOfflineDeny:
         result = asyncio.run(dangerous_op())
 
         assert isinstance(result, str)
-        assert "HASHED BLOCKED" in result or "denied" in result.lower() or "not allowed" in result.lower()
+        assert (
+            "HASHED BLOCKED" in result
+            or "denied" in result.lower()
+            or "not allowed" in result.lower()
+        )
 
     def test_denied_policy_with_raise_on_deny_raises_permission_error(self):
         """raise_on_deny=True should raise PermissionError instead of returning a string."""
@@ -299,7 +306,7 @@ class TestContextManager:
         """async with HashedCore() should initialize and shutdown cleanly."""
         # Build offline config via the helper (handles frozen Pydantic model)
         offline = _offline_core(agent_name="ctx-test")
-        config = offline._config   # already a valid offline HashedConfig
+        config = offline._config  # already a valid offline HashedConfig
 
         async def run():
             async with HashedCore(config=config, agent_name="ctx-test") as core:
@@ -382,7 +389,7 @@ class TestCanonicalSignedPayload:
 
         # The envelope must contain signature and canonical string
         assert "signature" in signed
-        assert len(signed["signature"]) == 128       # Ed25519 hex = 64 bytes
+        assert len(signed["signature"]) == 128  # Ed25519 hex = 64 bytes
         assert "canonical" in signed
         assert '"version":1' in signed["canonical"]
 
@@ -427,7 +434,7 @@ class TestCanonicalSignedPayload:
         _execute_remote_guard must include nonce, timestamp_ns, signature,
         and canonical in the JSON body of the POST /guard request.
         """
-        from unittest.mock import AsyncMock, MagicMock, patch
+        from unittest.mock import AsyncMock, MagicMock
 
         core = _offline_core()
         posted_body: dict = {}
@@ -448,18 +455,19 @@ class TestCanonicalSignedPayload:
 
             call_args = mock_http.post.call_args
             # Support both positional and keyword call styles
-            body = (
-                call_args[1].get("json")
-                or (call_args[0][1] if len(call_args[0]) > 1 else {})
+            body = call_args[1].get("json") or (
+                call_args[0][1] if len(call_args[0]) > 1 else {}
             )
             posted_body.update(body or {})
             core._http_client = None
 
         asyncio.run(run())
 
-        assert "nonce" in posted_body,       "nonce missing from /guard POST body"
-        assert "timestamp_ns" in posted_body, "timestamp_ns missing from /guard POST body"
-        assert "signature" in posted_body,   "signature missing from /guard POST body"
-        assert "canonical" in posted_body,   "canonical missing from /guard POST body"
+        assert "nonce" in posted_body, "nonce missing from /guard POST body"
+        assert (
+            "timestamp_ns" in posted_body
+        ), "timestamp_ns missing from /guard POST body"
+        assert "signature" in posted_body, "signature missing from /guard POST body"
+        assert "canonical" in posted_body, "canonical missing from /guard POST body"
         assert posted_body.get("operation") == "send_email"
         assert posted_body.get("agent_public_key") is not None

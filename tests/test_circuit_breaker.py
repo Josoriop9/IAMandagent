@@ -23,6 +23,7 @@ from hashed.guard import PermissionError as HashedPermissionError
 # _CircuitBreaker unit tests
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestCircuitBreaker:
     def test_starts_closed(self):
         cb = _CircuitBreaker()
@@ -34,7 +35,7 @@ class TestCircuitBreaker:
         cb.record_failure()
         assert cb.is_open is False  # not yet
         cb.record_failure()
-        assert cb.is_open is True   # threshold reached
+        assert cb.is_open is True  # threshold reached
 
     def test_success_resets_failure_count(self):
         cb = _CircuitBreaker(failure_threshold=3)
@@ -76,6 +77,7 @@ class TestCircuitBreaker:
 # _validate_local_policy
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestValidateLocalPolicy:
     def _make_core(self):
         config = HashedConfig()
@@ -107,6 +109,7 @@ class TestValidateLocalPolicy:
 # ──────────────────────────────────────────────────────────────────────────────
 # _execute_remote_guard
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestExecuteRemoteGuard:
     def _make_core_with_client(self):
@@ -205,6 +208,7 @@ class TestExecuteRemoteGuard:
 # _log_to_all_transports
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestLogToAllTransports:
     def _make_core(self):
         config = HashedConfig()
@@ -263,6 +267,7 @@ class TestLogToAllTransports:
 # sync_wrapper async/sync interop
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestSyncWrapper:
     def _make_core(self):
         config = HashedConfig()
@@ -312,6 +317,7 @@ class TestSyncWrapper:
 # Performance tracking
 # ──────────────────────────────────────────────────────────────────────────────
 
+
 class TestPerformanceTracking:
     @pytest.mark.asyncio
     async def test_overhead_logged_at_debug(self, caplog):
@@ -327,7 +333,9 @@ class TestPerformanceTracking:
         with caplog.at_level(logging.DEBUG, logger="hashed.core"):
             await timed_fn()
 
-        overhead_logs = [r for r in caplog.records if "governance overhead" in r.message]
+        overhead_logs = [
+            r for r in caplog.records if "governance overhead" in r.message
+        ]
         assert len(overhead_logs) == 1
         assert "timed_tool" in overhead_logs[0].message
         assert "ms" in overhead_logs[0].message
@@ -336,6 +344,7 @@ class TestPerformanceTracking:
 # ──────────────────────────────────────────────────────────────────────────────
 # _background_sync exponential backoff
 # ──────────────────────────────────────────────────────────────────────────────
+
 
 class TestBackgroundSyncBackoff:
     @pytest.mark.asyncio
@@ -405,6 +414,6 @@ class TestBackgroundSyncBackoff:
         # After failure: sleep > base_interval (backoff added)
         # After success: sleep == base_interval (backoff reset to 0)
         assert len(sleep_calls) == 3
-        assert sleep_calls[0] == float(base_interval)       # first sleep, backoff=0
-        assert sleep_calls[1] > sleep_calls[0]              # after failure, backoff added
-        assert sleep_calls[2] == float(base_interval)       # after success, backoff reset
+        assert sleep_calls[0] == float(base_interval)  # first sleep, backoff=0
+        assert sleep_calls[1] > sleep_calls[0]  # after failure, backoff added
+        assert sleep_calls[2] == float(base_interval)  # after success, backoff reset

@@ -50,11 +50,13 @@ def _make_core(*, backend: bool = False) -> HashedCore:
 def _mock_http_client() -> MagicMock:
     """Return a mock httpx.AsyncClient that always succeeds."""
     mock = MagicMock()
-    mock.post = AsyncMock(return_value=MagicMock(
-        is_success=True,
-        status_code=200,
-        json=lambda: {"allowed": True, "policy": None, "message": "allowed"},
-    ))
+    mock.post = AsyncMock(
+        return_value=MagicMock(
+            is_success=True,
+            status_code=200,
+            json=lambda: {"allowed": True, "policy": None, "message": "allowed"},
+        )
+    )
     mock.aclose = AsyncMock()
     return mock
 
@@ -110,7 +112,11 @@ class TestGuardDefaultBehaviour:
 
         result = await my_tool(data="x")
         # The string should be self-explanatory to the agent
-        assert "Permission denied" in result or "not allowed" in result or "BLOCKED" in result
+        assert (
+            "Permission denied" in result
+            or "not allowed" in result
+            or "BLOCKED" in result
+        )
 
     @pytest.mark.asyncio
     async def test_denied_function_body_never_executes(self) -> None:
@@ -243,8 +249,7 @@ class TestGuardAuditLogging:
         log_entries = [c for c in log_calls if "/log" in c["url"]]
         assert log_entries, "Expected at least one POST to /log endpoint"
         denied_entries = [
-            c for c in log_entries
-            if c["payload"].get("status") == "denied"
+            c for c in log_entries if c["payload"].get("status") == "denied"
         ]
         assert denied_entries, "Expected log entry with status='denied'"
 
@@ -276,8 +281,7 @@ class TestGuardAuditLogging:
 
         log_entries = [c for c in log_calls if "/log" in c["url"]]
         success_entries = [
-            c for c in log_entries
-            if c["payload"].get("status") == "success"
+            c for c in log_entries if c["payload"].get("status") == "success"
         ]
         assert success_entries, "Expected log entry with status='success'"
 
@@ -334,42 +338,49 @@ class TestPolicy:
     def test_allowed_false_returns_false(self) -> None:
         """Policy.validate() returns False when allowed=False (line 52)."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=False)
         assert p.validate() is False
 
     def test_allowed_true_no_amount_returns_true(self) -> None:
         """Policy.validate() returns True when allowed and no amount checked."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=True)
         assert p.validate() is True
 
     def test_amount_within_limit_returns_true(self) -> None:
         """Policy.validate() returns True when amount ≤ max_amount."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=True, max_amount=100.0)
         assert p.validate(amount=50.0) is True
 
     def test_amount_exactly_at_limit_returns_true(self) -> None:
         """Policy.validate() returns True when amount == max_amount."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=True, max_amount=100.0)
         assert p.validate(amount=100.0) is True
 
     def test_amount_exceeds_limit_returns_false(self) -> None:
         """Policy.validate() returns False when amount > max_amount (line 57)."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=True, max_amount=100.0)
         assert p.validate(amount=101.0) is False
 
     def test_amount_none_with_max_amount_returns_true(self) -> None:
         """validate(amount=None) with a max_amount skips the limit check."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op", allowed=True, max_amount=100.0)
         assert p.validate(amount=None) is True
 
     def test_metadata_defaults_to_empty_dict(self) -> None:
         """Policy.__post_init__ sets metadata={} when None is passed."""
         from hashed.guard import Policy
+
         p = Policy(tool_name="op")
         assert p.metadata == {}
 
@@ -382,6 +393,7 @@ class TestPolicyEngine:
 
     def _engine(self):
         from hashed.guard import PolicyEngine
+
         return PolicyEngine()
 
     # remove_policy (line 120)
@@ -410,6 +422,7 @@ class TestPolicyEngine:
     def test_set_default_policy_deny_all(self) -> None:
         """set_default_policy(allowed=False) blocks unknown tools."""
         from hashed.guard import PermissionError as PE
+
         engine = self._engine()
         engine.set_default_policy(allowed=False)
         with pytest.raises(PE):
@@ -418,6 +431,7 @@ class TestPolicyEngine:
     def test_set_default_policy_max_amount(self) -> None:
         """set_default_policy with max_amount enforces limit on unknown tools."""
         from hashed.guard import PermissionError as PE
+
         engine = self._engine()
         engine.set_default_policy(max_amount=50.0)
         assert engine.validate("tool_x", amount=10.0) is True
@@ -455,10 +469,12 @@ class TestPolicyEngine:
     # bulk_add_policies (lines 258-259)
     def test_bulk_add_policies_adds_all(self) -> None:
         engine = self._engine()
-        engine.bulk_add_policies({
-            "wire": {"max_amount": 1000.0, "allowed": True},
-            "delete": {"allowed": False},
-        })
+        engine.bulk_add_policies(
+            {
+                "wire": {"max_amount": 1000.0, "allowed": True},
+                "delete": {"allowed": False},
+            }
+        )
         assert engine.has_policy("wire")
         assert engine.has_policy("delete")
         assert engine.get_policy("wire").max_amount == 1000.0
@@ -480,10 +496,12 @@ class TestPolicyEngine:
     # import_policies (line 289)
     def test_import_policies_loads_correctly(self) -> None:
         engine = self._engine()
-        engine.import_policies({
-            "send_sms": {"max_amount": None, "allowed": True},
-            "nuke":     {"max_amount": None, "allowed": False},
-        })
+        engine.import_policies(
+            {
+                "send_sms": {"max_amount": None, "allowed": True},
+                "nuke": {"max_amount": None, "allowed": False},
+            }
+        )
         assert engine.has_policy("send_sms")
         assert engine.has_policy("nuke")
         assert engine.get_policy("nuke").allowed is False

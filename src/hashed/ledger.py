@@ -13,6 +13,8 @@ This module implements an async ledger that:
 Producer-Consumer pattern with crash-safe durability.
 """
 
+from __future__ import annotations
+
 import asyncio
 import base64
 import functools
@@ -20,7 +22,7 @@ import hashlib
 import json
 import logging
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -39,11 +41,11 @@ _GENESIS_HASH = "genesis"
 _LEGACY_HASH = "legacy"
 
 # ── WAL encryption (C-08 remediation — OWASP ASVS 4.0 L2) ───────────────────
-_WAL_KDF_SALT = b"hashed-wal-v1"   # static salt — acceptable because the
-                                    # API key is already 128-bit random entropy
+_WAL_KDF_SALT = b"hashed-wal-v1"  # static salt — acceptable because the
+# API key is already 128-bit random entropy
 
 
-def _derive_fernet_key(api_key: str) -> Optional[Fernet]:
+def _derive_fernet_key(api_key: Optional[str]) -> Optional[Fernet]:
     """Derive a Fernet key from the API key using PBKDF2-HMAC-SHA256.
 
     The derived key is deterministic given the same ``api_key``, which is
@@ -73,6 +75,7 @@ def _derive_fernet_key(api_key: str) -> Optional[Fernet]:
 
 # ── Hash chain helpers (SPEC §3.2) ───────────────────────────────────────────
 
+
 def _compute_entry_hash(entry_plaintext: dict[str, Any], prev_hash: str) -> str:
     """Compute the SHA-256 hash for a WAL entry in the forward-linked chain.
 
@@ -100,11 +103,14 @@ def _compute_entry_hash(entry_plaintext: dict[str, Any], prev_hash: str) -> str:
         "timestamp": entry_plaintext["timestamp"],
         "prev_hash": prev_hash,
     }
-    canonical = json.dumps(hashable, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    canonical = json.dumps(
+        hashable, sort_keys=True, separators=(",", ":"), ensure_ascii=True
+    )
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
 
 # ── WAL helpers (sync, run in executor) ──────────────────────────────────────
+
 
 def _wal_init(db_path: str) -> None:
     """Create the WAL table (and hash-chain columns) if they don't exist.
@@ -118,7 +124,8 @@ def _wal_init(db_path: str) -> None:
       ``verify_chain()`` can treat them as trusted anchors.
     """
     with sqlite3.connect(db_path) as conn:
-        conn.execute("""
+        conn.execute(
+            """
             CREATE TABLE IF NOT EXISTS wal_entries (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 event_type TEXT    NOT NULL,
@@ -129,7 +136,8 @@ def _wal_init(db_path: str) -> None:
                 prev_hash  TEXT    NOT NULL DEFAULT 'genesis',
                 entry_hash TEXT    NOT NULL DEFAULT ''
             )
-        """)
+        """
+        )
         conn.execute("CREATE INDEX IF NOT EXISTS idx_sent ON wal_entries (sent)")
 
         # Soft migration: add hash-chain columns to existing WAL databases.
@@ -265,17 +273,21 @@ def _wal_rows_to_entries(
             except (InvalidToken, Exception):
                 pass  # already plaintext (migration path)
             try:
-                metadata_json = fernet.decrypt(metadata_json.encode("ascii")).decode("utf-8")
+                metadata_json = fernet.decrypt(metadata_json.encode("ascii")).decode(
+                    "utf-8"
+                )
             except (InvalidToken, Exception):
                 pass
 
-        entries.append({
-            "_wal_id": row_id,
-            "event_type": event_type,
-            "data": json.loads(data_json),
-            "metadata": json.loads(metadata_json),
-            "timestamp": timestamp,
-        })
+        entries.append(
+            {
+                "_wal_id": row_id,
+                "event_type": event_type,
+                "data": json.loads(data_json),
+                "metadata": json.loads(metadata_json),
+                "timestamp": timestamp,
+            }
+        )
     return entries
 
 
@@ -344,7 +356,7 @@ class AsyncLedger:
         self._api_key = api_key or (config.api_key if config else None)
         # WAL — set to None to disable durability
         self._wal_path: Optional[str] = (
-            str(Path(wal_path or _DEFAULT_WAL_PATH)) if wal_path is not False else None
+            str(Path(wal_path or _DEFAULT_WAL_PATH)) if wal_path is not False else None  # type: ignore[comparison-overlap]
         )
 
         # ── WAL encryption (C-08) ─────────────────────────────────────────────
@@ -358,7 +370,9 @@ class AsyncLedger:
                 self._wal_path,
             )
         elif self._wal_path and self._fernet:
-            logger.debug("WAL encryption enabled (Fernet/AES-128 — PBKDF2-SHA256 key derivation)")
+            logger.debug(
+                "WAL encryption enabled (Fernet/AES-128 — PBKDF2-SHA256 key derivation)"
+            )
 
         # ── Hash chain (SPEC §3.2) ────────────────────────────────────────────
         # Seeded to "genesis" at init; updated to the last WAL entry's hash
@@ -390,19 +404,25 @@ class AsyncLedger:
             unsent = await loop.run_in_executor(None, _wal_get_unsent, self._wal_path)
             if unsent:
                 recovered = _wal_rows_to_entries(unsent, fernet=self._fernet)
-                logger.info(f"WAL recovery: re-queuing {len(recovered)} unsent log entries")
+                logger.info(
+                    f"WAL recovery: re-queuing {len(recovered)} unsent log entries"
+                )
                 for entry in recovered:
                     try:
                         await self._queue.put(entry)
                     except asyncio.QueueFull:
-                        logger.warning("Queue full during WAL recovery — some entries dropped")
+                        logger.warning(
+                            "Queue full during WAL recovery — some entries dropped"
+                        )
                         break
 
             # Seed hash chain from last WAL entry so new entries continue the chain.
             self._last_entry_hash = await loop.run_in_executor(
                 None, _wal_get_last_entry_hash, self._wal_path
             )
-            logger.debug(f"Hash chain seeded: _last_entry_hash={self._last_entry_hash[:16]}…")
+            logger.debug(
+                f"Hash chain seeded: _last_entry_hash={self._last_entry_hash[:16]}…"
+            )
 
         # Init HTTP client
         headers = {}
@@ -470,7 +490,7 @@ class AsyncLedger:
             "event_type": event_type,
             "data": data,
             "metadata": metadata or {},
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
 
         # Write to WAL before touching the in-memory queue.
@@ -540,11 +560,24 @@ class AsyncLedger:
         rows = await loop.run_in_executor(None, _wal_get_all_for_verify, self._wal_path)
 
         if not rows:
-            return {"valid": True, "total_entries": 0, "broken_at": None, "reason": None}
+            return {
+                "valid": True,
+                "total_entries": 0,
+                "broken_at": None,
+                "reason": None,
+            }
 
         expected_prev_hash = _GENESIS_HASH
 
-        for row_id, event_type, data_enc, metadata_enc, timestamp, stored_prev_hash, stored_entry_hash in rows:
+        for (
+            row_id,
+            event_type,
+            data_enc,
+            metadata_enc,
+            timestamp,
+            stored_prev_hash,
+            stored_entry_hash,
+        ) in rows:
             # Legacy entries pre-date hash-chain support — use as anchor and skip.
             if stored_entry_hash == _LEGACY_HASH:
                 expected_prev_hash = _LEGACY_HASH
@@ -555,11 +588,15 @@ class AsyncLedger:
             metadata_json = metadata_enc
             if self._fernet:
                 try:
-                    data_json = self._fernet.decrypt(data_enc.encode("ascii")).decode("utf-8")
+                    data_json = self._fernet.decrypt(data_enc.encode("ascii")).decode(
+                        "utf-8"
+                    )
                 except Exception:
                     pass  # plaintext fallback
                 try:
-                    metadata_json = self._fernet.decrypt(metadata_enc.encode("ascii")).decode("utf-8")
+                    metadata_json = self._fernet.decrypt(
+                        metadata_enc.encode("ascii")
+                    ).decode("utf-8")
                 except Exception:
                     pass
 
@@ -605,7 +642,12 @@ class AsyncLedger:
 
             expected_prev_hash = stored_entry_hash
 
-        return {"valid": True, "total_entries": len(rows), "broken_at": None, "reason": None}
+        return {
+            "valid": True,
+            "total_entries": len(rows),
+            "broken_at": None,
+            "reason": None,
+        }
 
     # ── Internal ──────────────────────────────────────────────────────────────
 
@@ -622,7 +664,9 @@ class AsyncLedger:
                     if remaining <= 0:
                         break
                     try:
-                        entry = await asyncio.wait_for(self._queue.get(), timeout=remaining)
+                        entry = await asyncio.wait_for(
+                            self._queue.get(), timeout=remaining
+                        )
                         self._pending_logs.append(entry)
                     except asyncio.TimeoutError:
                         break
@@ -650,7 +694,7 @@ class AsyncLedger:
         payload: dict[str, Any] = {
             "logs": clean_logs,
             "batch_size": len(clean_logs),
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
         }
         if self._agent_public_key:
             payload["agent_public_key"] = self._agent_public_key
@@ -672,7 +716,9 @@ class AsyncLedger:
                         None, _wal_mark_sent, self._wal_path, wal_ids
                     )
             else:
-                logger.error(f"Ledger send failed: {response.status_code} — {response.text}")
+                logger.error(
+                    f"Ledger send failed: {response.status_code} — {response.text}"
+                )
 
         except httpx.HTTPError as e:
             logger.error(f"HTTP error sending ledger batch: {e}")
@@ -695,5 +741,10 @@ class AsyncLedger:
         await self.start()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
         await self.stop()

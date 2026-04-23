@@ -20,14 +20,19 @@ from rich.panel import Panel
 from rich.table import Table
 
 from hashed import HashedConfig, load_or_create_identity
-from hashed.templates import FRAMEWORK_INSTALL, FRAMEWORK_LABELS, FRAMEWORKS, render_agent_script
+from hashed.templates import (
+    FRAMEWORK_INSTALL,
+    FRAMEWORK_LABELS,
+    FRAMEWORKS,
+    render_agent_script,
+)
 
 # Initialize Typer app
 app = typer.Typer(
     name="hashed",
     help="🔐 Hashed - AI Agent Governance & Security CLI",
     add_completion=False,
-    no_args_is_help=False,   # we handle no-args ourselves to show banner
+    no_args_is_help=False,  # we handle no-args ourselves to show banner
 )
 
 
@@ -37,9 +42,11 @@ def _app_root(ctx: typer.Context) -> None:
     if ctx.invoked_subcommand is None:
         from hashed import __version__
         from hashed.banner import show_banner
+
         show_banner(version=__version__)
         console.print(ctx.get_help())
         raise typer.Exit()
+
 
 # Rich console for beautiful output
 console = Console()
@@ -55,13 +62,14 @@ CREDENTIALS_FILE = CREDENTIALS_DIR / "credentials.json"
 try:
     import keyring as _keyring  # type: ignore[import]
     import keyring.errors as _keyring_errors  # type: ignore[import]
+
     _KEYRING_AVAILABLE = True
 except ImportError:
     _KEYRING_AVAILABLE = False
     _keyring_errors = None  # type: ignore[assignment]
 
 _KEYRING_SERVICE = "hashed-sdk"
-_KEYRING_ACCOUNT = "api_key"          # account key used inside the service
+_KEYRING_ACCOUNT = "api_key"  # account key used inside the service
 
 # Sub-commands
 identity_app = typer.Typer(help="🔑 Manage agent identities")
@@ -78,6 +86,7 @@ app.add_typer(logs_app, name="logs")
 # ============================================================================
 # UTILITY FUNCTIONS
 # ============================================================================
+
 
 def get_config() -> HashedConfig:
     """Load configuration from environment."""
@@ -108,11 +117,12 @@ def warning(message: str) -> None:
 # MAIN COMMANDS
 # ============================================================================
 
+
 def _to_snake_case(name: str) -> str:
     """Convert 'My Agent Name' to 'my_agent_name'."""
     # Replace non-alphanumeric with spaces, then join with underscores
-    cleaned = re.sub(r'[^a-zA-Z0-9\s]', '', name)
-    return re.sub(r'\s+', '_', cleaned.strip()).lower()
+    cleaned = re.sub(r"[^a-zA-Z0-9\s]", "", name)
+    return re.sub(r"\s+", "_", cleaned.strip()).lower()
 
 
 @app.command()
@@ -121,16 +131,20 @@ def init(
     agent_type: str = typer.Option("general", "--type", "-t", help="Agent type"),
     framework: str = typer.Option(
         "plain",
-        "--framework", "--fw",
+        "--framework",
+        "--fw",
         help=f"AI framework: {', '.join(FRAMEWORKS)}",
         show_default=True,
     ),
     interactive: bool = typer.Option(
         False,
-        "--interactive", "-i",
+        "--interactive",
+        "-i",
         help="Add interactive REPL loop (chat mode in terminal)",
     ),
-    create_config: bool = typer.Option(True, "--config/--no-config", help="Create .env config file"),
+    create_config: bool = typer.Option(
+        True, "--config/--no-config", help="Create .env config file"
+    ),
     force: bool = typer.Option(False, "--force", "-f", help="Overwrite existing files"),
 ):
     """
@@ -152,11 +166,13 @@ def init(
         raise typer.Exit(1)
 
     fw_label = FRAMEWORK_LABELS[framework]
-    console.print(Panel.fit(
-        f"[bold cyan]Hashed Agent Initialization[/bold cyan]\n"
-        f"[dim]Framework: {fw_label}{'  ·  Interactive' if interactive else ''}[/dim]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit(
+            f"[bold cyan]Hashed Agent Initialization[/bold cyan]\n"
+            f"[dim]Framework: {fw_label}{'  ·  Interactive' if interactive else ''}[/dim]",
+            border_style="cyan",
+        )
+    )
 
     try:
         # Derive file names from agent name
@@ -179,6 +195,7 @@ def init(
         # Auto-generates a secure password if HASHED_IDENTITY_PASSWORD is not set.
         # Saves to ~/.hashed/identity_password (chmod 0600) for reuse across runs.
         from hashed.identity_store import get_or_create_identity_password
+
         password = get_or_create_identity_password()
 
         identity = load_or_create_identity(identity_file, password)
@@ -205,7 +222,9 @@ def init(
                 api_key_value = saved_api_key or "your_api_key_here"
 
                 env_content = "# Hashed Configuration\n"
-                env_content += "HASHED_BACKEND_URL=https://iamandagent-production.up.railway.app\n"
+                env_content += (
+                    "HASHED_BACKEND_URL=https://iamandagent-production.up.railway.app\n"
+                )
                 env_content += f"HASHED_API_KEY={api_key_value}\n"
                 env_content += f"HASHED_IDENTITY_PASSWORD={password}\n"
                 if framework in ("langchain", "crewai", "autogen"):
@@ -217,22 +236,32 @@ def init(
                 env_file.write_text(env_content)
                 success(f"Created configuration: {env_file}")
                 if saved_api_key:
-                    success("✓ HASHED_API_KEY auto-populated from your login credentials")
+                    success(
+                        "✓ HASHED_API_KEY auto-populated from your login credentials"
+                    )
                 else:
-                    warning("⚠️  Update HASHED_API_KEY in .env — run: hashed whoami --show-key")
+                    warning(
+                        "⚠️  Update HASHED_API_KEY in .env — run: hashed whoami --show-key"
+                    )
             else:
                 info(".env file already exists, skipping")
 
         # Create agent script
         script_path = Path(script_file)
         if script_path.exists() and not force:
-            overwrite = typer.confirm(f"  {script_file} already exists. Overwrite?", default=False)
+            overwrite = typer.confirm(
+                f"  {script_file} already exists. Overwrite?", default=False
+            )
             if not overwrite:
                 info(f"Skipped {script_file}")
             else:
-                _write_agent_script(script_path, name, agent_type, identity_file, framework, interactive)
+                _write_agent_script(
+                    script_path, name, agent_type, identity_file, framework, interactive
+                )
         else:
-            _write_agent_script(script_path, name, agent_type, identity_file, framework, interactive)
+            _write_agent_script(
+                script_path, name, agent_type, identity_file, framework, interactive
+            )
 
         # Final instructions
         console.print()
@@ -246,7 +275,9 @@ def init(
             step += 1
         console.print(f"  {step}. Update .env with your API keys")
         step += 1
-        console.print(f"  {step}. Add policies: [bold]hashed policy add <tool> --allow --agent \"{name}\"[/bold]")
+        console.print(
+            f'  {step}. Add policies: [bold]hashed policy add <tool> --allow --agent "{name}"[/bold]'
+        )
         step += 1
         console.print(f"  {step}. Run: [bold]python3 {script_file}[/bold]")
         step += 1
@@ -296,13 +327,14 @@ def _write_agent_script(
         info(f"  Generated {total_pols} @core.guard() tool(s) from policies")
     else:
         info("  No policies found → example tool generated")
-        info(f"  Add policies: hashed policy add <tool> --allow --agent \"{name}\"")
+        info(f'  Add policies: hashed policy add <tool> --allow --agent "{name}"')
 
 
 @app.command()
 def version():
     """📦 Show Hashed version."""
     from hashed import __version__
+
     console.print(f"[cyan]Hashed SDK[/cyan] version [green]{__version__}[/green]")
 
 
@@ -310,10 +342,15 @@ def version():
 # IDENTITY COMMANDS
 # ============================================================================
 
+
 @identity_app.command("create")
 def identity_create(
-    output: str = typer.Option("./secrets/agent_key.pem", "--output", "-o", help="Output file path"),
-    password: Optional[str] = typer.Option(None, "--password", "-p", help="Encryption password"),
+    output: str = typer.Option(
+        "./secrets/agent_key.pem", "--output", "-o", help="Output file path"
+    ),
+    password: Optional[str] = typer.Option(
+        None, "--password", "-p", help="Encryption password"
+    ),
 ):
     """
     🔑 Create a new cryptographic identity.
@@ -346,8 +383,12 @@ def identity_create(
 
 @identity_app.command("show")
 def identity_show(
-    identity_file: str = typer.Option("./secrets/agent_key.pem", "--file", "-f", help="Identity file path"),
-    password: Optional[str] = typer.Option(None, "--password", "-p", help="Decryption password"),
+    identity_file: str = typer.Option(
+        "./secrets/agent_key.pem", "--file", "-f", help="Identity file path"
+    ),
+    password: Optional[str] = typer.Option(
+        None, "--password", "-p", help="Decryption password"
+    ),
 ):
     """
     👁️  Show identity information.
@@ -383,20 +424,28 @@ def identity_show(
 @identity_app.command("export")
 def identity_export(
     identity_file: str = typer.Option(
-        "./secrets/agent_key.pem", "--file", "-f",
-        help="Path to the .pem identity file to export"
+        "./secrets/agent_key.pem",
+        "--file",
+        "-f",
+        help="Path to the .pem identity file to export",
     ),
     password: Optional[str] = typer.Option(
-        None, "--password", "-p",
-        help="Decryption password (if the key was saved encrypted)"
+        None,
+        "--password",
+        "-p",
+        help="Decryption password (if the key was saved encrypted)",
     ),
     agent: Optional[str] = typer.Option(
-        None, "--agent", "-a",
-        help="Agent name shortcut — looks in ~/.hashed/agents/<name>.pem"
+        None,
+        "--agent",
+        "-a",
+        help="Agent name shortcut — looks in ~/.hashed/agents/<name>.pem",
     ),
     quiet: bool = typer.Option(
-        False, "--quiet", "-q",
-        help="Print only the base64 string (for piping into scripts)"
+        False,
+        "--quiet",
+        "-q",
+        help="Print only the base64 string (for piping into scripts)",
     ),
 ):
     """
@@ -454,12 +503,14 @@ def identity_export(
 
         # Pretty output for humans
         console.print()
-        console.print(Panel(
-            f"[bold green]{b64}[/bold green]",
-            title="[cyan]HASHED_AGENT_PRIVATE_KEY[/cyan]",
-            subtitle="[dim]Set this in your cloud provider's env vars[/dim]",
-            border_style="cyan",
-        ))
+        console.print(
+            Panel(
+                f"[bold green]{b64}[/bold green]",
+                title="[cyan]HASHED_AGENT_PRIVATE_KEY[/cyan]",
+                subtitle="[dim]Set this in your cloud provider's env vars[/dim]",
+                border_style="cyan",
+            )
+        )
         console.print()
 
         table = Table(box=box.ROUNDED, show_header=False)
@@ -496,7 +547,9 @@ def identity_export(
 @identity_app.command("sign")
 def identity_sign(
     message: str = typer.Argument(..., help="Message to sign"),
-    identity_file: str = typer.Option("./secrets/agent_key.pem", "--file", "-f", help="Identity file"),
+    identity_file: str = typer.Option(
+        "./secrets/agent_key.pem", "--file", "-f", help="Identity file"
+    ),
 ):
     """
     ✍️  Sign a message with identity.
@@ -543,7 +596,9 @@ def _save_policies(policies: dict, config_file: str = POLICY_FILE) -> None:
     Path(config_file).write_text(json.dumps(policies, indent=2))
 
 
-def _resolve_policy(policies: dict, tool_name: str, agent_name: Optional[str] = None) -> Optional[dict]:
+def _resolve_policy(
+    policies: dict, tool_name: str, agent_name: Optional[str] = None
+) -> Optional[dict]:
     """Resolve a policy: agent-specific first, then global fallback."""
     if agent_name:
         snake = _to_snake_case(agent_name)
@@ -558,13 +613,20 @@ def _resolve_policy(policies: dict, tool_name: str, agent_name: Optional[str] = 
 # POLICY COMMANDS
 # ============================================================================
 
+
 @policy_app.command("add")
 def policy_add(
     tool_name: str = typer.Argument(..., help="Tool/operation name"),
     allowed: bool = typer.Option(True, "--allow/--deny", help="Allow or deny"),
-    max_amount: Optional[float] = typer.Option(None, "--max-amount", "-m", help="Maximum amount"),
-    agent_name: Optional[str] = typer.Option(None, "--agent", help="Agent name (omit for global)"),
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    max_amount: Optional[float] = typer.Option(
+        None, "--max-amount", "-m", help="Maximum amount"
+    ),
+    agent_name: Optional[str] = typer.Option(
+        None, "--agent", help="Agent name (omit for global)"
+    ),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     ➕ Add a policy rule (global or per-agent).
@@ -580,7 +642,7 @@ def policy_add(
         entry = {
             "allowed": allowed,
             "max_amount": max_amount,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
 
         if agent_name:
@@ -607,9 +669,15 @@ def policy_add(
 
 @policy_app.command("list")
 def policy_list(
-    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Filter by agent"),
-    output_format: str = typer.Option("table", "--format", "-f", help="Output format (table/json)"),
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(
+        None, "--agent", "-a", help="Filter by agent"
+    ),
+    output_format: str = typer.Option(
+        "table", "--format", "-f", help="Output format (table/json)"
+    ),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     📋 List policies (all, global, or per-agent).
@@ -680,7 +748,9 @@ def _add_policy_row(table: Table, tool_name: str, policy: dict) -> None:
     """Add a formatted row to a policy table."""
     allowed = "✓ Yes" if policy["allowed"] else "✗ No"
     style = "green" if policy["allowed"] else "red"
-    max_amt = str(policy.get("max_amount")) if policy.get("max_amount") is not None else "-"
+    max_amt = (
+        str(policy.get("max_amount")) if policy.get("max_amount") is not None else "-"
+    )
     created = policy.get("created_at", "-")[:10]
     table.add_row(tool_name, f"[{style}]{allowed}[/]", max_amt, created)
 
@@ -688,8 +758,12 @@ def _add_policy_row(table: Table, tool_name: str, policy: dict) -> None:
 @policy_app.command("remove")
 def policy_remove(
     tool_name: str = typer.Argument(..., help="Tool/operation name"),
-    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent name (omit for global)"),
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(
+        None, "--agent", "-a", help="Agent name (omit for global)"
+    ),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     ➖ Remove a policy rule.
@@ -728,9 +802,15 @@ def policy_remove(
 @policy_app.command("test")
 def policy_test(
     tool_name: str = typer.Argument(..., help="Tool to test"),
-    agent_name: Optional[str] = typer.Option(None, "--agent", "-a", help="Agent to test as"),
-    amount: Optional[float] = typer.Option(None, "--amount", "-m", help="Amount to test"),
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    agent_name: Optional[str] = typer.Option(
+        None, "--agent", "-a", help="Agent to test as"
+    ),
+    amount: Optional[float] = typer.Option(
+        None, "--amount", "-m", help="Amount to test"
+    ),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     🧪 Test if an operation would be allowed.
@@ -748,20 +828,28 @@ def policy_test(
         scope = f"agent:{_to_snake_case(agent_name)}" if agent_name else "global"
 
         if not policy:
-            info(f"No policy for '{tool_name}' ({scope}) → default: [green]ALLOWED[/green]")
+            info(
+                f"No policy for '{tool_name}' ({scope}) → default: [green]ALLOWED[/green]"
+            )
             return
 
         # Check allowed
         if not policy["allowed"]:
-            console.print(f"[red]✗ DENIED[/red] - Policy denies '{tool_name}' ({scope})")
+            console.print(
+                f"[red]✗ DENIED[/red] - Policy denies '{tool_name}' ({scope})"
+            )
             return
 
         # Check amount
         if amount is not None and policy.get("max_amount") is not None:
             if amount > policy["max_amount"]:
-                console.print(f"[red]✗ DENIED[/red] - Amount ${amount} exceeds max ${policy['max_amount']}")
+                console.print(
+                    f"[red]✗ DENIED[/red] - Amount ${amount} exceeds max ${policy['max_amount']}"
+                )
                 return
-            console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted (${amount} ≤ ${policy['max_amount']})")
+            console.print(
+                f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted (${amount} ≤ ${policy['max_amount']})"
+            )
             return
 
         console.print(f"[green]✓ ALLOWED[/green] - '{tool_name}' permitted ({scope})")
@@ -775,14 +863,16 @@ def policy_test(
 # POLICY SYNC (push/pull)
 # ============================================================================
 
+
 def _normalize_name(name: str) -> str:
     """Normalize agent name for matching: remove all non-alphanumeric, lowercase."""
-    return re.sub(r'[^a-z0-9]', '', name.lower())
+    return re.sub(r"[^a-z0-9]", "", name.lower())
 
 
 def _get_sync_credentials() -> tuple:
     """Get API key and backend URL for sync, preferring ~/.hashed/credentials.json."""
     from dotenv import load_dotenv
+
     load_dotenv()
 
     # Priority: credentials.json > .env > HashedConfig
@@ -805,7 +895,9 @@ def _get_sync_credentials() -> tuple:
 
 @policy_app.command("push")
 def policy_push(
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     ⬆️  Push local policies to backend (JSON → Supabase).
@@ -816,6 +908,7 @@ def policy_push(
     Example:
         hashed policy push
     """
+
     async def _push():
         try:
             import httpx
@@ -843,7 +936,7 @@ def policy_push(
                     error("Check your credentials: hashed whoami")
                     raise typer.Exit(1)
 
-                agent_map: dict = {}     # normalized_name → agent_id
+                agent_map: dict = {}  # normalized_name → agent_id
                 agent_display: dict = {}  # normalized_name → original name
                 for a in agents_resp.json().get("agents", []):
                     norm = _normalize_name(a["name"])
@@ -855,7 +948,9 @@ def policy_push(
                     f"{backend_url}/v1/policies", headers=headers
                 )
                 if not backend_resp.is_success:
-                    error(f"Failed to fetch backend policies: {backend_resp.status_code}")
+                    error(
+                        f"Failed to fetch backend policies: {backend_resp.status_code}"
+                    )
                     raise typer.Exit(1)
 
                 # Build backend index: (tool_name, agent_id_or_None) → policy_id
@@ -908,7 +1003,9 @@ def policy_push(
 
                     if not agent_id:
                         available = [f"'{v}'" for v in agent_display.values()]
-                        warning(f"  Agent '{agent_key}' not found on backend. Skipping.")
+                        warning(
+                            f"  Agent '{agent_key}' not found on backend. Skipping."
+                        )
                         if available:
                             info(f"    Available: {', '.join(available)}")
                         else:
@@ -920,7 +1017,8 @@ def policy_push(
 
                     for tool_name, pol in tools.items():
                         await _upsert(
-                            tool_name, pol,
+                            tool_name,
+                            pol,
                             agent_id=agent_id,
                             scope=f"agent:{agent_key}",
                         )
@@ -940,9 +1038,13 @@ def policy_push(
                             if del_resp.is_success:
                                 deleted += 1
                                 scope = f"agent:{agent_id}" if agent_id else "global"
-                                console.print(f"  [red]🗑️  {tool_name} ({scope}) — removed from backend[/red]")
+                                console.print(
+                                    f"  [red]🗑️  {tool_name} ({scope}) — removed from backend[/red]"
+                                )
                             else:
-                                warning(f"  ⚠ Could not delete {tool_name}: {del_resp.status_code}")
+                                warning(
+                                    f"  ⚠ Could not delete {tool_name}: {del_resp.status_code}"
+                                )
                         except Exception as exc:
                             error(f"  ✗ Delete {tool_name}: {exc}")
                             errors_count += 1
@@ -963,13 +1065,17 @@ def policy_push(
             error(f"Push failed: {e}")
             raise typer.Exit(1)
 
-    console.print(Panel.fit("[bold cyan]Policy Push → Backend[/bold cyan]", border_style="cyan"))
+    console.print(
+        Panel.fit("[bold cyan]Policy Push → Backend[/bold cyan]", border_style="cyan")
+    )
     asyncio.run(_push())
 
 
 @policy_app.command("pull")
 def policy_pull(
-    config_file: str = typer.Option(POLICY_FILE, "--config", "-c", help="Policy config file"),
+    config_file: str = typer.Option(
+        POLICY_FILE, "--config", "-c", help="Policy config file"
+    ),
 ):
     """
     ⬇️  Pull policies from backend to local JSON (Supabase → JSON).
@@ -979,6 +1085,7 @@ def policy_pull(
     Example:
         hashed policy pull
     """
+
     async def _pull():
         try:
             import httpx
@@ -1017,7 +1124,7 @@ def policy_pull(
                 entry = {
                     "allowed": pol["allowed"],
                     "max_amount": pol.get("max_amount"),
-                    "created_at": pol.get("created_at", datetime.now().isoformat())
+                    "created_at": pol.get("created_at", datetime.now().isoformat()),
                 }
 
                 if pol.get("agent_id"):
@@ -1043,7 +1150,9 @@ def policy_pull(
             error(f"Pull failed: {e}")
             raise typer.Exit(1)
 
-    console.print(Panel.fit("[bold cyan]Policy Pull ← Backend[/bold cyan]", border_style="cyan"))
+    console.print(
+        Panel.fit("[bold cyan]Policy Pull ← Backend[/bold cyan]", border_style="cyan")
+    )
     asyncio.run(_pull())
 
 
@@ -1051,11 +1160,13 @@ def policy_pull(
 # AGENT COMMANDS
 # ============================================================================
 
+
 @agent_app.command("list")
 def agent_list():
     """
     📋 List registered agents (requires backend).
     """
+
     async def _list():
         try:
             api_key, backend_url = _get_sync_credentials()
@@ -1066,10 +1177,10 @@ def agent_list():
 
             # Simple HTTP request to backend
             import httpx
+
             async with httpx.AsyncClient() as client:
                 response = await client.get(
-                    f"{backend_url}/v1/agents",
-                    headers={"X-API-KEY": api_key}
+                    f"{backend_url}/v1/agents", headers={"X-API-KEY": api_key}
                 )
 
                 if not response.is_success:
@@ -1090,12 +1201,16 @@ def agent_list():
                 table.add_column("Status", style="bold")
 
                 for agent in agents:
-                    status = "🟢 Active" if agent.get("status") == "active" else "🔴 Inactive"
+                    status = (
+                        "🟢 Active"
+                        if agent.get("status") == "active"
+                        else "🔴 Inactive"
+                    )
                     table.add_row(
                         agent["name"],
                         agent.get("agent_type", "-"),
                         agent["public_key"][:16] + "...",
-                        status
+                        status,
                     )
 
                 console.print(table)
@@ -1110,7 +1225,9 @@ def agent_list():
 @agent_app.command("delete")
 def agent_delete(
     name: str = typer.Argument(..., help="Agent name to delete"),
-    agent_id: Optional[str] = typer.Option(None, "--id", help="Agent ID (use instead of name)"),
+    agent_id: Optional[str] = typer.Option(
+        None, "--id", help="Agent ID (use instead of name)"
+    ),
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ):
     """
@@ -1124,6 +1241,7 @@ def agent_delete(
         hashed agent delete "Research Agent 4" --yes
         hashed agent delete --id abc123-...
     """
+
     async def _delete():
         try:
             config = get_config()
@@ -1134,6 +1252,7 @@ def agent_delete(
                 raise typer.Exit(1)
 
             import httpx
+
             async with httpx.AsyncClient() as client:
                 headers = {"X-API-KEY": config.api_key or ""}
 
@@ -1220,14 +1339,18 @@ def agent_delete(
 # LOGS COMMANDS
 # ============================================================================
 
+
 @logs_app.command("list")
 def logs_list(
     limit: int = typer.Option(10, "--limit", "-l", help="Number of logs to show"),
-    status: Optional[str] = typer.Option(None, "--status", "-s", help="Filter by status"),
+    status: Optional[str] = typer.Option(
+        None, "--status", "-s", help="Filter by status"
+    ),
 ):
     """
     📝 View recent audit logs (requires backend).
     """
+
     async def _list():
         try:
             api_key, backend_url = _get_sync_credentials()
@@ -1237,6 +1360,7 @@ def logs_list(
                 raise typer.Exit(1)
 
             import httpx
+
             async with httpx.AsyncClient() as client:
                 # Build params dict
                 params = {"limit": limit}
@@ -1246,7 +1370,7 @@ def logs_list(
                 response = await client.get(
                     f"{backend_url}/v1/logs",
                     params=params,
-                    headers={"X-API-KEY": api_key}
+                    headers={"X-API-KEY": api_key},
                 )
 
                 if not response.is_success:
@@ -1272,23 +1396,21 @@ def logs_list(
                     log_status = log["status"]
                     agent = log.get("agent_name", "Unknown")[:20]
 
-                    status_emoji = {
-                        "success": "✓",
-                        "denied": "✗",
-                        "error": "⚠"
-                    }.get(log_status, "•")
+                    status_emoji = {"success": "✓", "denied": "✗", "error": "⚠"}.get(
+                        log_status, "•"
+                    )
 
                     status_color = {
                         "success": "green",
                         "denied": "red",
-                        "error": "yellow"
+                        "error": "yellow",
                     }.get(log_status, "white")
 
                     table.add_row(
                         timestamp,
                         tool,
                         f"[{status_color}]{status_emoji} {log_status}[/]",
-                        agent
+                        agent,
                     )
 
                 console.print(table)
@@ -1303,6 +1425,7 @@ def logs_list(
 # ============================================================================
 # CREDENTIALS HELPERS
 # ============================================================================
+
 
 def save_credentials(data: dict) -> None:
     """Save credentials — API key to OS keychain, metadata to JSON file.
@@ -1329,13 +1452,14 @@ def save_credentials(data: dict) -> None:
             _keyring.set_password(_KEYRING_SERVICE, account, api_key)
             # Write only non-sensitive metadata to disk
             safe = {k: v for k, v in data.items() if k != "api_key"}
-            safe["_keyring"] = True          # flag: key is in keychain
+            safe["_keyring"] = True  # flag: key is in keychain
             CREDENTIALS_FILE.write_text(json.dumps(safe, indent=2))
             CREDENTIALS_FILE.chmod(0o600)
             return
-        except Exception as exc:            # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             # Keychain unavailable (e.g. locked, headless CI) → fall through
             import logging
+
             logging.getLogger(__name__).warning(
                 "Keychain write failed (%s). Falling back to file storage.", exc
             )
@@ -1343,6 +1467,7 @@ def save_credentials(data: dict) -> None:
     # ── Fallback: plaintext file ─────────────────────────────────────────────
     if not _KEYRING_AVAILABLE:
         import logging
+
         logging.getLogger(__name__).warning(
             "⚠️  'keyring' not installed — API key stored in plaintext at %s. "
             "Install hashed-sdk[secure] for OS-keychain storage (C-02).",
@@ -1370,11 +1495,11 @@ def load_credentials() -> Optional[dict]:
             try:
                 api_key = _keyring.get_password(_KEYRING_SERVICE, account)
                 if api_key:
-                    creds = dict(creds)          # shallow copy
+                    creds = dict(creds)  # shallow copy
                     creds["api_key"] = api_key
                     return creds
-            except Exception:                    # noqa: BLE001
-                pass                             # fall through to file value
+            except Exception:  # noqa: BLE001
+                pass  # fall through to file value
 
         return creds
     except Exception:
@@ -1391,8 +1516,8 @@ def clear_credentials() -> None:
                 org_id = creds.get("org_id", "default")
                 account = f"{_KEYRING_ACCOUNT}:{org_id}"
                 _keyring.delete_password(_KEYRING_SERVICE, account)
-        except Exception:                        # noqa: BLE001
-            pass                                 # keychain entry may not exist
+        except Exception:  # noqa: BLE001
+            pass  # keychain entry may not exist
 
     if CREDENTIALS_FILE.exists():
         CREDENTIALS_FILE.unlink()
@@ -1402,11 +1527,13 @@ def clear_credentials() -> None:
 # AUTH COMMANDS (Signup, Login, Logout, Whoami)
 # ============================================================================
 
+
 @app.command()
 def signup(
     backend_url: str = typer.Option(
         "https://iamandagent-production.up.railway.app",
-        "--backend", "-b",
+        "--backend",
+        "-b",
         help="Backend URL",
     ),
 ):
@@ -1419,10 +1546,9 @@ def signup(
 
     import httpx
 
-    console.print(Panel.fit(
-        "[bold cyan]Hashed - Create Account[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit("[bold cyan]Hashed - Create Account[/bold cyan]", border_style="cyan")
+    )
 
     # Gather info
     email = typer.prompt("Email")
@@ -1444,7 +1570,7 @@ def signup(
         with httpx.Client(timeout=30) as client:
             response = client.post(
                 f"{backend_url}/v1/auth/signup",
-                json={"email": email, "password": password, "org_name": org_name}
+                json={"email": email, "password": password, "org_name": org_name},
             )
 
             if response.status_code == 409:
@@ -1462,10 +1588,16 @@ def signup(
         already_confirmed = signup_data.get("email_confirmed", False)
         success("Account created!")
         if already_confirmed:
-            console.print("\n[green]✅ Email auto-confirmed — no confirmation step needed.[/green]\n")
+            console.print(
+                "\n[green]✅ Email auto-confirmed — no confirmation step needed.[/green]\n"
+            )
         else:
-            console.print(f"\n[yellow]📧 Confirmation email sent to [bold]{email}[/bold][/yellow]")
-            console.print("   Please check your inbox and click the confirmation link.\n")
+            console.print(
+                f"\n[yellow]📧 Confirmation email sent to [bold]{email}[/bold][/yellow]"
+            )
+            console.print(
+                "   Please check your inbox and click the confirmation link.\n"
+            )
 
     except httpx.ConnectError:
         error(f"Cannot connect to backend at {backend_url}")
@@ -1475,7 +1607,9 @@ def signup(
     # Step 2: Poll for email confirmation (skipped when server auto-confirmed)
     confirmed = already_confirmed
     if not already_confirmed:
-        console.print("[dim]⏳ Waiting for email confirmation... (press Ctrl+C to skip)[/dim]")
+        console.print(
+            "[dim]⏳ Waiting for email confirmation... (press Ctrl+C to skip)[/dim]"
+        )
         try:
             with httpx.Client(timeout=10) as client:
                 for i in range(120):  # Wait up to 6 minutes
@@ -1483,7 +1617,7 @@ def signup(
                     try:
                         check = client.get(
                             f"{backend_url}/v1/auth/check-confirmation",
-                            params={"email": email}
+                            params={"email": email},
                         )
                         if check.is_success and check.json().get("confirmed"):
                             confirmed = True
@@ -1515,7 +1649,7 @@ def signup(
         with httpx.Client(timeout=30) as client:
             login_resp = client.post(
                 f"{backend_url}/v1/auth/login",
-                json={"email": email, "password": password}
+                json={"email": email, "password": password},
             )
 
             if not login_resp.is_success:
@@ -1531,7 +1665,7 @@ def signup(
             "api_key": data["api_key"],
             "org_id": data["org_id"],
             "backend_url": backend_url,
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
         }
         save_credentials(creds)
 
@@ -1548,7 +1682,7 @@ def signup(
 
         console.print("\n[bold green]✓ You're all set![/bold green]")
         console.print("\n[cyan]Next steps:[/cyan]")
-        console.print("  1. hashed init --name \"My Agent\" --type assistant")
+        console.print('  1. hashed init --name "My Agent" --type assistant')
         console.print("  2. python3 agent.py")
         console.print("  3. hashed logs list")
 
@@ -1564,7 +1698,8 @@ def login(
     password: Optional[str] = typer.Option(None, "--password", "-p", help="Password"),
     backend_url: str = typer.Option(
         "https://iamandagent-production.up.railway.app",
-        "--backend", "-b",
+        "--backend",
+        "-b",
         help="Backend URL",
     ),
 ):
@@ -1575,10 +1710,9 @@ def login(
     """
     import httpx
 
-    console.print(Panel.fit(
-        "[bold cyan]Hashed - Login[/bold cyan]",
-        border_style="cyan"
-    ))
+    console.print(
+        Panel.fit("[bold cyan]Hashed - Login[/bold cyan]", border_style="cyan")
+    )
 
     # Get credentials
     if not email:
@@ -1590,14 +1724,16 @@ def login(
         with httpx.Client(timeout=30) as client:
             response = client.post(
                 f"{backend_url}/v1/auth/login",
-                json={"email": email, "password": password}
+                json={"email": email, "password": password},
             )
 
             if response.status_code == 401:
                 error("Invalid email or password")
                 raise typer.Exit(1)
             elif response.status_code == 403:
-                error("Email not confirmed. Check your inbox for the confirmation link.")
+                error(
+                    "Email not confirmed. Check your inbox for the confirmation link."
+                )
                 raise typer.Exit(1)
             elif not response.is_success:
                 detail = response.json().get("detail", "Login failed")
@@ -1613,7 +1749,7 @@ def login(
             "api_key": data["api_key"],
             "org_id": data["org_id"],
             "backend_url": backend_url,
-            "logged_in_at": datetime.now().isoformat()
+            "logged_in_at": datetime.now().isoformat(),
         }
         save_credentials(creds)
 
@@ -1646,7 +1782,9 @@ def logout():
 @app.command()
 def whoami(
     show_key: bool = typer.Option(
-        False, "--show-key", "-k",
+        False,
+        "--show-key",
+        "-k",
         help="Reveal the full API key (keep secret — do not share)",
     ),
 ):
@@ -1664,7 +1802,9 @@ def whoami(
     if show_key:
         api_key_display = f"[bold yellow]{api_key_raw}[/bold yellow]"
     else:
-        api_key_display = api_key_raw[:25] + "...  [dim](use --show-key to reveal)[/dim]"
+        api_key_display = (
+            api_key_raw[:25] + "...  [dim](use --show-key to reveal)[/dim]"
+        )
 
     table = Table(title="Current Session", box=box.ROUNDED)
     table.add_column("Property", style="cyan")
@@ -1685,10 +1825,11 @@ def whoami(
 
 @app.command("account-delete")
 def account_delete(
-    yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompts (DANGEROUS)"),
+    yes: bool = typer.Option(
+        False, "--yes", "-y", help="Skip confirmation prompts (DANGEROUS)"
+    ),
     backend_url: Optional[str] = typer.Option(
-        None, "--backend", "-b",
-        help="Override backend URL (default: from credentials)"
+        None, "--backend", "-b", help="Override backend URL (default: from credentials)"
     ),
 ):
     """
@@ -1718,28 +1859,34 @@ def account_delete(
         error("Not logged in. Run: hashed login")
         raise typer.Exit(1)
 
-    url = backend_url or creds.get("backend_url", "https://iamandagent-production.up.railway.app")
+    url = backend_url or creds.get(
+        "backend_url", "https://iamandagent-production.up.railway.app"
+    )
     api_key = creds.get("api_key", "")
     email = creds.get("email", "your account")
     org_name = creds.get("org_name", "your organization")
 
     # ── Destructive warning panel ──────────────────────────────────────────
     console.print()
-    console.print(Panel(
-        f"[bold red]☠️  HYPER-DESTRUCTIVE OPERATION[/bold red]\n\n"
-        f"[red]This will PERMANENTLY delete:[/red]\n"
-        f"  [red]•[/red] Organization: [bold]{org_name}[/bold]\n"
-        f"  [red]•[/red] ALL agents, policies, audit logs\n"
-        f"  [red]•[/red] Account: [bold]{email}[/bold]\n\n"
-        f"[bold red]There is NO undo. Data is gone forever.[/bold red]",
-        border_style="red",
-        title="[bold red]⚠️  DANGER ZONE[/bold red]",
-    ))
+    console.print(
+        Panel(
+            f"[bold red]☠️  HYPER-DESTRUCTIVE OPERATION[/bold red]\n\n"
+            f"[red]This will PERMANENTLY delete:[/red]\n"
+            f"  [red]•[/red] Organization: [bold]{org_name}[/bold]\n"
+            f"  [red]•[/red] ALL agents, policies, audit logs\n"
+            f"  [red]•[/red] Account: [bold]{email}[/bold]\n\n"
+            f"[bold red]There is NO undo. Data is gone forever.[/bold red]",
+            border_style="red",
+            title="[bold red]⚠️  DANGER ZONE[/bold red]",
+        )
+    )
     console.print()
 
     if not yes:
         # Anti-fat-finger check: user must type their email exactly
-        console.print(f"[bold red]To confirm, type your email address:[/bold red] [dim]{email}[/dim]")
+        console.print(
+            f"[bold red]To confirm, type your email address:[/bold red] [dim]{email}[/dim]"
+        )
         typed = typer.prompt("Email")
         if typed.strip() != email:
             error("Email does not match. Deletion cancelled.")
@@ -1777,15 +1924,17 @@ def account_delete(
         clear_credentials()
 
         console.print()
-        console.print(Panel(
-            f"[green]✓ Account permanently deleted[/green]\n\n"
-            f"[dim]Org ID: {data.get('deleted_org_id', '-')}[/dim]\n"
-            f"[dim]Auth user deleted: {data.get('auth_user_deleted', False)}[/dim]\n"
-            f"[dim]Deleted at: {data.get('deleted_at', '-')}[/dim]\n\n"
-            f"[dim]Local credentials cleared from {CREDENTIALS_FILE}[/dim]",
-            border_style="green",
-            title="[green]Deleted[/green]",
-        ))
+        console.print(
+            Panel(
+                f"[green]✓ Account permanently deleted[/green]\n\n"
+                f"[dim]Org ID: {data.get('deleted_org_id', '-')}[/dim]\n"
+                f"[dim]Auth user deleted: {data.get('auth_user_deleted', False)}[/dim]\n"
+                f"[dim]Deleted at: {data.get('deleted_at', '-')}[/dim]\n\n"
+                f"[dim]Local credentials cleared from {CREDENTIALS_FILE}[/dim]",
+                border_style="green",
+                title="[green]Deleted[/green]",
+            )
+        )
 
     except httpx.ConnectError:
         error(f"Cannot connect to backend at {url}")
@@ -1820,14 +1969,18 @@ def rotate_key(
         error("Not logged in. Run: hashed login")
         raise typer.Exit(1)
 
-    backend_url = creds.get("backend_url", "https://iamandagent-production.up.railway.app")
+    backend_url = creds.get(
+        "backend_url", "https://iamandagent-production.up.railway.app"
+    )
     api_key = creds.get("api_key", "")
 
-    console.print(Panel.fit(
-        "[bold yellow]🔄 API Key Rotation[/bold yellow]\n"
-        "[dim]The old key will be invalidated immediately.[/dim]",
-        border_style="yellow"
-    ))
+    console.print(
+        Panel.fit(
+            "[bold yellow]🔄 API Key Rotation[/bold yellow]\n"
+            "[dim]The old key will be invalidated immediately.[/dim]",
+            border_style="yellow",
+        )
+    )
 
     console.print(f"\n[dim]Current key:[/dim] [yellow]{api_key[:25]}...[/yellow]")
 
@@ -1884,7 +2037,9 @@ def rotate_key(
 
         console.print()
         console.print("[bold yellow]⚠️  Action required:[/bold yellow]")
-        console.print("   Update [bold]HASHED_API_KEY[/bold] in every agent's [bold].env[/bold] file:")
+        console.print(
+            "   Update [bold]HASHED_API_KEY[/bold] in every agent's [bold].env[/bold] file:"
+        )
         console.print(f"   [dim]HASHED_API_KEY={new_key}[/dim]")
 
     except httpx.ConnectError:
@@ -1900,6 +2055,7 @@ def rotate_key(
 # ============================================================================
 # ENTRY POINT
 # ============================================================================
+
 
 def main():
     """Main CLI entry point."""

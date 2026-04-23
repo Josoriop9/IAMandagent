@@ -5,7 +5,7 @@ This module defines Pydantic models for request and response validation,
 ensuring type safety and data integrity throughout the SDK.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Optional
 
@@ -23,10 +23,10 @@ class HashAlgorithm(str, Enum):
 
 class HashRequest(BaseModel):
     """
-    Request model for hashing operations.
+    Request model for a compute-hash operation.
 
-    This model validates input data before processing, following
-    the Interface Segregation Principle by providing a focused interface.
+    Used by the legacy HashedClient API (SHA-256/SHA-512/BLAKE2 computation).
+    Most SDK users interact with HashedCore and @core.guard() instead.
     """
 
     data: str = Field(
@@ -71,9 +71,10 @@ class HashRequest(BaseModel):
 
 class HashResponse(BaseModel):
     """
-    Response model for hashing operations.
+    Response model for a compute-hash operation.
 
-    Contains the result of a hashing operation along with metadata.
+    Contains the hex-encoded hash value, the algorithm used, and the
+    UTC timestamp at which the hash was computed.
     """
 
     hash_value: str = Field(
@@ -85,8 +86,8 @@ class HashResponse(BaseModel):
         description="Algorithm used for hashing",
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Timestamp of when the hash was computed",
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC timestamp of when the hash was computed",
     )
     metadata: dict[str, Any] = Field(
         default_factory=dict,
@@ -125,6 +126,6 @@ class APIResponse(BaseModel):
         description="Error message if the operation failed",
     )
     timestamp: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Timestamp of the response",
+        default_factory=lambda: datetime.now(timezone.utc),
+        description="UTC timestamp of the response",
     )

@@ -115,7 +115,12 @@ class TestPolicyCommands:
         )
         # Either exit code != 0 OR output contains denial indicator
         output = result.output.lower()
-        assert result.exit_code != 0 or "deny" in output or "exceed" in output or "❌" in output
+        assert (
+            result.exit_code != 0
+            or "deny" in output
+            or "exceed" in output
+            or "❌" in output
+        )
 
 
 # ── Identity commands ─────────────────────────────────────────────────────────
@@ -125,7 +130,12 @@ class TestPolicyCommands:
 # try to contact the backend (identity create may auto-register,
 # whoami may refresh tokens, etc.)
 _HTTP_PATCHES = [
-    patch("httpx.Client.send", return_value=MagicMock(status_code=200, is_success=True, text="{}", json=lambda: {})),
+    patch(
+        "httpx.Client.send",
+        return_value=MagicMock(
+            status_code=200, is_success=True, text="{}", json=lambda: {}
+        ),
+    ),
     patch("httpx.AsyncClient.send", new_callable=lambda: lambda *a, **kw: MagicMock()),
 ]
 
@@ -153,9 +163,10 @@ class TestIdentityCommands:
         assert result.exit_code == 0
         # Accept any token that is a hex string of at least 8 chars
         import re
-        assert re.search(r"[0-9a-fA-F]{8,}", result.output), (
-            f"Expected a hex key in output. Got:\n{result.output}"
-        )
+
+        assert re.search(
+            r"[0-9a-fA-F]{8,}", result.output
+        ), f"Expected a hex key in output. Got:\n{result.output}"
 
 
 # ── Auth commands (offline / no-credentials state) ───────────────────────────
@@ -167,7 +178,11 @@ class TestAuthCommands:
         """hashed whoami without credentials → graceful 'not logged in' message."""
         result = runner.invoke(app, ["whoami"])
         # Should not crash regardless of credentials
-        assert result.exit_code == 0 or "not" in result.output.lower() or isinstance(result.exit_code, int)
+        assert (
+            result.exit_code == 0
+            or "not" in result.output.lower()
+            or isinstance(result.exit_code, int)
+        )
 
     def test_logout_clears_state(self, tmp_workdir: Path) -> None:
         """hashed logout → exits cleanly even with no active session."""
@@ -182,7 +197,7 @@ class TestPolicyPushNoCredentials:
 
     @pytest.mark.skip(
         reason="policy push makes a real network connection even without credentials "
-               "— needs httpx-level mocking at the CLI transport layer. Tracked in Sprint 4."
+        "— needs httpx-level mocking at the CLI transport layer. Tracked in Sprint 4."
     )
     def test_policy_push_without_credentials_exits_gracefully(
         self, policy_file: Path, tmp_workdir: Path
@@ -237,17 +252,13 @@ class TestIdentityExportCommand:
 
     def test_export_human_output_contains_key_header(self, pem_file: Path) -> None:
         """Default (non-quiet) output should show HASHED_AGENT_PRIVATE_KEY panel."""
-        result = runner.invoke(
-            app, ["identity", "export", "--file", str(pem_file)]
-        )
+        result = runner.invoke(app, ["identity", "export", "--file", str(pem_file)])
         assert result.exit_code == 0
         assert "HASHED_AGENT_PRIVATE_KEY" in result.output
 
     def test_export_human_output_contains_setup_guide(self, pem_file: Path) -> None:
         """Default output should include cloud setup instructions."""
-        result = runner.invoke(
-            app, ["identity", "export", "--file", str(pem_file)]
-        )
+        result = runner.invoke(app, ["identity", "export", "--file", str(pem_file)])
         assert result.exit_code == 0
         # Should mention Railway or API key steps
         assert "Railway" in result.output or "HASHED_API_KEY" in result.output
@@ -261,7 +272,9 @@ class TestIdentityExportCommand:
         assert result.exit_code != 0
         assert "not found" in result.output.lower() or "error" in result.output.lower()
 
-    def test_export_round_trip_matches_public_key(self, pem_file: Path, monkeypatch) -> None:
+    def test_export_round_trip_matches_public_key(
+        self, pem_file: Path, monkeypatch
+    ) -> None:
         """base64 exported by CLI can be loaded back and yields the same public key."""
         from hashed.identity import IdentityManager
         from hashed.identity_store import load_identity_from_env

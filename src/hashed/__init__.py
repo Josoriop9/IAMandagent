@@ -1,8 +1,9 @@
 """
-Hashed SDK - A professional Python SDK for hashed operations.
+Hashed SDK — AI Agent Governance & Security.
 
-This package provides a clean, type-safe interface for cryptographic
-hashing operations and API interactions.
+Provides cryptographic identity (Ed25519), policy enforcement, and
+tamper-evident audit logging for AI agents.
+See https://github.com/Josoriop9/IAMandagent for docs.
 """
 
 from hashed.client import HashedClient
@@ -30,7 +31,7 @@ from hashed.identity_store import (
 from hashed.ledger import AsyncLedger
 from hashed.models import HashAlgorithm, HashRequest, HashResponse
 
-__version__ = "0.3.4"
+__version__ = "0.4.0"
 __all__ = [
     # Core
     "HashedClient",

@@ -9,6 +9,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-04-22
+
+### New Features
+
+- **Canonical signed payloads** with `nonce`, `timestamp_ns`, and `version` per SPEC §2.1 — every `@guard()` call now produces a full Ed25519-signed envelope; `sign_operation()` replaces the deprecated `sign_data()`.
+- **Forward-linked hash chain in `AsyncLedger`** — every WAL entry stores `prev_hash` and `entry_hash` (SHA-256). Retroactive tampering detectable in O(n) via `verify_chain()` (SPEC §3.2).
+- **Real LangChain integration (`HashedCallbackHandler`)** — `pip install hashed-sdk[langchain]`. Drop-in `BaseCallbackHandler` that enforces `PolicyEngine` on `on_tool_start`, logs signed envelopes on `on_tool_end` and `on_tool_error`. No langchain required in test environment.
+
+### Improvements
+
+- Replaced deprecated `datetime.utcnow()` with `datetime.now(timezone.utc)` project-wide (ruff `UP` compliance).
+- Updated module docstrings to reflect AI agent governance focus (`__init__.py`, `models.py`, `crypto/__init__.py`).
+- Added `## How Hashed differs from Microsoft Agent Governance Toolkit` positioning section in `README.md`.
+- `pyproject.toml`: version bumped to `0.4.0`; added `# NOTE` comment on `[crewai]`/`[autogen]`/`[strands]` extras not yet having integration modules.
+
+### Backwards Compatibility
+
+- `sign_data()` retained with `DeprecationWarning`; `sign_operation()` is the new canonical API.
+- All public API signatures in `__all__` unchanged.
+- `AsyncLedger` WAL databases from v0.3.x auto-migrate (existing rows stamped as `legacy` anchors; new rows extend the chain).
+
+### Roadmap
+
+- CrewAI integration (`wrap_tool` + `HashedBaseTool`): planned for v0.5.0
+- AutoGen integration: planned for v0.5.0
+- AWS Strands integration: planned for v0.6.0
+- MCP Server (`hashed mcp`): planned for v0.5.0
+
+---
+
 ## [0.3.1] — 2026-03-15
 
 ### Added

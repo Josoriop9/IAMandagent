@@ -52,10 +52,7 @@ class TestHashResponse:
 
     def test_valid_response(self) -> None:
         """Test creating a valid hash response."""
-        response = HashResponse(
-            hash_value="abc123",
-            algorithm="sha256"
-        )
+        response = HashResponse(hash_value="abc123", algorithm="sha256")
         assert response.hash_value == "abc123"
         assert response.algorithm == "sha256"
         assert response.timestamp
@@ -65,16 +62,11 @@ class TestHashResponse:
         """Test response with custom metadata."""
         metadata = {"key": "value", "count": 42}
         response = HashResponse(
-            hash_value="abc123",
-            algorithm="sha256",
-            metadata=metadata
+            hash_value="abc123", algorithm="sha256", metadata=metadata
         )
         assert response.metadata == metadata
 
     def test_response_immutability(self) -> None:
         """Test that response fields are set correctly."""
-        response = HashResponse(
-            hash_value="test_hash",
-            algorithm="sha256"
-        )
+        response = HashResponse(hash_value="test_hash", algorithm="sha256")
         assert response.hash_value == "test_hash"

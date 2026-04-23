@@ -21,9 +21,7 @@ import pytest
 from hashed.config import HashedConfig
 from hashed.ledger import (
     AsyncLedger,
-    _compute_entry_hash,
     _wal_get_all_for_verify,
-    _wal_get_last_entry_hash,
     _wal_get_unsent,
     _wal_init,
     _wal_insert,
@@ -151,7 +149,13 @@ class TestWalRowsToEntries:
     def test_converts_rows_to_dicts(self) -> None:
         """_wal_rows_to_entries converts raw SQLite tuples to usable dicts."""
         rows = [
-            (7, "transfer", json.dumps({"amount": 99}), json.dumps({"agent": "x"}), "2026-01-01"),
+            (
+                7,
+                "transfer",
+                json.dumps({"amount": 99}),
+                json.dumps({"agent": "x"}),
+                "2026-01-01",
+            ),
         ]
         entries = _wal_rows_to_entries(rows)
         assert len(entries) == 1
@@ -282,8 +286,10 @@ class TestAsyncLedgerLifecycle:
     async def test_start_sets_running_true(self, wal_db: str) -> None:
         """After start(), ledger._running is True."""
         ledger, mock_client = self._patched_ledger(wal_db)
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             assert ledger._running is True
             await ledger.stop(flush=False)
@@ -335,7 +341,9 @@ class TestWorkerRealLoop:
         with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client):
             await ledger.start()
 
-            await ledger.log("worker.real.test", data={"n": 1}, metadata={"agent": "bot"})
+            await ledger.log(
+                "worker.real.test", data={"n": 1}, metadata={"agent": "bot"}
+            )
 
             # Worker should send the batch within a few seconds
             try:
@@ -349,7 +357,9 @@ class TestWorkerRealLoop:
         assert post_payloads[0].get("batch_size") == 1
 
     @pytest.mark.asyncio
-    async def test_worker_timeout_branch_sends_batch_after_interval(self, wal_db: str) -> None:
+    async def test_worker_timeout_branch_sends_batch_after_interval(
+        self, wal_db: str
+    ) -> None:
         """
         If no entry arrives before the flush interval, the inner while exits via
         asyncio.TimeoutError and the worker loops back (lines 382-383, 392-394).
@@ -359,11 +369,13 @@ class TestWorkerRealLoop:
         """
         mock_client = AsyncMock()
         mock_client.aclose = AsyncMock()
-        mock_client.post = AsyncMock(return_value=MagicMock(is_success=True, status_code=200))
+        mock_client.post = AsyncMock(
+            return_value=MagicMock(is_success=True, status_code=200)
+        )
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
         ledger._flush_interval = 0.05  # 50ms — fast timeout for test
-        ledger._batch_size = 100       # never reached
+        ledger._batch_size = 100  # never reached
 
         with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client):
             await ledger.start()
@@ -395,8 +407,10 @@ class TestLogWithWal:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             await ledger.log("wal.insert.check", data={"key": "value"}, metadata={})
             await ledger.stop(flush=False)
@@ -416,8 +430,10 @@ class TestLogWithWal:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             for i in range(3):
                 await ledger.log(f"event.{i}", data={"i": i}, metadata={})
@@ -461,8 +477,10 @@ class TestSendBatchWithPublicKey:
             agent_public_key="deadbeef1234567890abcdef",
         )
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             logs = [{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}]
             await ledger._send_batch(logs)
@@ -496,8 +514,10 @@ class TestSendBatchWithPublicKey:
             # No agent_public_key
         )
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             logs = [{"event_type": "y", "data": {}, "metadata": {}, "timestamp": "t"}]
             await ledger._send_batch(logs)
@@ -505,7 +525,6 @@ class TestSendBatchWithPublicKey:
 
         assert len(post_payloads) == 1
         assert "agent_public_key" not in post_payloads[0]
-
 
 
 # ── Fernet encryption in WAL helpers ─────────────────────────────────────────
@@ -574,7 +593,7 @@ class TestWalFernetEncryption:
             "metadata": {},
             "timestamp": "2025-12-31T23:59:59",
         }
-        _wal_insert(wal_db, entry, fernet=None)   # plain insert
+        _wal_insert(wal_db, entry, fernet=None)  # plain insert
 
         rows = _wal_get_unsent(wal_db)
         fernet = Fernet(Fernet.generate_key())
@@ -602,8 +621,10 @@ class TestAsyncLedgerLog:
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             before = ledger.queue_size
             await ledger.log("test.event", {"key": "val"})
@@ -617,10 +638,14 @@ class TestAsyncLedgerLog:
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
-            await ledger.log("transfer.success", {"amount": 100.0}, metadata={"sig": "xyz"})
+            await ledger.log(
+                "transfer.success", {"amount": 100.0}, metadata={"sig": "xyz"}
+            )
             await ledger.stop(flush=False)
 
         # WAL entry should exist
@@ -635,8 +660,10 @@ class TestAsyncLedgerLog:
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             await ledger.log(
                 "payment.denied",
@@ -676,13 +703,25 @@ class TestAsyncLedgerSendBatch:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
 
             logs = [
-                {"event_type": "a.success", "data": {"x": 1}, "metadata": {}, "timestamp": "2026-01-01"},
-                {"event_type": "b.denied",  "data": {"y": 2}, "metadata": {}, "timestamp": "2026-01-02"},
+                {
+                    "event_type": "a.success",
+                    "data": {"x": 1},
+                    "metadata": {},
+                    "timestamp": "2026-01-01",
+                },
+                {
+                    "event_type": "b.denied",
+                    "data": {"y": 2},
+                    "metadata": {},
+                    "timestamp": "2026-01-02",
+                },
             ]
             # Put tasks in queue so task_done() works
             for _ in logs:
@@ -708,8 +747,10 @@ class TestAsyncLedgerSendBatch:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             await ledger.log("evt.ok", {"n": 1})
 
@@ -735,7 +776,9 @@ class TestAsyncLedgerSendBatch:
         ledger._client = None  # force None
 
         # Should not raise
-        await ledger._send_batch([{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}])
+        await ledger._send_batch(
+            [{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}]
+        )
 
 
 # ── AsyncLedger properties ────────────────────────────────────────────────────
@@ -756,8 +799,10 @@ class TestAsyncLedgerProperties:
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             assert ledger.queue_size == 0
 
@@ -774,8 +819,10 @@ class TestAsyncLedgerProperties:
 
         assert ledger.is_running is False
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             assert ledger.is_running is True
             await ledger.stop(flush=False)
@@ -799,16 +846,28 @@ class TestWalCrashRecovery:
     async def test_start_replays_unsent_entries(self, wal_db: str) -> None:
         """Unsent WAL entries from a prior crash are re-queued on start()."""
         # Seed two unsent entries directly in the WAL
-        e1 = {"event_type": "crash.event1", "data": {"n": 1}, "metadata": {}, "timestamp": "t1"}
-        e2 = {"event_type": "crash.event2", "data": {"n": 2}, "metadata": {}, "timestamp": "t2"}
+        e1 = {
+            "event_type": "crash.event1",
+            "data": {"n": 1},
+            "metadata": {},
+            "timestamp": "t1",
+        }
+        e2 = {
+            "event_type": "crash.event2",
+            "data": {"n": 2},
+            "metadata": {},
+            "timestamp": "t2",
+        }
         _wal_insert(wal_db, e1)
         _wal_insert(wal_db, e2)
 
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             # Both crash entries should be in the queue
             assert ledger.queue_size == 2
@@ -820,8 +879,10 @@ class TestWalCrashRecovery:
         mock_client = AsyncMock()
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             assert ledger.queue_size == 0
             await ledger.stop(flush=False)
@@ -844,13 +905,17 @@ class TestSendBatchErrorPaths:
         """_send_batch() with a non-success HTTP response logs error but does not raise."""
 
         mock_client = AsyncMock()
-        error_resp = MagicMock(is_success=False, status_code=500, text="Internal Server Error")
+        error_resp = MagicMock(
+            is_success=False, status_code=500, text="Internal Server Error"
+        )
         mock_client.post = AsyncMock(return_value=error_resp)
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             # Should not raise
             logs = [{"event_type": "x", "data": {}, "metadata": {}, "timestamp": "t"}]
@@ -867,8 +932,10 @@ class TestSendBatchErrorPaths:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             logs = [{"event_type": "y", "data": {}, "metadata": {}, "timestamp": "t"}]
             # Must not raise
@@ -876,15 +943,19 @@ class TestSendBatchErrorPaths:
             await ledger.stop(flush=False)
 
     @pytest.mark.asyncio
-    async def test_send_batch_unexpected_exception_does_not_raise(self, wal_db: str) -> None:
+    async def test_send_batch_unexpected_exception_does_not_raise(
+        self, wal_db: str
+    ) -> None:
         """_send_batch() with an unexpected exception logs and does not propagate."""
         mock_client = AsyncMock()
         mock_client.post = AsyncMock(side_effect=RuntimeError("unexpected"))
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             logs = [{"event_type": "z", "data": {}, "metadata": {}, "timestamp": "t"}]
             await ledger._send_batch(logs)
@@ -959,8 +1030,10 @@ class TestHashChain:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             await ledger.log("evt.a", {"x": 1})
             await ledger.log("evt.b", {"x": 2})
@@ -982,8 +1055,10 @@ class TestHashChain:
 
         ledger = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger.start()
             await ledger.log("evt.x", {"amount": 50})
             await ledger.log("evt.y", {"amount": 100})
@@ -1002,8 +1077,10 @@ class TestHashChain:
         # Re-open a ledger and verify
         ledger2 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger2.start()
             result = await ledger2.verify_chain()
             await ledger2.stop(flush=False)
@@ -1023,8 +1100,10 @@ class TestHashChain:
         # ── Session 1: log two entries ────────────────────────────────────────
         ledger1 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger1.start()
             await ledger1.log("session1.a", {"s": 1})
             await ledger1.log("session1.b", {"s": 2})
@@ -1034,8 +1113,10 @@ class TestHashChain:
         # ── Session 2: new ledger on same WAL ─────────────────────────────────
         ledger2 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
 
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger2.start()
             # After start(), _last_entry_hash should equal last entry of session 1
             assert ledger2._last_entry_hash == last_hash_session1
@@ -1050,8 +1131,10 @@ class TestHashChain:
 
         # Full chain should be valid
         ledger3 = AsyncLedger(endpoint="http://mock/v1/logs/batch", wal_path=wal_db)
-        with patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client), \
-             patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker):
+        with (
+            patch("hashed.ledger.httpx.AsyncClient", return_value=mock_client),
+            patch.object(AsyncLedger, "_worker", TestAsyncLedgerLifecycle._noop_worker),
+        ):
             await ledger3.start()
             result = await ledger3.verify_chain()
             await ledger3.stop(flush=False)

@@ -54,7 +54,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 from hashed.guard import PermissionError
 
@@ -66,16 +66,18 @@ logger = logging.getLogger(__name__)
 # ── Lazy LangChain import ────────────────────────────────────────────────────
 
 try:
-    from langchain_core.callbacks import BaseCallbackHandler as _Base  # type: ignore[import]
+    from langchain_core.callbacks import BaseCallbackHandler as _Base  # type: ignore[import,import-untyped]
+
     _LANGCHAIN_AVAILABLE = True
 except ImportError:  # pragma: no cover
-    _Base = object  # type: ignore[assignment, misc]
+    _Base = object  # type: ignore[assignment,misc]
     _LANGCHAIN_AVAILABLE = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
-def _extract_amount(input_str: Any) -> Optional[float]:
+
+def _extract_amount(input_str: Any) -> float | None:
     """
     Best-effort extraction of a numeric ``amount`` from a tool's input.
 
@@ -118,6 +120,7 @@ def _schedule_log(coro: Any) -> None:
 
 # ── HashedCallbackHandler ────────────────────────────────────────────────────
 
+
 class HashedCallbackHandler(_Base):  # type: ignore[misc]
     """
     LangChain ``BaseCallbackHandler`` that enforces Hashed governance policies.
@@ -137,7 +140,7 @@ class HashedCallbackHandler(_Base):  # type: ignore[misc]
 
     def __init__(
         self,
-        core: "HashedCore",
+        core: HashedCore,
         raise_on_deny: bool = True,
     ) -> None:
         if not _LANGCHAIN_AVAILABLE:
@@ -148,7 +151,7 @@ class HashedCallbackHandler(_Base):  # type: ignore[misc]
         super().__init__()
         self._core = core
         self._raise_on_deny = raise_on_deny
-        self._last_tool_name: Optional[str] = None
+        self._last_tool_name: str | None = None
         self._denied: set = set()
 
     # ── LangChain lifecycle hooks ────────────────────────────────────────────
@@ -156,7 +159,7 @@ class HashedCallbackHandler(_Base):  # type: ignore[misc]
     def on_tool_start(
         self,
         serialized: dict,
-        input_str: Union[str, dict],
+        input_str: str | dict,
         **kwargs: Any,
     ) -> None:
         """
@@ -173,7 +176,9 @@ class HashedCallbackHandler(_Base):  # type: ignore[misc]
         input_str:
             The tool's input, either a JSON string or a dict.
         """
-        tool_name: str = serialized.get("name", "unknown_tool") if serialized else "unknown_tool"
+        tool_name: str = (
+            serialized.get("name", "unknown_tool") if serialized else "unknown_tool"
+        )
         self._last_tool_name = tool_name
         amount = _extract_amount(input_str)
 
@@ -215,7 +220,7 @@ class HashedCallbackHandler(_Base):  # type: ignore[misc]
 
     def on_tool_error(
         self,
-        error: Union[Exception, KeyboardInterrupt],
+        error: BaseException,
         **kwargs: Any,
     ) -> None:
         """

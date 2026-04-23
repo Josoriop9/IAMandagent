@@ -10,6 +10,7 @@ The `#` symbol is the Hashed brand mark:
 
 No external dependencies — only Rich (already in hashed-sdk core deps).
 """
+
 from __future__ import annotations
 
 from rich.console import Console
@@ -53,11 +54,11 @@ _HASHED_LINES = [
 ]
 
 # Palette
-_HASH_STYLE    = "bold cyan"          # same brand cyan — # is part of the logo
-_HASHED_STYLE  = "bold cyan"          # Hashed brand cyan
+_HASH_STYLE = "bold cyan"  # same brand cyan — # is part of the logo
+_HASHED_STYLE = "bold cyan"  # Hashed brand cyan
 _VERSION_STYLE = "bold green"
 _TAGLINE_STYLE = "dim white"
-_GAP           = "   "                # horizontal gap between # and HASHED
+_GAP = "   "  # horizontal gap between # and HASHED
 
 
 def show_banner(version: str = "", tagline: bool = True) -> None:
@@ -87,9 +88,7 @@ def show_banner(version: str = "", tagline: bool = True) -> None:
 
     if tagline:
         ver_str = (
-            f"  [{_VERSION_STYLE}]v{version}[/{_VERSION_STYLE}]"
-            if version
-            else ""
+            f"  [{_VERSION_STYLE}]v{version}[/{_VERSION_STYLE}]" if version else ""
         )
         console.print(
             f"\n[{_TAGLINE_STYLE}]"

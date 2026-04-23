@@ -82,12 +82,13 @@ class IdentityManager:
             signature = self._private_key.sign(message_bytes)
             return signature
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to sign message: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to sign message: {str(e)}") from e
 
     def verify_signature(
-        self, message: str, signature: bytes, public_key: Optional[Ed25519PublicKey] = None
+        self,
+        message: str,
+        signature: bytes,
+        public_key: Optional[Ed25519PublicKey] = None,
     ) -> bool:
         """
         Verify a message signature.
@@ -155,9 +156,7 @@ class IdentityManager:
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             }
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to sign data: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to sign data: {str(e)}") from e
 
     @staticmethod
     def verify_signed_data(signed_data: dict) -> bool:
@@ -264,9 +263,7 @@ class IdentityManager:
                 "public_key": self.public_key_hex,
             }
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to sign operation: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to sign operation: {str(e)}") from e
 
     @staticmethod
     def verify_signed_operation(signed: dict) -> bool:
@@ -331,9 +328,7 @@ class IdentityManager:
                 encryption_algorithm=encryption,
             )
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to export private key: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to export private key: {str(e)}") from e
 
     @classmethod
     def from_private_key_bytes(
@@ -360,6 +355,4 @@ class IdentityManager:
                 raise HashedCryptoError("Invalid key type, expected Ed25519")
             return cls(private_key=private_key)
         except Exception as e:
-            raise HashedCryptoError(
-                f"Failed to load private key: {str(e)}"
-            ) from e
+            raise HashedCryptoError(f"Failed to load private key: {str(e)}") from e

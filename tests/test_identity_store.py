@@ -271,6 +271,7 @@ class TestIdentityStore:
 # export_identity_for_env) — added 2026-03-08 for cloud deployment support.
 # ============================================================================
 
+
 class TestLoadIdentityFromEnv:
     """Tests for load_identity_from_env() — HASHED_AGENT_PRIVATE_KEY support."""
 
@@ -469,4 +470,6 @@ class TestHashedCoreEnvIdentity:
         core = HashedCore(agent_name="test-ephemeral")
 
         # Should have a valid identity (just not from env var)
-        assert len(core.identity.public_key_hex) == 64  # Ed25519 = 32 bytes = 64 hex chars
+        assert (
+            len(core.identity.public_key_hex) == 64
+        )  # Ed25519 = 32 bytes = 64 hex chars
