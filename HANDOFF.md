@@ -1,6 +1,6 @@
 # Hashed — Handoff Document
 
-> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 1 (canonical identity)
+> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 2 (hash chain ledger)
 
 ---
 
@@ -8,12 +8,12 @@
 
 - ✅ **Core SDK is production-ready and published to PyPI** as `hashed-sdk==0.3.4` — `hashed` CLI works end-to-end (login, init, agent list, logs, whoami, account-delete)
 - ✅ **FastAPI backend** deployed on Railway; `SUPABASE_KEY` (service_role) is correctly set — all `/v1/*` endpoints return 200
-- ✅ **428 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
+- ✅ **433 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
 - ✅ **AsyncLedger** is crash-safe (SQLite WAL + Fernet AES-128 encryption with PBKDF2 key derivation from API key)
 - ✅ **Circuit breaker** (3 failures → open, 60s cooldown) guards all backend HTTP calls in `HashedCore`
 - ✅ **`identity.py` now has `sign_operation()`** — SPEC §2.1-compliant canonical payload with `nonce`, `timestamp_ns`, `version`, `agent_id`; `sign_data()` marked deprecated
-- ⚠️ **Ledger has no hash chain** — log entries are not linked; a forged/deleted entry mid-sequence is undetectable without the WAL
-- ⚠️ **`sign_operation()` not yet wired into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still use the old ad-hoc payload (PROMPT 3 pending)
+- ✅ **`AsyncLedger` now has a forward-linked SHA-256 hash chain (SPEC §3.2)** — every WAL entry stores `prev_hash` + `entry_hash`; `verify_chain()` detects retroactive tampering in O(n); legacy WALs auto-migrated
+- ⚠️ **`sign_operation()` not yet wired into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still use the old ad-hoc payload (PROMPT 3 — next)
 - ⚠️ **`identity_store.py` coverage at 79%** — lines 244-284 (keyring fallback paths) not exercised in CI
 - ⚠️ **Duplicate org bug in Supabase** is dormant (backend working now) but root cause not fixed — `auth_login` in `server.py` can still create a second org if `user_organizations` link is lost
 - 🔴 **Dashboard `.single()` calls** on `organizations` will 406 if the duplicate org bug re-triggers (affects `agents/page.tsx`, `logs/page.tsx`, `policies/page.tsx`, `page.tsx`)
@@ -50,12 +50,19 @@
 | `.github/workflows/deploy.yml` | `--skip-existing` on PyPI upload; bumped coverage floor to 70% |
 | `database/migrations/006_fix_handle_new_user_trigger.sql` | Replaced `gen_random_bytes` with `gen_random_uuid()` in the trigger |
 
-### PROMPT 1 — Canonical identity payload (this session)
+### PROMPT 1 — Canonical identity payload
 
 | File | What changed |
 |---|---|
 | `src/hashed/identity.py` | Added `sign_operation()` with SPEC §2.1 canonical payload (`version`, `agent_id`, `operation`, `amount`, `timestamp_ns`, `nonce`, `status`, `context`). Added `verify_signed_operation()` static method. Marked `sign_data()` as `DeprecationWarning`. Replaced `datetime.utcnow()` → `datetime.now(timezone.utc)`. Added `import os`, `import warnings`, `from time import time_ns` at module level. |
 | `tests/test_identity.py` | Added `TestSignOperation` class with 6 tests: `test_sign_operation_has_required_fields`, `test_nonce_is_unique`, `test_canonical_is_deterministic`, `test_verify_signed_operation_valid`, `test_verify_signed_operation_tampered`, `test_replay_protection_via_nonce`. Total tests in file: 38. |
+
+### PROMPT 2 — Forward-linked hash chain in AsyncLedger
+
+| File | What changed |
+|---|---|
+| `src/hashed/ledger.py` | Added `_compute_entry_hash(entry_plaintext, prev_hash) → str` (SHA-256 canonical). Extended `_wal_init` with `prev_hash`/`entry_hash` columns + soft migration via `ALTER TABLE … ADD COLUMN` + legacy stamp. Added `_wal_get_last_entry_hash`, `_wal_get_all_for_verify`. Changed `_wal_insert` signature to accept `prev_hash`, compute `entry_hash`, return `(row_id, entry_hash)`. Updated `AsyncLedger.__init__` with `self._last_entry_hash = "genesis"`. Updated `start()` to seed chain from WAL. Updated `log()` to pass chain tip and advance it. Added `verify_chain()` async public method. |
+| `tests/test_ledger.py` | Updated imports (added 3 new helpers). Fixed 4 existing tests that used `_wal_insert` return as `int` → unpack `(row_id, entry_hash)`. Added `TestHashChain` class with 5 tests: `test_first_entry_has_genesis_prev_hash`, `test_chain_links_consecutive_entries`, `test_verify_chain_valid_returns_true`, `test_verify_chain_detects_tampering`, `test_chain_survives_restart`. Total: 48 tests in file, all passing. |
 
 ---
 
@@ -67,8 +74,8 @@
 
 ### 🟡 Medium Priority
 - ~~**Canonical payload in `identity.py`**~~ — ✅ **DONE (PROMPT 1)**: `sign_operation()` added with full SPEC §2.1 envelope. `sign_data()` deprecated.
-- **Hash chain in `AsyncLedger`** — Each WAL entry should include `prev_hash = SHA-256(previous_entry_json)`. Without it, a deleted entry mid-sequence is undetectable. **(PROMPT 2 — next)**
-- **Wire `sign_operation()` into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still build payloads ad-hoc. Must call `identity.sign_operation()` and embed the canonical envelope + signature. **(PROMPT 3)**
+- ~~**Hash chain in `AsyncLedger`**~~ — ✅ **DONE (PROMPT 2)**: `_compute_entry_hash`, `_wal_get_last_entry_hash`, `_wal_get_all_for_verify`, `verify_chain()`. 48/48 tests passing. commit `ffeef29`.
+- **Wire `sign_operation()` into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still build payloads ad-hoc. Must call `identity.sign_operation()` and embed the canonical envelope + signature. **(PROMPT 3 — next)**
 
 ### 🟢 Lower Priority / Tech Debt
 - `identity_store.py` lines 244-284 (keyring fallback) — not covered by tests (79% coverage)
@@ -84,7 +91,9 @@
 ## Last Commits
 
 ```
-67feb6 (HEAD -> main) feat(identity): canonical payload with nonce, timestamp_ns, version per SPEC 2
+ffeef29 (HEAD -> main) feat(ledger): forward-linked hash chain per SPEC §3.2 with tamper detection
+dc8629a docs: update handoff after PROMPT 1
+667feb6 feat(identity): canonical payload with nonce, timestamp_ns, version per SPEC §2
 46fa4a9 (origin/main) docs: update CLI_GUIDE for v0.3.4 new features
 01ed285 fix: remove spurious f-prefix on plain string (ruff F541)
 d0a345d (tag: v0.3.4) chore: bump version 0.3.3 → 0.3.4
@@ -111,7 +120,7 @@ bc165cc refactor(core): Sprint 7 principal-engineer quality refactor
 ## Test State
 
 ```
-428 passed, 1 skipped, 54 warnings in 4.01s   ← +6 tests from TestSignOperation
+433 passed, 1 skipped, 54 warnings in 4.74s   ← +5 tests from TestHashChain
 
 Coverage summary (key modules):
   src/hashed/core.py              91%
@@ -119,7 +128,7 @@ Coverage summary (key modules):
   src/hashed/exceptions.py       100%
   src/hashed/identity.py          96%   ← 2 uncovered lines in sign_operation exception path (minor)
   src/hashed/models.py            97%
-  src/hashed/ledger.py            90%
+  src/hashed/ledger.py            85%   ← improved from 90% after hash chain lines added
   src/hashed/identity_store.py    79%   ← gap: keyring fallback paths
   src/hashed/crypto/hasher.py     83%   ← gap: error paths
   src/hashed/utils/http_client.py 95%
@@ -135,10 +144,10 @@ Execute in this order — each is a self-contained prompt:
 **1. ~~Canonical payload in `identity.py`~~** ✅ **DONE — commit `67feb6`**
 > `sign_operation()` added with full SPEC §2.1 envelope (`version`, `agent_id`, `operation`, `amount`, `timestamp_ns`, `nonce`, `status`, `context`). `verify_signed_operation()` static method added. `sign_data()` deprecated. 38/38 tests green.
 
-**2. Hash chain in `AsyncLedger`** ← **NEXT**
-> In `ledger.py`, add `prev_hash` field to each WAL entry: `SHA-256(json.dumps(previous_entry, sort_keys=True))`. Genesis entry uses `prev_hash = "0" * 64`. Add `verify_chain()` method that walks WAL and validates the chain. Add tests in `test_ledger.py`.
+**2. ~~Hash chain in `AsyncLedger`~~** ✅ **DONE — commit `ffeef29`**
+> `_compute_entry_hash`, `_wal_get_last_entry_hash`, `_wal_get_all_for_verify` added. `_wal_insert` returns `(row_id, entry_hash)`. `AsyncLedger.verify_chain()` walks WAL in O(n) and detects tampered entries. Legacy WAL migration automatic. 48/48 tests green.
 
-**3. Wire new identity + ledger into `core.py`**
+**3. Wire new identity + ledger into `core.py`** ← **NEXT**
 > Update `_execute_remote_guard` to pass the canonical signed envelope (with nonce + timestamp_ns) to the backend `/guard` endpoint. Update `_log_to_all_transports` to include `prev_hash` in metadata. Ensure `test_core.py` covers the new fields.
 
 **4. LangChain integration (real `HashedCallbackHandler`)**
