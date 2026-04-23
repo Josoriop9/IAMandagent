@@ -109,7 +109,7 @@ class HashedClient:
         Example:
             >>> hash_value = client.hash_string("Hello, World!")
         """
-        request = HashRequest(data=data, algorithm=algorithm, salt=salt)
+        request = HashRequest(data=data, algorithm=algorithm, salt=salt)  # type: ignore[arg-type]
         response = self.hash(request)
         return response.hash_value
 

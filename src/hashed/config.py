@@ -8,7 +8,7 @@ variables and programmatic configuration.
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -175,7 +175,7 @@ class HashedConfig(BaseModel):
                 f"Failed to load configuration from environment: {e}"
             ) from e
 
-    def with_overrides(self, **kwargs: any) -> "HashedConfig":
+    def with_overrides(self, **kwargs: Any) -> "HashedConfig":
         """
         Create a new config with specific values overridden.
 

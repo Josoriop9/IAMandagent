@@ -32,7 +32,7 @@ class Policy:
     tool_name: str
     max_amount: Optional[float] = None
     allowed: bool = True
-    metadata: dict[str, Any] = None
+    metadata: Optional[dict[str, Any]] = None
 
     def __post_init__(self) -> None:
         """Initialize metadata if not provided."""

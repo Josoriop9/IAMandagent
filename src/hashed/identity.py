@@ -313,13 +313,12 @@ class IdentityManager:
             HashedCryptoError: If export fails
         """
         try:
-            if password:
-                from cryptography.hazmat.primitives import serialization as ser
+            from cryptography.hazmat.primitives import serialization as ser
 
+            encryption: "ser.KeySerializationEncryption"
+            if password:
                 encryption = ser.BestAvailableEncryption(password)
             else:
-                from cryptography.hazmat.primitives import serialization as ser
-
                 encryption = ser.NoEncryption()
 
             return self._private_key.private_bytes(

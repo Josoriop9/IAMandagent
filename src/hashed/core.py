@@ -724,6 +724,8 @@ class HashedCore:
 
         async def _upsert(tool_name: str, pol: dict, agent_id: Optional[str]) -> None:
             nonlocal pushed
+            if self._http_client is None:
+                return
             params = {"agent_id": agent_id} if agent_id else {}
             try:
                 resp = await self._http_client.post(
@@ -797,10 +799,10 @@ class HashedCore:
                             "tool_name": tool_name,
                             "allowed": policy.allowed,
                             "max_amount": policy.max_amount,
-                            "requires_approval": policy.metadata.get(
+                            "requires_approval": (policy.metadata or {}).get(
                                 "requires_approval", False
                             ),
-                            "metadata": policy.metadata,
+                            "metadata": policy.metadata or {},
                         },
                     )
                     if response.is_success or response.status_code == 409:
