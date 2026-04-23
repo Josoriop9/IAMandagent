@@ -359,7 +359,11 @@ First production-ready release of Hashed SDK — AI Agent Governance Platform.
 
 ---
 
-[Unreleased]: https://github.com/Josoriop9/IAMandagent/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/Josoriop9/IAMandagent/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/Josoriop9/IAMandagent/compare/v0.3.1...v0.4.0
+[0.3.1]: https://github.com/Josoriop9/IAMandagent/compare/v0.3.0...v0.3.1
+[0.3.0]: https://github.com/Josoriop9/IAMandagent/compare/v0.2.1...v0.3.0
+[0.2.1]: https://github.com/Josoriop9/IAMandagent/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/Josoriop9/IAMandagent/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/Josoriop9/IAMandagent/releases/tag/v0.1.0
 [0.0.1]: https://github.com/Josoriop9/IAMandagent/releases/tag/v0.0.1

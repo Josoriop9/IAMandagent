@@ -1,0 +1,131 @@
+name: Release — PyPI + GitHub Release
+
+# Triggered automatically when a version tag (v*) is pushed.
+# Can also be run manually from GitHub Actions UI to publish an existing tag.
+#
+# Required repository secret: PYPI_API_TOKEN
+# Set it at: Settings → Secrets and variables → Actions → New repository secret
+#
+# Future release workflow:
+#   git tag v0.5.0 && git push --tags
+#   → This workflow runs automatically
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"   # matches v0.4.0, v1.2.3, etc.
+
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.4.0). Must already exist in the repo."
+        required: true
+        default: "v0.4.0"
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false  # never cancel a release in progress
+
+jobs:
+  # ── 1. Test gate ──────────────────────────────────────────────────────────
+  test:
+    name: Test gate (pytest)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install -e ".[dev]"
+
+      - name: Run pytest
+        run: |
+          pytest --tb=short -q
+          echo "✅ All tests passed"
+
+  # ── 2. Build + Publish to PyPI + Create GitHub Release ───────────────────
+  publish:
+    name: Publish to PyPI + GitHub Release
+    runs-on: ubuntu-latest
+    needs: test
+    permissions:
+      contents: write   # required to create GitHub Releases
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history for changelog extraction
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Resolve tag name
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "name=$TAG" >> $GITHUB_OUTPUT
+          echo "version=${TAG#v}" >> $GITHUB_OUTPUT
+          echo "Releasing $TAG"
+
+      - name: Extract CHANGELOG body for this release
+        id: changelog
+        run: |
+          VERSION="${{ steps.tag.outputs.version }}"
+          # Extract the block between ## [VERSION] and the next ## heading
+          python3 - <<'EOF'
+          import re, sys
+
+          version = "${{ steps.tag.outputs.version }}"
+          with open("CHANGELOG.md") as f:
+              content = f.read()
+
+          # Match the section for this version
+          pattern = rf"## \[{re.escape(version)}\][^\n]*\n(.*?)(?=\n## \[|\Z)"
+          match = re.search(pattern, content, re.DOTALL)
+          if match:
+              body = match.group(1).strip()
+          else:
+              body = f"Release {version} — see CHANGELOG.md for details."
+
+          with open("/tmp/release_notes.md", "w") as f:
+              f.write(body)
+
+          print(f"Extracted {len(body)} chars of release notes")
+          EOF
+
+      - name: Build distribution
+        run: |
+          pip install build
+          python -m build
+          echo "✅ Built:"
+          ls -lh dist/
+
+      - name: Publish to PyPI
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          pip install twine
+          twine upload dist/* --skip-existing
+          echo "✅ Published hashed-sdk ${{ steps.tag.outputs.version }} to PyPI"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          name: "${{ steps.tag.outputs.name }} — hashed-sdk"
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: false
