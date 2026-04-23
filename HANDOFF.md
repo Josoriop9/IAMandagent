@@ -108,7 +108,8 @@
 ## Last Commits
 
 ```
-9026e13 (HEAD -> main) feat(integrations): real LangChain callback handler with policy enforcement
+d176203 (HEAD -> main) docs: update handoff after PROMPT 4
+9026e13 feat(integrations): real LangChain callback handler with policy enforcement
 a0762a9 docs: update handoff after PROMPT 3
 76f3179 docs: update handoff after PROMPT 3
 8e42c84 refactor(core): wire canonical sign_operation + hash-chained ledger end-to-end
