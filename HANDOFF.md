@@ -1,6 +1,6 @@
 # Hashed — Handoff Document
 
-> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 2 (hash chain ledger)
+> Generated: 2026-04-22 | Version: 0.3.4 | Branch: `main` | Last prompt: PROMPT 3 (core wiring)
 
 ---
 
@@ -8,12 +8,12 @@
 
 - ✅ **Core SDK is production-ready and published to PyPI** as `hashed-sdk==0.3.4` — `hashed` CLI works end-to-end (login, init, agent list, logs, whoami, account-delete)
 - ✅ **FastAPI backend** deployed on Railway; `SUPABASE_KEY` (service_role) is correctly set — all `/v1/*` endpoints return 200
-- ✅ **433 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
+- ✅ **436 tests passing, 74% coverage, 1 skipped** — CI passes on every push via GitHub Actions
 - ✅ **AsyncLedger** is crash-safe (SQLite WAL + Fernet AES-128 encryption with PBKDF2 key derivation from API key)
 - ✅ **Circuit breaker** (3 failures → open, 60s cooldown) guards all backend HTTP calls in `HashedCore`
 - ✅ **`identity.py` now has `sign_operation()`** — SPEC §2.1-compliant canonical payload with `nonce`, `timestamp_ns`, `version`, `agent_id`; `sign_data()` marked deprecated
 - ✅ **`AsyncLedger` now has a forward-linked SHA-256 hash chain (SPEC §3.2)** — every WAL entry stores `prev_hash` + `entry_hash`; `verify_chain()` detects retroactive tampering in O(n); legacy WALs auto-migrated
-- ⚠️ **`sign_operation()` not yet wired into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still use the old ad-hoc payload (PROMPT 3 — next)
+- ✅ **`HashedCore.guard()` now uses canonical `sign_operation()` end-to-end** — Step 3 (`status="allowed"`), `_execute_remote_guard` POST `/guard` (`status="pending"` + `nonce`/`timestamp_ns`/`canonical`), `_log_denial` (`status="denied"`), `_log_error` (`status="error"`). `sign_data()` no longer called anywhere in `core.py`.
 - ⚠️ **`identity_store.py` coverage at 79%** — lines 244-284 (keyring fallback paths) not exercised in CI
 - ⚠️ **Duplicate org bug in Supabase** is dormant (backend working now) but root cause not fixed — `auth_login` in `server.py` can still create a second org if `user_organizations` link is lost
 - 🔴 **Dashboard `.single()` calls** on `organizations` will 406 if the duplicate org bug re-triggers (affects `agents/page.tsx`, `logs/page.tsx`, `policies/page.tsx`, `page.tsx`)
@@ -64,6 +64,13 @@
 | `src/hashed/ledger.py` | Added `_compute_entry_hash(entry_plaintext, prev_hash) → str` (SHA-256 canonical). Extended `_wal_init` with `prev_hash`/`entry_hash` columns + soft migration via `ALTER TABLE … ADD COLUMN` + legacy stamp. Added `_wal_get_last_entry_hash`, `_wal_get_all_for_verify`. Changed `_wal_insert` signature to accept `prev_hash`, compute `entry_hash`, return `(row_id, entry_hash)`. Updated `AsyncLedger.__init__` with `self._last_entry_hash = "genesis"`. Updated `start()` to seed chain from WAL. Updated `log()` to pass chain tip and advance it. Added `verify_chain()` async public method. |
 | `tests/test_ledger.py` | Updated imports (added 3 new helpers). Fixed 4 existing tests that used `_wal_insert` return as `int` → unpack `(row_id, entry_hash)`. Added `TestHashChain` class with 5 tests: `test_first_entry_has_genesis_prev_hash`, `test_chain_links_consecutive_entries`, `test_verify_chain_valid_returns_true`, `test_verify_chain_detects_tampering`, `test_chain_survives_restart`. Total: 48 tests in file, all passing. |
 
+### PROMPT 3 — Wire canonical sign_operation + hash-chained ledger into HashedCore
+
+| File | What changed |
+|---|---|
+| `src/hashed/core.py` | Step 3 of `async_wrapper`: replaced `sign_data()` call with `sign_operation(operation, amount, context, status="allowed")`. `_execute_remote_guard`: replaced `sign_data()` with `sign_operation(status="pending")` and extended POST `/guard` body with `nonce`, `timestamp_ns`, `canonical`. `_log_to_all_transports`: param changed from `signature: str` to `signed: dict`; metadata now includes `nonce`, `timestamp_ns`, `canonical`, `version` for both backend and ledger transports. `_log_denial`: now calls `sign_operation(status="denied")` before logging. `_log_error`: now calls `sign_operation(status="error")` and includes full canonical metadata. `sign_data()` no longer called anywhere in `core.py`. |
+| `tests/test_core.py` | Added `TestCanonicalSignedPayload` class with 3 tests: `test_guard_produces_canonical_payload` (verifies all 8 SPEC §2.1 fields in `signed["payload"]`), `test_denial_is_also_signed_canonically` (verifies `payload.status == "denied"` and nonce present), `test_remote_guard_sends_nonce` (verifies `/guard` POST body contains `nonce`, `timestamp_ns`, `signature`, `canonical`). Total tests in file: 27. |
+
 ---
 
 ## Known Issues / TODOs
@@ -75,7 +82,7 @@
 ### 🟡 Medium Priority
 - ~~**Canonical payload in `identity.py`**~~ — ✅ **DONE (PROMPT 1)**: `sign_operation()` added with full SPEC §2.1 envelope. `sign_data()` deprecated.
 - ~~**Hash chain in `AsyncLedger`**~~ — ✅ **DONE (PROMPT 2)**: `_compute_entry_hash`, `_wal_get_last_entry_hash`, `_wal_get_all_for_verify`, `verify_chain()`. 48/48 tests passing. commit `ffeef29`.
-- **Wire `sign_operation()` into `core.py`** — `_execute_remote_guard` and `_log_to_all_transports` still build payloads ad-hoc. Must call `identity.sign_operation()` and embed the canonical envelope + signature. **(PROMPT 3 — next)**
+- ~~**Wire `sign_operation()` into `core.py`**~~ — ✅ **DONE (PROMPT 3)**: `_execute_remote_guard` uses `sign_operation(status="pending")` + sends `nonce`/`timestamp_ns`/`canonical` to `/guard`. `_log_to_all_transports` accepts `signed: dict`. `_log_denial` signs with `status="denied"`. `_log_error` signs with `status="error"`. commit `8e42c84`.
 
 ### 🟢 Lower Priority / Tech Debt
 - `identity_store.py` lines 244-284 (keyring fallback) — not covered by tests (79% coverage)
@@ -91,7 +98,9 @@
 ## Last Commits
 
 ```
-ffeef29 (HEAD -> main) feat(ledger): forward-linked hash chain per SPEC §3.2 with tamper detection
+8e42c84 (HEAD -> main) refactor(core): wire canonical sign_operation + hash-chained ledger end-to-end
+b5115b2 docs: update handoff after PROMPT 2
+ffeef29 feat(ledger): forward-linked hash chain per SPEC §3.2 with tamper detection
 dc8629a docs: update handoff after PROMPT 1
 667feb6 feat(identity): canonical payload with nonce, timestamp_ns, version per SPEC §2
 46fa4a9 (origin/main) docs: update CLI_GUIDE for v0.3.4 new features
@@ -120,15 +129,15 @@ bc165cc refactor(core): Sprint 7 principal-engineer quality refactor
 ## Test State
 
 ```
-433 passed, 1 skipped, 54 warnings in 4.74s   ← +5 tests from TestHashChain
+436 passed, 1 skipped, 18 warnings in 4.00s   ← +3 tests from TestCanonicalSignedPayload
 
 Coverage summary (key modules):
-  src/hashed/core.py              91%
+  src/hashed/core.py              84%   ← guard() wiring added new code; existing tests still cover 84%
   src/hashed/guard.py            100%
-  src/hashed/exceptions.py       100%
+  src/hashed/exceptions.py        85%
   src/hashed/identity.py          96%   ← 2 uncovered lines in sign_operation exception path (minor)
   src/hashed/models.py            97%
-  src/hashed/ledger.py            85%   ← improved from 90% after hash chain lines added
+  src/hashed/ledger.py            85%
   src/hashed/identity_store.py    79%   ← gap: keyring fallback paths
   src/hashed/crypto/hasher.py     83%   ← gap: error paths
   src/hashed/utils/http_client.py 95%
@@ -147,10 +156,10 @@ Execute in this order — each is a self-contained prompt:
 **2. ~~Hash chain in `AsyncLedger`~~** ✅ **DONE — commit `ffeef29`**
 > `_compute_entry_hash`, `_wal_get_last_entry_hash`, `_wal_get_all_for_verify` added. `_wal_insert` returns `(row_id, entry_hash)`. `AsyncLedger.verify_chain()` walks WAL in O(n) and detects tampered entries. Legacy WAL migration automatic. 48/48 tests green.
 
-**3. Wire new identity + ledger into `core.py`** ← **NEXT**
-> Update `_execute_remote_guard` to pass the canonical signed envelope (with nonce + timestamp_ns) to the backend `/guard` endpoint. Update `_log_to_all_transports` to include `prev_hash` in metadata. Ensure `test_core.py` covers the new fields.
+**3. ~~Wire new identity + ledger into `core.py`~~** ✅ **DONE — commit `8e42c84`**
+> `_execute_remote_guard` uses `sign_operation(status="pending")` + sends `nonce`/`timestamp_ns`/`canonical` to `/guard`. `_log_to_all_transports` accepts `signed: dict` with full canonical metadata. `_log_denial` signs with `status="denied"`. `_log_error` signs with `status="error"`. 436/436 tests green.
 
-**4. LangChain integration (real `HashedCallbackHandler`)**
+**4. LangChain integration (real `HashedCallbackHandler`)** ← **NEXT**
 > In `src/hashed/integrations/langchain.py`, implement `HashedCallbackHandler(BaseCallbackHandler)` that calls `core.guard(tool_name)` on `on_tool_start` and logs result on `on_tool_end`. Add `examples/langchain_example.py`. Update `docs/FRAMEWORK_GUIDES.md`.
 
 **5. CrewAI integration (`wrap_tool` + `HashedBaseTool`)**
