@@ -304,12 +304,13 @@ class HashedCore:
                     # ── Step 2: remote guard (circuit-breaker protected) ─
                     await self._execute_remote_guard(tool_name, amount, kwargs)
 
-                    # ── Step 3: sign the operation ───────────────────────
-                    signed = self._identity.sign_data({
-                        "tool_name": tool_name,
-                        "amount": amount,
-                        "kwargs": {k: str(v) for k, v in kwargs.items()},
-                    })
+                    # ── Step 3: sign the operation (SPEC §2.1 canonical) ─
+                    signed = self._identity.sign_operation(
+                        operation=tool_name,
+                        amount=amount,
+                        context={"kwargs": {k: str(v) for k, v in kwargs.items()}},
+                        status="allowed",
+                    )
 
                     # ── Step 4: execute function (async or sync) ─────────
                     result = func(*args, **kwargs)
@@ -318,7 +319,7 @@ class HashedCore:
 
                     # ── Step 5: audit log (success) ──────────────────────
                     await self._log_to_all_transports(
-                        tool_name, "success", amount, result, signed["signature"]
+                        tool_name, "success", amount, result, signed
                     )
 
                     overhead_ms = (time.perf_counter() - t0) * 1000
@@ -427,18 +428,22 @@ class HashedCore:
             return
 
         try:
-            _guard_canonical = {
-                "operation": tool_name,
-                "agent_public_key": self._identity.public_key_hex,
-            }
-            _guard_signed = self._identity.sign_data(_guard_canonical)
+            _guard_signed = self._identity.sign_operation(
+                operation=tool_name,
+                amount=amount,
+                context={"kwargs": {k: str(v) for k, v in kwargs.items()}},
+                status="pending",
+            )
 
             response = await self._http_client.post(
                 "/guard",
                 json={
                     "operation": tool_name,
                     "agent_public_key": self._identity.public_key_hex,
-                    "signature": _guard_signed.get("signature"),
+                    "signature": _guard_signed["signature"],
+                    "nonce": _guard_signed["payload"]["nonce"],
+                    "timestamp_ns": _guard_signed["payload"]["timestamp_ns"],
+                    "canonical": _guard_signed["canonical"],
                     "data": {
                         "amount": amount,
                         **{k: str(v) for k, v in kwargs.items()},
@@ -489,7 +494,7 @@ class HashedCore:
         status: str,
         amount: Any,
         result_or_str: Any,
-        signature: str,
+        signed: dict,
     ) -> None:
         """
         Emit an audit log entry to backend (preferred) or local ledger (fallback).
@@ -502,9 +507,13 @@ class HashedCore:
             status: "success" | "denied" | "error".
             amount: Numeric amount involved (may be None).
             result_or_str: Result object or error string (truncated to 200 chars).
-            signature: Ed25519 hex signature of the operation.
+            signed: Full dict from IdentityManager.sign_operation() containing
+                    ``payload``, ``canonical``, ``signature``, ``public_key``.
         """
         logged = False
+        _sig = signed.get("signature", "") if isinstance(signed, dict) else ""
+        _payload = signed.get("payload", {}) if isinstance(signed, dict) else {}
+        _canonical = signed.get("canonical", "") if isinstance(signed, dict) else ""
 
         if self._http_client:
             try:
@@ -519,7 +528,12 @@ class HashedCore:
                             "amount": amount,
                             "result": str(result_or_str)[:200],
                         },
-                        "metadata": {"signature": signature},
+                        "metadata": {
+                            "signature": _sig,
+                            "nonce": _payload.get("nonce"),
+                            "timestamp_ns": _payload.get("timestamp_ns"),
+                            "version": _payload.get("version", 1),
+                        },
                     },
                 )
                 logger.debug(f"Operation '{tool_name}' ({status}) logged to backend")
@@ -539,8 +553,12 @@ class HashedCore:
                         "result": str(result_or_str)[:200],
                     },
                     metadata={
-                        "signature": signature,
+                        "signature": _sig,
                         "public_key": self._identity.public_key_hex,
+                        "nonce": _payload.get("nonce"),
+                        "timestamp_ns": _payload.get("timestamp_ns"),
+                        "canonical": _canonical,
+                        "version": _payload.get("version", 1),
                     },
                 )
                 logger.debug(
@@ -552,17 +570,32 @@ class HashedCore:
     async def _log_denial(
         self, tool_name: str, amount: Any, error: PermissionError
     ) -> None:
-        """Log a policy denial to all transports."""
+        """Log a policy denial to all transports with a canonical signed envelope."""
+        signed = self._identity.sign_operation(
+            operation=tool_name,
+            amount=amount,
+            context={"error": str(error)},
+            status="denied",
+        )
         await self._log_to_all_transports(
-            tool_name, "denied", amount, str(error), ""
+            tool_name, "denied", amount, str(error), signed
         )
 
     async def _log_error(
         self, tool_name: str, amount: Any, error: Exception
     ) -> None:
-        """Log an unexpected error to the local ledger."""
+        """Log an unexpected error to the local ledger with a canonical signed envelope."""
         if self._ledger:
             try:
+                signed = self._identity.sign_operation(
+                    operation=tool_name,
+                    amount=amount,
+                    context={
+                        "error": str(error),
+                        "error_type": type(error).__name__,
+                    },
+                    status="error",
+                )
                 await self._ledger.log(
                     event_type=f"{tool_name}.error",
                     data={
@@ -571,7 +604,14 @@ class HashedCore:
                         "error": str(error),
                         "error_type": type(error).__name__,
                     },
-                    metadata={"public_key": self._identity.public_key_hex},
+                    metadata={
+                        "signature": signed["signature"],
+                        "public_key": self._identity.public_key_hex,
+                        "nonce": signed["payload"]["nonce"],
+                        "timestamp_ns": signed["payload"]["timestamp_ns"],
+                        "canonical": signed["canonical"],
+                        "version": signed["payload"]["version"],
+                    },
                 )
             except Exception:
                 pass

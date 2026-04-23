@@ -334,3 +334,132 @@ class TestPolicyEngineIntegration:
         core = _offline_core()
         core.policy_engine.add_policy("new_op", allowed=True, max_amount=50.0)
         assert "new_op" in core.policy_engine._policies
+
+
+# ── Canonical sign_operation envelopes ───────────────────────────────────────
+
+
+class TestCanonicalSignedPayload:
+    """
+    Verify that guard() now uses IdentityManager.sign_operation() (SPEC §2.1)
+    for every lifecycle state: allowed, denied, and the /guard POST.
+    """
+
+    def test_guard_produces_canonical_payload(self):
+        """
+        A successful guard call must pass a sign_operation()-produced dict
+        to _log_to_all_transports with all 8 canonical fields.
+        """
+        from unittest.mock import patch
+
+        core = _offline_core()
+        captured: dict = {}
+
+        async def _capture(tool_name, status, amount, result_or_str, signed):
+            captured["signed"] = signed
+
+        @core.guard("canonical_test")
+        async def my_tool() -> str:
+            return "ok"
+
+        with patch.object(core, "_log_to_all_transports", side_effect=_capture):
+            result = asyncio.run(my_tool())
+
+        assert result == "ok"
+
+        signed = captured.get("signed", {})
+        payload = signed.get("payload", {})
+
+        # All 8 SPEC §2.1 canonical fields must be present
+        assert payload.get("version") == 1
+        assert "nonce" in payload
+        assert "timestamp_ns" in payload
+        assert payload.get("operation") == "canonical_test"
+        assert payload.get("status") == "allowed"
+        assert "agent_id" in payload
+        assert "amount" in payload
+        assert "context" in payload
+
+        # The envelope must contain signature and canonical string
+        assert "signature" in signed
+        assert len(signed["signature"]) == 128       # Ed25519 hex = 64 bytes
+        assert "canonical" in signed
+        assert '"version":1' in signed["canonical"]
+
+    def test_denial_is_also_signed_canonically(self):
+        """
+        A denied operation must call _log_to_all_transports with
+        status='denied' and a sign_operation() envelope whose payload
+        has status='denied' and all canonical fields present.
+        """
+        from unittest.mock import patch
+
+        core = _offline_core()
+        core.policy_engine.add_policy("blocked_op", allowed=False)
+        captured: dict = {}
+
+        async def _capture(tool_name, status, amount, result_or_str, signed):
+            captured["signed"] = signed
+            captured["status"] = status
+
+        @core.guard("blocked_op")
+        async def blocked() -> str:
+            return "should not run"
+
+        with patch.object(core, "_log_to_all_transports", side_effect=_capture):
+            result = asyncio.run(blocked())
+
+        # guard() returns the BLOCKED string, not the function result
+        assert "HASHED BLOCKED" in result or "denied" in result.lower()
+
+        assert captured.get("status") == "denied"
+
+        signed = captured.get("signed", {})
+        payload = signed.get("payload", {})
+        assert payload.get("status") == "denied"
+        assert payload.get("version") == 1
+        assert "nonce" in payload
+        assert "timestamp_ns" in payload
+        assert len(signed.get("signature", "")) == 128
+
+    def test_remote_guard_sends_nonce(self):
+        """
+        _execute_remote_guard must include nonce, timestamp_ns, signature,
+        and canonical in the JSON body of the POST /guard request.
+        """
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        core = _offline_core()
+        posted_body: dict = {}
+
+        async def run() -> None:
+            mock_resp = MagicMock()
+            mock_resp.is_success = True
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {"allowed": True}
+
+            mock_http = AsyncMock()
+            mock_http.post = AsyncMock(return_value=mock_resp)
+            core._http_client = mock_http
+
+            await core._execute_remote_guard(
+                "send_email", 50.0, {"to": "alice@example.com"}
+            )
+
+            call_args = mock_http.post.call_args
+            # Support both positional and keyword call styles
+            body = (
+                call_args[1].get("json")
+                or (call_args[0][1] if len(call_args[0]) > 1 else {})
+            )
+            posted_body.update(body or {})
+            core._http_client = None
+
+        asyncio.run(run())
+
+        assert "nonce" in posted_body,       "nonce missing from /guard POST body"
+        assert "timestamp_ns" in posted_body, "timestamp_ns missing from /guard POST body"
+        assert "signature" in posted_body,   "signature missing from /guard POST body"
+        assert "canonical" in posted_body,   "canonical missing from /guard POST body"
+        assert posted_body.get("operation") == "send_email"
+        assert posted_body.get("agent_public_key") is not None
