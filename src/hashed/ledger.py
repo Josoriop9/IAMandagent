@@ -737,7 +737,7 @@ class AsyncLedger:
         """Whether the worker is active."""
         return self._running
 
-    async def __aenter__(self) -> "AsyncLedger":
+    async def __aenter__(self) -> AsyncLedger:
         await self.start()
         return self
 

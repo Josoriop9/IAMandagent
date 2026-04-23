@@ -315,7 +315,7 @@ class IdentityManager:
         try:
             from cryptography.hazmat.primitives import serialization as ser
 
-            encryption: "ser.KeySerializationEncryption"
+            encryption: ser.KeySerializationEncryption
             if password:
                 encryption = ser.BestAvailableEncryption(password)
             else:
