@@ -122,7 +122,7 @@ jobs:
           echo "✅ Published hashed-sdk ${{ steps.tag.outputs.version }} to PyPI"
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.tag.outputs.name }}
           name: "${{ steps.tag.outputs.name }} — hashed-sdk"
